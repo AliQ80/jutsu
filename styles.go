@@ -163,6 +163,9 @@ var (
 				Foreground(colorGreen).
 				Bold(true)
 
+	commandTextLongStyle = lipgloss.NewStyle().
+				Foreground(colorSubtext)
+
 	outputStyle = lipgloss.NewStyle().
 			Foreground(colorText)
 

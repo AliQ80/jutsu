@@ -36,6 +36,7 @@ type mainModel struct {
 	focusedInputIdx int
 
 	cmdText         string
+	cmdTextLong     string
 	running         bool
 	validationFlash bool
 	copyFlash       bool
@@ -98,7 +99,7 @@ func newModel() mainModel {
 		}
 	}
 
-	m.cmdText = m.buildCommandString()
+	m.cmdText, m.cmdTextLong = m.buildCommandStrings()
 	m.refreshDocs()
 	return m
 }
@@ -218,7 +219,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.lastFocusPane = m.focusPane
 			}
 			m.focusPane = focusCmdBar
-			m.cmdText = m.buildCommandString()
+			m.cmdText, m.cmdTextLong = m.buildCommandStrings()
 		case msg.X < leftWidth && msg.Y < composerH:
 			switch {
 			case msg.X < catPaneW:
@@ -290,7 +291,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				var cmd tea.Cmd
 				ti, cmd = ti.Update(msg)
 				m.setInput(item, ti)
-				m.cmdText = m.buildCommandString()
+				m.cmdText, m.cmdTextLong = m.buildCommandStrings()
 				return m, cmd
 			}
 		}
@@ -308,7 +309,7 @@ func (m mainModel) handleComposerKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		}
 		m.lastFocusPane = m.focusPane
 		m.focusPane = focusCmdBar
-		m.cmdText = m.buildCommandString()
+		m.cmdText, m.cmdTextLong = m.buildCommandStrings()
 		return m, nil
 
 	case "right", "l":
@@ -323,7 +324,7 @@ func (m mainModel) handleComposerKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 			m.focusPane = next
 			m.clampIndices()
 		}
-		m.cmdText = m.buildCommandString()
+		m.cmdText, m.cmdTextLong = m.buildCommandStrings()
 		m.layoutViewports()
 		m.refreshDocs()
 		return m, nil
@@ -336,7 +337,7 @@ func (m mainModel) handleComposerKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 			}
 			m.clampIndices()
 		}
-		m.cmdText = m.buildCommandString()
+		m.cmdText, m.cmdTextLong = m.buildCommandStrings()
 		m.layoutViewports()
 		m.refreshDocs()
 		return m, nil
@@ -344,7 +345,7 @@ func (m mainModel) handleComposerKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 	case "down", "j":
 		m.navigateDown()
 		m.clampFocusPane()
-		m.cmdText = m.buildCommandString()
+		m.cmdText, m.cmdTextLong = m.buildCommandStrings()
 		m.layoutViewports()
 		m.refreshDocs()
 		return m, nil
@@ -352,7 +353,7 @@ func (m mainModel) handleComposerKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 	case "up", "k":
 		m.navigateUp()
 		m.clampFocusPane()
-		m.cmdText = m.buildCommandString()
+		m.cmdText, m.cmdTextLong = m.buildCommandStrings()
 		m.layoutViewports()
 		m.refreshDocs()
 		return m, nil
@@ -413,7 +414,7 @@ func (m mainModel) handleComposerKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		if m.focusPane == focusFlags {
 			m.toggleFlag()
 		}
-		m.cmdText = m.buildCommandString()
+		m.cmdText, m.cmdTextLong = m.buildCommandStrings()
 		m.layoutViewports()
 		m.refreshDocs()
 		return m, nil
@@ -782,38 +783,52 @@ func (m *mainModel) currentFlags() []Flag {
 	return cmd.Flags
 }
 
-func (m mainModel) buildCommandString() string {
+// buildCommandStrings returns (short, long) where short uses command/subcommand
+// aliases when available, and long always uses the full name.
+func (m mainModel) buildCommandStrings() (short, long string) {
 	cmds := m.currentCommands()
 	if len(cmds) == 0 || m.cmdIdx >= len(cmds) {
-		return "jj"
+		return "jj", "jj"
 	}
 
 	cmd := cmds[m.cmdIdx]
-	parts := []string{"jj", cmd.Name}
+
+	shortName := cmd.Name
+	if cmd.Alias != "" && len(cmd.Alias) < len(cmd.Name) {
+		shortName = cmd.Alias
+	}
+	shortParts := []string{"jj", shortName}
+	longParts := []string{"jj", cmd.Name}
 
 	if len(cmd.SubCmds) > 0 && m.subIdx < len(cmd.SubCmds) {
 		sub := cmd.SubCmds[m.subIdx]
-		cmdPart := sub.Value
-		if cmdPart == "" {
-			cmdPart = sub.Name
+		longPart := sub.Value
+		if longPart == "" {
+			longPart = sub.Name
 		}
-		parts = append(parts, cmdPart)
+		shortPart := longPart
+		if sub.Alias != "" && len(sub.Alias) < len(longPart) {
+			shortPart = sub.Alias
+		}
+		shortParts = append(shortParts, shortPart)
+		longParts = append(longParts, longPart)
 	}
 
 	flags := m.currentFlags()
 	for _, f := range flags {
 		if f.Selected {
 			if f.Value != "" {
-				parts = append(parts, f.Value)
+				shortParts = append(shortParts, f.Value)
+				longParts = append(longParts, f.Value)
 			}
 			if f.RequiresInput {
 				val := m.inputs[f.Name].Value()
 				if val != "" {
 					if f.NeedsQuotes {
-						parts = append(parts, "\""+val+"\"")
-					} else {
-						parts = append(parts, val)
+						val = "\"" + val + "\""
 					}
+					shortParts = append(shortParts, val)
+					longParts = append(longParts, val)
 				}
 			}
 		}
@@ -822,11 +837,12 @@ func (m mainModel) buildCommandString() string {
 	// Append required positional arg values after flags.
 	for _, a := range m.getRequiredArgs() {
 		if val := m.argInputs[a.Name].Value(); val != "" {
-			parts = append(parts, val)
+			shortParts = append(shortParts, val)
+			longParts = append(longParts, val)
 		}
 	}
 
-	return strings.Join(parts, " ")
+	return strings.Join(shortParts, " "), strings.Join(longParts, " ")
 }
 
 func (m *mainModel) layoutViewports() {
@@ -1115,7 +1131,7 @@ func (m mainModel) handleInputKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		ti.Blur()
 		m.setInput(cur, ti)
 		m.focusPane = m.lastFocusPane
-		m.cmdText = m.buildCommandString()
+		m.cmdText, m.cmdTextLong = m.buildCommandStrings()
 		return m, nil
 	case "up":
 		if m.focusedInputIdx > 0 {
@@ -1130,7 +1146,7 @@ func (m mainModel) handleInputKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			cmd := newTi.Focus()
 			m.setInput(newItem, newTi)
 
-			m.cmdText = m.buildCommandString()
+			m.cmdText, m.cmdTextLong = m.buildCommandStrings()
 			return m, cmd
 		}
 		return m, nil
@@ -1147,7 +1163,7 @@ func (m mainModel) handleInputKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			cmd := newTi.Focus()
 			m.setInput(newItem, newTi)
 
-			m.cmdText = m.buildCommandString()
+			m.cmdText, m.cmdTextLong = m.buildCommandStrings()
 			return m, cmd
 		}
 		return m, nil
@@ -1161,7 +1177,7 @@ func (m mainModel) handleInputKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			newTi := m.getInput(newItem)
 			cmd := newTi.Focus()
 			m.setInput(newItem, newTi)
-			m.cmdText = m.buildCommandString()
+			m.cmdText, m.cmdTextLong = m.buildCommandStrings()
 			return m, cmd
 		}
 		if m.hasIncompleteInputs() {
@@ -1169,7 +1185,7 @@ func (m mainModel) handleInputKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, flashTimer()
 		}
 		m.focusPane = focusCmdBar
-		m.cmdText = m.buildCommandString()
+		m.cmdText, m.cmdTextLong = m.buildCommandStrings()
 		return m, nil
 	case "tab":
 		if m.hasIncompleteInputs() {
@@ -1177,7 +1193,7 @@ func (m mainModel) handleInputKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, flashTimer()
 		}
 		m.focusPane = focusCmdBar
-		m.cmdText = m.buildCommandString()
+		m.cmdText, m.cmdTextLong = m.buildCommandStrings()
 		return m, nil
 	}
 
@@ -1185,7 +1201,7 @@ func (m mainModel) handleInputKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	ti, cmd = ti.Update(msg)
 	m.setInput(cur, ti)
-	m.cmdText = m.buildCommandString()
+	m.cmdText, m.cmdTextLong = m.buildCommandStrings()
 	return m, cmd
 }
 

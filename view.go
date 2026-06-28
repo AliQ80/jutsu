@@ -288,16 +288,18 @@ func (m mainModel) renderDescriptionBar(width, height int) string {
 }
 
 func (m mainModel) renderCommandBar(width int) string {
-	cmdDisplay := m.cmdText
+	// Show the long form (full name) in the bar; short alias is what gets executed.
+	cmdDisplay := m.cmdTextLong
+	if cmdDisplay == "" {
+		cmdDisplay = m.cmdText
+	}
 	if cmdDisplay == "" {
 		cmdDisplay = "jj"
 	}
 
-	// Calculate content area dimensions
 	// Height(5) = 2 borders + 3 content rows
 	contentWidth := width - 4 // 2 borders + 2 padding
 
-	// Render and center the text horizontally
 	renderedText := commandTextStyle.Render(cmdDisplay)
 	centeredText := lipgloss.PlaceHorizontal(contentWidth, lipgloss.Center, renderedText)
 
