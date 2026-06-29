@@ -149,6 +149,10 @@ var (
 	flagUnselectedStyle = lipgloss.NewStyle().
 				Foreground(colorOverlay)
 
+	activeSelectionStyle = lipgloss.NewStyle().
+				Foreground(colorSapphire).
+				Bold(true)
+
 	// Flags blocked by a conflicting selection: pinkish-red, clearly distinct from grey unselected.
 	flagConflictedStyle = lipgloss.NewStyle().
 				Foreground(colorMaroon)
