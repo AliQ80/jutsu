@@ -395,6 +395,9 @@ func (m mainModel) renderHelpBar(width int) string {
 			{"tab", "command"},
 			{"q", "quit"},
 		}
+		if m.lastCmd != nil {
+			entries = append(entries, entry{"r", "recall"})
+		}
 	}
 
 	var parts []string

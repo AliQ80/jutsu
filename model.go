@@ -431,6 +431,10 @@ func (m mainModel) handleComposerKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		m.reclampAllScrolls()
 		m.refreshDocs()
 		return m, nil
+
+	case "r":
+		m.restoreLastCmd()
+		return m, nil
 	}
 
 	return m, nil
@@ -704,6 +708,57 @@ func (m mainModel) captureSnapshot() *commandSnapshot {
 		}
 	}
 	return snap
+}
+
+func (m *mainModel) restoreLastCmd() {
+	if m.lastCmd == nil {
+		return
+	}
+	snap := m.lastCmd
+	m.catIdx = snap.catIdx
+	m.cmdIdx = snap.cmdIdx
+	m.subIdx = snap.subIdx
+
+	if len(m.categories) == 0 || m.catIdx >= len(m.categories) {
+		return
+	}
+	cat := &m.categories[m.catIdx]
+	if len(cat.Commands) == 0 || m.cmdIdx >= len(cat.Commands) {
+		return
+	}
+
+	// Must mutate through the categories slice — currentFlags() returns value copies.
+	cmd := &cat.Commands[m.cmdIdx]
+	var flags *[]Flag
+	if len(cmd.SubCmds) > 0 && snap.subIdx < len(cmd.SubCmds) {
+		flags = &cmd.SubCmds[snap.subIdx].Flags
+	} else {
+		flags = &cmd.Flags
+	}
+	for i := range *flags {
+		if !(*flags)[i].Mandatory {
+			(*flags)[i].Selected = snap.selectedFlags[(*flags)[i].Name]
+		}
+	}
+
+	for name, val := range snap.inputValues {
+		if ti, ok := m.inputs[name]; ok {
+			ti.SetValue(val)
+			m.inputs[name] = ti
+		}
+	}
+	for name, val := range snap.argValues {
+		if ti, ok := m.argInputs[name]; ok {
+			ti.SetValue(val)
+			m.argInputs[name] = ti
+		}
+	}
+
+	m.clampIndices()
+	m.layoutViewports()
+	m.reclampAllScrolls()
+	m.refreshDocs()
+	m.cmdText, m.cmdTextLong = m.buildCommandStrings()
 }
 
 func (m *mainModel) toggleFlag() {
