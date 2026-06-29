@@ -137,9 +137,6 @@ var (
 	dimItemStyle = lipgloss.NewStyle().
 			Foreground(colorOverlay)
 
-	flagSelectedStyle = lipgloss.NewStyle().
-				Foreground(colorText)
-
 	// Mandatory flags use sapphire so they're visually distinct from toggleable selected flags.
 	flagMandatoryStyle = lipgloss.NewStyle().
 				Foreground(colorCrust).

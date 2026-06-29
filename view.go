@@ -205,8 +205,7 @@ func (m mainModel) renderPane(paneIdx int, title string, width, height int) stri
 					if flags[itemIdx].Mandatory {
 						content.WriteString(flagMandatoryStyle.Render(truncateItem(items[itemIdx], width)))
 					} else if flags[itemIdx].Selected {
-						// was flagSelectedStyle (colorText, barely visible) — now same
-						// sapphire+bold as unfocused-pane selections for visual consistency.
+						// ponytail: was flagSelectedStyle (colorText) — now activeSelectionStyle (sapphire+bold) for visual consistency with unfocused-pane selections.
 						content.WriteString(activeSelectionStyle.Render(truncateItem(items[itemIdx], width)))
 					} else if isConflicted(flags[itemIdx], flags) {
 						content.WriteString(flagConflictedStyle.Render(truncateItem(items[itemIdx], width)))
