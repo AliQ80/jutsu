@@ -371,7 +371,7 @@ func (m mainModel) renderVersionBadge() string {
 func (m mainModel) renderHelpBar(width int) string {
 	type entry struct{ key, desc string }
 
-	var entries []entry
+	var entries, contextual []entry
 	switch m.focusPane {
 	case focusOutput:
 		entries = []entry{
@@ -406,25 +406,42 @@ func (m mainModel) renderHelpBar(width int) string {
 		entries = []entry{
 			{"↑↓", "navigate"},
 			{"←→", "pane"},
-			{"spc", "toggle"},
-			{"enter", "inputs"},
 			{"d", "docs"},
 			{"o", "output"},
 			{"tab", "command"},
 			{"q", "quit"},
 		}
 		if m.lastCmd != nil {
-			entries = append(entries, entry{"r", "recall"})
+			contextual = append(contextual, entry{"r", "recall"})
+		}
+		if m.focusPane == focusFlags {
+			contextual = append(contextual, entry{"spc", "toggle"})
+		}
+		for _, f := range m.currentFlags() {
+			if f.Selected && f.RequiresInput {
+				contextual = append(contextual, entry{"enter", "inputs"})
+				break
+			}
 		}
 	}
 
+	render := func(e entry) string {
+		return helpKeyStyle.Render(e.key) + " " + helpDescStyle.Render(e.desc)
+	}
 	var parts []string
 	for _, e := range entries {
-		parts = append(parts, helpKeyStyle.Render(e.key)+" "+helpDescStyle.Render(e.desc))
+		parts = append(parts, render(e))
 	}
-	leftBar := strings.Join(parts, helpDescStyle.Render("  ·  "))
+	leftBar := strings.Join(parts, " ")
+	if len(contextual) > 0 {
+		var ctx []string
+		for _, e := range contextual {
+			ctx = append(ctx, render(e))
+		}
+		leftBar += helpDescStyle.Render(" | ") + strings.Join(ctx, " ")
+	}
 	if m.copyFlash {
-		leftBar += helpDescStyle.Render("  ·  ") + copyFlashStyle.Render("✓ copied")
+		leftBar += " " + copyFlashStyle.Render("✓ copied")
 	}
 
 	badge := m.renderVersionBadge()

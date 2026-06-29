@@ -2,11 +2,3 @@
 jitsu
 gen-descriptions
 
-# AI coding tool state
-.claude/
-
-# AI coding docs / planning
-CLAUDE.md
-AGENTS.md
-NOTES.md
-ROADMAP_INTERACTIVE.md
