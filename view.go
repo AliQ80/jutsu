@@ -159,6 +159,7 @@ func (m mainModel) renderPane(paneIdx int, title string, width, height int) stri
 		scrollOffset = m.flagScroll
 	}
 
+	isFocused := m.focusPane == paneIdx
 	var content strings.Builder
 	for i := 0; i < contentHeight; i++ {
 		if i > 0 {
@@ -166,21 +167,37 @@ func (m mainModel) renderPane(paneIdx int, title string, width, height int) stri
 		}
 		itemIdx := i + scrollOffset
 		if itemIdx < len(items) {
-			// Highlight selected item regardless of focus (persistent highlight)
 			if itemIdx == selectedIdx {
 				if paneIdx == focusFlags {
 					flags := m.currentFlags()
-					if itemIdx < len(flags) && flags[itemIdx].Mandatory {
-						content.WriteString(flagMandatoryStyle.Render(truncateItem(items[itemIdx], width)))
-					} else if itemIdx < len(flags) && flags[itemIdx].Selected {
-						content.WriteString(selectedItemStyle.Render(truncateItem(items[itemIdx], width)))
-					} else if itemIdx < len(flags) && isConflicted(flags[itemIdx], flags) {
-						content.WriteString(flagConflictedFocusedStyle.Render(truncateItem(items[itemIdx], width)))
-					} else {
-						content.WriteString(selectedItemStyle.Render(truncateItem(items[itemIdx], width)))
+					if itemIdx < len(flags) {
+						f := flags[itemIdx]
+						switch {
+						case f.Mandatory:
+							content.WriteString(flagMandatoryStyle.Render(truncateItem(items[itemIdx], width)))
+						case !isFocused:
+							// Unfocused flags pane: cursor position has no special highlight;
+							// render the flag's own state so it blends with other flags.
+							if f.Selected {
+								content.WriteString(activeSelectionStyle.Render(truncateItem(items[itemIdx], width)))
+							} else if isConflicted(f, flags) {
+								content.WriteString(flagConflictedStyle.Render(truncateItem(items[itemIdx], width)))
+							} else {
+								content.WriteString(flagUnselectedStyle.Render(truncateItem(items[itemIdx], width)))
+							}
+						case isConflicted(f, flags):
+							content.WriteString(flagConflictedFocusedStyle.Render(truncateItem(items[itemIdx], width)))
+						default:
+							content.WriteString(selectedItemStyle.Render(truncateItem(items[itemIdx], width)))
+						}
 					}
 				} else {
-					content.WriteString(selectedItemStyle.Render(truncateItem(items[itemIdx], width)))
+					// Categories, Commands, Subcommands
+					if isFocused {
+						content.WriteString(selectedItemStyle.Render(truncateItem(items[itemIdx], width)))
+					} else {
+						content.WriteString(activeSelectionStyle.Render(truncateItem(items[itemIdx], width)))
+					}
 				}
 			} else {
 				if paneIdx == focusFlags && itemIdx < len(m.currentFlags()) {
@@ -188,7 +205,9 @@ func (m mainModel) renderPane(paneIdx int, title string, width, height int) stri
 					if flags[itemIdx].Mandatory {
 						content.WriteString(flagMandatoryStyle.Render(truncateItem(items[itemIdx], width)))
 					} else if flags[itemIdx].Selected {
-						content.WriteString(flagSelectedStyle.Render(truncateItem(items[itemIdx], width)))
+						// was flagSelectedStyle (colorText, barely visible) — now same
+						// sapphire+bold as unfocused-pane selections for visual consistency.
+						content.WriteString(activeSelectionStyle.Render(truncateItem(items[itemIdx], width)))
 					} else if isConflicted(flags[itemIdx], flags) {
 						content.WriteString(flagConflictedStyle.Render(truncateItem(items[itemIdx], width)))
 					} else {
