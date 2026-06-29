@@ -380,6 +380,8 @@ func (m mainModel) handleComposerKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 				if f.RequiresInput {
 					if !f.Selected {
 						m.toggleFlag()
+						m.layoutViewports()
+						m.reclampAllScrolls()
 						flags = m.currentFlags()
 						f = flags[m.flagIdx]
 					}
@@ -416,6 +418,7 @@ func (m mainModel) handleComposerKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		}
 		m.cmdText, m.cmdTextLong = m.buildCommandStrings()
 		m.layoutViewports()
+		m.reclampAllScrolls()
 		m.refreshDocs()
 		return m, nil
 	}
@@ -533,6 +536,32 @@ func clampScroll(scroll, sel, contentH int) int {
 		return sel
 	}
 	return scroll
+}
+
+// reclampAllScrolls re-clamps every pane's scroll offset after paneH changes
+// (e.g. when the input bar appears or disappears and shrinks the composer panes).
+func (m *mainModel) reclampAllScrolls() {
+	ch := m.paneH - 4
+	m.catScroll = clampScroll(m.catScroll, m.catIdx, ch)
+	m.cmdScroll = clampScroll(m.cmdScroll, m.cmdIdx, ch)
+	m.subScroll = clampScroll(m.subScroll, m.subIdx, ch)
+
+	// Clamp to flagIdx+1 so the item below the cursor stays visible
+	// (cursor sits one row above the bottom edge when a next item exists).
+	flags := m.currentFlags()
+	peekIdx := m.flagIdx
+	if peekIdx < len(flags)-1 {
+		peekIdx++
+	}
+	m.flagScroll = clampScroll(m.flagScroll, peekIdx, ch)
+
+	// Cap scroll so the list stays flush to the bottom — prevents empty
+	// lines when the pane grows after untoggling a RequiresInput flag.
+	if ch > 0 {
+		if maxScroll := max(0, len(flags)-ch); m.flagScroll > maxScroll {
+			m.flagScroll = maxScroll
+		}
+	}
 }
 
 func (m *mainModel) navigateDown() {
