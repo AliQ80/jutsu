@@ -38,6 +38,7 @@ type mainModel struct {
 	cmdText         string
 	cmdTextLong     string
 	running         bool
+	lastCmd         *commandSnapshot // nil until first command executes
 	validationFlash bool
 	copyFlash       bool
 	jjVersion       string
@@ -66,6 +67,15 @@ func (m mainModel) setInput(item InputItem, ti textinput.Model) {
 	} else {
 		m.inputs[item.Name] = ti
 	}
+}
+
+type commandSnapshot struct {
+	catIdx        int
+	cmdIdx        int
+	subIdx        int
+	selectedFlags map[string]bool   // flag Name → Selected
+	inputValues   map[string]string // flag Name → text input value
+	argValues     map[string]string // arg Name → text input value
 }
 
 func newModel() mainModel {
@@ -434,6 +444,7 @@ func (m mainModel) handleCmdBarKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				m.validationFlash = true
 				return m, flashTimer()
 			}
+			m.lastCmd = m.captureSnapshot()
 			m.running = true
 			m.focusPane = m.lastFocusPane
 			return m, executeCommand(m.cmdText)
@@ -666,6 +677,33 @@ func (m *mainModel) resetCurrentFlags() {
 			}
 		}
 	}
+}
+
+func (m mainModel) captureSnapshot() *commandSnapshot {
+	snap := &commandSnapshot{
+		catIdx:        m.catIdx,
+		cmdIdx:        m.cmdIdx,
+		subIdx:        m.subIdx,
+		selectedFlags: make(map[string]bool),
+		inputValues:   make(map[string]string),
+		argValues:     make(map[string]string),
+	}
+	for _, f := range m.currentFlags() {
+		if f.Selected {
+			snap.selectedFlags[f.Name] = true
+		}
+		if f.RequiresInput {
+			if ti, ok := m.inputs[f.Name]; ok {
+				snap.inputValues[f.Name] = ti.Value()
+			}
+		}
+	}
+	for _, a := range m.currentArgs() {
+		if ti, ok := m.argInputs[a.Name]; ok {
+			snap.argValues[a.Name] = ti.Value()
+		}
+	}
+	return snap
 }
 
 func (m *mainModel) toggleFlag() {
