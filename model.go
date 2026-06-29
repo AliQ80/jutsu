@@ -73,6 +73,8 @@ type commandSnapshot struct {
 	catIdx        int
 	cmdIdx        int
 	subIdx        int
+	flagIdx       int
+	composerPane  int               // focusPane at capture time (lastFocusPane, a composer pane 0–3)
 	selectedFlags map[string]bool   // flag Name → Selected
 	inputValues   map[string]string // flag Name → text input value
 	argValues     map[string]string // arg Name → text input value
@@ -688,6 +690,8 @@ func (m mainModel) captureSnapshot() *commandSnapshot {
 		catIdx:        m.catIdx,
 		cmdIdx:        m.cmdIdx,
 		subIdx:        m.subIdx,
+		flagIdx:       m.flagIdx,
+		composerPane:  m.lastFocusPane,
 		selectedFlags: make(map[string]bool),
 		inputValues:   make(map[string]string),
 		argValues:     make(map[string]string),
@@ -754,6 +758,8 @@ func (m *mainModel) restoreLastCmd() {
 		}
 	}
 
+	m.focusPane = snap.composerPane
+	m.flagIdx = snap.flagIdx
 	m.clampIndices()
 	m.layoutViewports()
 	m.reclampAllScrolls()
