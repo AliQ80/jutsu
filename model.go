@@ -386,40 +386,16 @@ func (m mainModel) handleComposerKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 			}
 		}
 		if m.focusPane == focusFlags {
-			flags := m.currentFlags()
-			if m.flagIdx >= 0 && m.flagIdx < len(flags) {
-				f := flags[m.flagIdx]
-				if f.RequiresInput {
-					if !f.Selected {
-						m.toggleFlag()
-						m.layoutViewports()
-						m.reclampAllScrolls()
-						flags = m.currentFlags()
-						f = flags[m.flagIdx]
-					}
-					m.lastFocusPane = m.focusPane
-					m.focusPane = focusInputs
-
-					combined := m.getActiveCombined()
-					m.focusedInputIdx = 0
-					item := combined[0]
-					ti := m.getInput(item)
-					cmd := ti.Focus()
-					m.setInput(item, ti)
-					return m, cmd
-				} else {
-					combined := m.getActiveCombined()
-					if len(combined) > 0 {
-						m.lastFocusPane = m.focusPane
-						m.focusPane = focusInputs
-						m.focusedInputIdx = 0
-						item := combined[0]
-						ti := m.getInput(item)
-						cmd := ti.Focus()
-						m.setInput(item, ti)
-						return m, cmd
-					}
-				}
+			combined := m.getActiveCombined()
+			if len(combined) > 0 {
+				m.lastFocusPane = m.focusPane
+				m.focusPane = focusInputs
+				m.focusedInputIdx = 0
+				item := combined[0]
+				ti := m.getInput(item)
+				cmd := ti.Focus()
+				m.setInput(item, ti)
+				return m, cmd
 			}
 		}
 		return m, nil
@@ -1296,25 +1272,16 @@ func (m mainModel) handleInputKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "enter":
-		if m.focusedInputIdx < len(combined)-1 {
-			oldTi := m.getInput(cur)
-			oldTi.Blur()
-			m.setInput(cur, oldTi)
-			m.focusedInputIdx++
-			newItem := combined[m.focusedInputIdx]
-			newTi := m.getInput(newItem)
-			cmd := newTi.Focus()
-			m.setInput(newItem, newTi)
-			m.cmdText, m.cmdTextLong = m.buildCommandStrings()
-			return m, cmd
-		}
-		if m.hasIncompleteInputs() {
-			m.validationFlash = true
-			return m, flashTimer()
-		}
-		m.focusPane = focusCmdBar
+		oldTi := m.getInput(cur)
+		oldTi.Blur()
+		m.setInput(cur, oldTi)
+		m.focusedInputIdx = (m.focusedInputIdx + 1) % len(combined)
+		newItem := combined[m.focusedInputIdx]
+		newTi := m.getInput(newItem)
+		cmd := newTi.Focus()
+		m.setInput(newItem, newTi)
 		m.cmdText, m.cmdTextLong = m.buildCommandStrings()
-		return m, nil
+		return m, cmd
 	case "tab":
 		if m.hasIncompleteInputs() {
 			m.validationFlash = true
