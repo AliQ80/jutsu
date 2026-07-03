@@ -30,6 +30,7 @@ type mainModel struct {
 	output          viewport.Model
 	outputLines     []string
 	xOffset         int
+	outputEnlarged  bool
 	docs            viewport.Model
 	inputs          map[string]textinput.Model // keyed by flag Name
 	argInputs       map[string]textinput.Model // keyed by Arg Name
@@ -266,8 +267,17 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focusPane = focusOutput
 				return m, nil
 			}
+		case "O":
+			if m.focusPane != focusInputs {
+				if m.focusPane <= focusFlags {
+					m.lastFocusPane = m.focusPane
+				}
+				m.focusPane = focusOutput
+				m.outputEnlarged = true
+				return m, nil
+			}
 		case "d":
-			if m.focusPane != focusInputs && m.focusPane != focusDocs {
+			if !m.outputEnlarged && m.focusPane != focusInputs && m.focusPane != focusDocs {
 				if m.focusPane <= focusFlags {
 					m.lastFocusPane = m.focusPane
 				}
@@ -474,8 +484,10 @@ func (m mainModel) handleOutputKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, copyToClipboard(text)
 	case "tab":
 		m.focusPane = focusCmdBar
+		m.outputEnlarged = false
 	case "esc":
 		m.focusPane = m.lastFocusPane
+		m.outputEnlarged = false
 	}
 	return m, nil
 }
@@ -949,7 +961,23 @@ func (m mainModel) buildCommandStrings() (short, long string) {
 	return strings.Join(shortParts, " "), strings.Join(longParts, " ")
 }
 
+// outputEnlargedActive reports whether the output pane should render in its
+// enlarged, full-width/full-height form. Enlarge is cleared explicitly by
+// every path that leaves the output pane (see handleOutputKeys and the mouse
+// handlers), so checking both the flag and current focus here is a
+// belt-and-suspenders guard against a stale flag reappearing on refocus.
+func (m mainModel) outputEnlargedActive() bool {
+	return m.outputEnlarged && m.focusPane == focusOutput
+}
+
 func (m *mainModel) layoutViewports() {
+	if m.outputEnlargedActive() {
+		height := m.height - 6 // 5 cmdBar + 1 helpBar
+		m.output.SetWidth(m.width - 4)
+		m.output.SetHeight(height - 4)
+		return
+	}
+
 	leftWidth, rightWidth := m.getLayoutWidths()
 
 	combined := m.getActiveCombined()

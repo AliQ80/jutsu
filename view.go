@@ -26,6 +26,18 @@ func (m mainModel) View() tea.View {
 		return tea.NewView("Loading...")
 	}
 
+	if m.outputEnlargedActive() {
+		height := m.height - 6 // 5 cmdBar + 1 helpBar
+		rightPane := m.renderRightPane(m.width, height)
+		cmdBar := m.renderCommandBar(m.width)
+		helpBar := m.renderHelpBar(m.width)
+		content := lipgloss.JoinVertical(lipgloss.Left, rightPane, cmdBar, helpBar)
+		v := tea.NewView(content)
+		v.AltScreen = true
+		v.MouseMode = tea.MouseModeCellMotion
+		return v
+	}
+
 	leftWidth, rightWidth := m.getLayoutWidths()
 
 	combined := m.getActiveCombined()
