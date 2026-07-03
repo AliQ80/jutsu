@@ -179,6 +179,18 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.MouseWheelMsg:
+		if m.outputEnlargedActive() {
+			height := m.height - 6 // 5 cmdBar + 1 helpBar
+			if msg.Y < height {
+				if msg.Button == tea.MouseWheelUp && m.output.YOffset() > 0 {
+					m.output.SetYOffset(m.output.YOffset() - 1)
+				} else if msg.Button == tea.MouseWheelDown {
+					m.output.SetYOffset(m.output.YOffset() + 1)
+				}
+			}
+			return m, nil
+		}
+
 		leftWidth, _ := m.getLayoutWidths()
 		activeInputs := m.getActiveInputs()
 		inputsHeight := 0
@@ -207,6 +219,16 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Button != tea.MouseLeft {
 			return m, nil
 		}
+		if m.outputEnlargedActive() {
+			height := m.height - 6 // 5 cmdBar + 1 helpBar
+			if msg.Y >= height && msg.Y < height+5 {
+				m.focusPane = focusCmdBar
+				m.outputEnlarged = false
+				m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+			}
+			return m, nil
+		}
+
 		leftWidth, _ := m.getLayoutWidths()
 		activeInputs := m.getActiveInputs()
 		inputsHeight := 0
