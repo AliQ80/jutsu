@@ -300,7 +300,11 @@ func (m mainModel) renderRightPane(width, height int) string {
 
 	content := strings.Join(lines, "\n")
 
-	titleBox := tStyle.Width(width).Align(lipgloss.Center).Render(headerStyle.Render("OUTPUT"))
+	title := "OUTPUT"
+	if m.outputEnlargedActive() {
+		title = "OUTPUT (ENLARGED)"
+	}
+	titleBox := tStyle.Width(width).Align(lipgloss.Center).Render(headerStyle.Render(title))
 	contentBox := cStyle.Width(width).Height(height - 3).Render(content)
 
 	return lipgloss.JoinVertical(lipgloss.Left, titleBox, contentBox)
@@ -389,6 +393,7 @@ func (m mainModel) renderHelpBar(width int) string {
 		entries = []entry{
 			{"↑↓", "scroll"},
 			{"←→", "pan"},
+			{"O", "enlarge"},
 			{"c", "copy"},
 			{"esc", "back"},
 			{"tab", "command"},
@@ -419,7 +424,7 @@ func (m mainModel) renderHelpBar(width int) string {
 			{"↑↓", "navigate"},
 			{"←→", "pane"},
 			{"d", "docs"},
-			{"o", "output"},
+			{"o/O", "output"},
 			{"tab", "command"},
 			{"q", "quit"},
 		}
