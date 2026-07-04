@@ -8,6 +8,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 type clearValidationFlashMsg struct{}
@@ -816,7 +817,6 @@ func (m *mainModel) toggleFlag() {
 					ti.Prompt = " "
 					ti.Placeholder = "Enter " + key + "..."
 					ti.CharLimit = 256
-					ti.SetWidth(40)
 					m.inputs[key] = ti
 				}
 			}
@@ -848,7 +848,6 @@ func (m *mainModel) toggleFlag() {
 					ti.Prompt = " "
 					ti.Placeholder = "Enter " + key + "..."
 					ti.CharLimit = 256
-					ti.SetWidth(40)
 					m.inputs[key] = ti
 				}
 			}
@@ -1011,17 +1010,26 @@ func (m *mainModel) layoutViewports() {
 		inputsHeight = len(combined) + 2
 	}
 
-	topHeight := m.height - 6 - inputsHeight // matches View()
-	m.paneH = topHeight / 2
+	outputHeight := m.height - 6 // matches View(): 5 cmdBar + 1 helpBar
+	if outputHeight < 6 {
+		outputHeight = 6
+	}
 	paneContentWidth := rightWidth - 4
-	paneContentHeight := topHeight - 4 // title box (3) + content bottom border (1)
+	paneContentHeight := outputHeight - 4 // title box (3) + content bottom border (1)
 
 	m.output.SetWidth(paneContentWidth)
 	m.output.SetHeight(paneContentHeight)
 
+	// Composer/description bar share leftBudget, not outputHeight (matches View()).
+	leftBudget := outputHeight - inputsHeight
+	if leftBudget < 6 {
+		leftBudget = 6
+	}
+	m.paneH = leftBudget / 2
+
 	// Docs viewport: fits inside the description bar (rounded border = 2 height, 4 width)
-	composerH := topHeight / 2
-	descBarH := topHeight - composerH
+	composerH := leftBudget / 2
+	descBarH := leftBudget - composerH
 	docsW := leftWidth - 4
 	docsH := descBarH - 2
 	if docsW < 1 {
@@ -1032,6 +1040,21 @@ func (m *mainModel) layoutViewports() {
 	}
 	m.docs.SetWidth(docsW)
 	m.docs.SetHeight(docsH)
+
+	// Size each input field to fill the remaining box width so text can
+	// scroll all the way to the border instead of stopping at a fixed width.
+	boxContentWidth := leftWidth - 4 // border(2) + padding(2), matches renderInputPanes
+	for _, item := range combined {
+		ti := m.getInput(item)
+		// ponytail: -1 margin works around a bubbles textinput off-by-one; see
+		// CLAUDE.md "Known fragile points".
+		avail := boxContentWidth - inputPromptWidth(item.Label) - lipgloss.Width(ti.Prompt) - 1
+		if avail < 1 {
+			avail = 1
+		}
+		ti.SetWidth(avail)
+		m.setInput(item, ti)
+	}
 }
 
 func (m mainModel) currentDescription() string {
@@ -1188,7 +1211,6 @@ func initMandatoryFlagInputs(flags []Flag, inputs map[string]textinput.Model) {
 				ti.Prompt = " "
 				ti.Placeholder = "Enter " + flags[i].Name + "..."
 				ti.CharLimit = 256
-				ti.SetWidth(40)
 				inputs[flags[i].Name] = ti
 			}
 		}
@@ -1259,7 +1281,6 @@ func (m mainModel) getActiveCombined() []InputItem {
 			ti.Prompt = " "
 			ti.Placeholder = "enter " + strings.ToLower(a.Name) + "..."
 			ti.CharLimit = 256
-			ti.SetWidth(40)
 			m.argInputs[a.Name] = ti
 		}
 		items = append(items, InputItem{Name: a.Name, Label: a.Name, IsArg: true})

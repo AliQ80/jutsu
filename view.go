@@ -10,7 +10,7 @@ import (
 
 // Fixed pane widths sized to their longest content (content + 4 for border/padding).
 const (
-	catPaneW  = 16 // "CATEGORIES" title, "Advanced" = 8
+	catPaneW  = 19 // "CATEGORIES" title (10) + scroll-arrow prefix/suffix (2+2) + 1 margin
 	cmdPaneW  = 22 // "simplify-parents" = 16
 	subPaneW  = 22 // "completion bash" = 15
 	flagPaneW = 22 // full name visible in docs box on hover
@@ -46,41 +46,38 @@ func (m mainModel) View() tea.View {
 		inputsHeight = len(combined) + 2
 	}
 
-	topHeight := m.height - 6 - inputsHeight // 5 cmdBar + 1 helpBar
-	if topHeight < 6 {
-		topHeight = 6
+	outputHeight := m.height - 6 // 5 cmdBar + 1 helpBar
+	if outputHeight < 6 {
+		outputHeight = 6
 	}
 
-	composerH := topHeight / 2
-	descBarH := topHeight - composerH
+	leftBudget := outputHeight - inputsHeight
+	if leftBudget < 6 {
+		leftBudget = 6
+	}
+
+	composerH := leftBudget / 2
+	descBarH := leftBudget - composerH
 
 	composerSection := m.renderLeftPane(composerH)
-	var leftColumn string
+	leftColumn := composerSection
 	if descBarH >= 3 {
 		descBar := m.renderDescriptionBar(leftWidth, descBarH)
-		leftColumn = lipgloss.JoinVertical(lipgloss.Left, composerSection, descBar)
-	} else {
-		leftColumn = composerSection
+		leftColumn = lipgloss.JoinVertical(lipgloss.Left, leftColumn, descBar)
 	}
-
-	rightPane := m.renderRightPane(rightWidth, topHeight)
-	topSection := lipgloss.JoinHorizontal(lipgloss.Top, leftColumn, rightPane)
-
-	var middleSection string
 	if inputsHeight > 0 {
-		middleSection = m.renderInputPanes(m.width, inputsHeight, combined)
+		inputsPane := m.renderInputPanes(leftWidth, inputsHeight, combined)
+		leftColumn = lipgloss.JoinVertical(lipgloss.Left, leftColumn, inputsPane)
 	}
+
+	rightPane := m.renderRightPane(rightWidth, outputHeight)
+	topSection := lipgloss.JoinHorizontal(lipgloss.Top, leftColumn, rightPane)
 
 	cmdBar := m.renderCommandBar(m.width)
 	helpBar := m.renderHelpBar(m.width)
 
 	topSection = strings.TrimRight(topSection, "\n")
-	var content string
-	if inputsHeight > 0 {
-		content = lipgloss.JoinVertical(lipgloss.Left, topSection, middleSection, cmdBar, helpBar)
-	} else {
-		content = lipgloss.JoinVertical(lipgloss.Left, topSection, cmdBar, helpBar)
-	}
+	content := lipgloss.JoinVertical(lipgloss.Left, topSection, cmdBar, helpBar)
 	v := tea.NewView(content)
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion
@@ -337,11 +334,22 @@ func (m mainModel) renderCommandBar(width int) string {
 	renderedText := commandTextStyle.Render(cmdDisplay)
 	centeredText := lipgloss.PlaceHorizontal(contentWidth, lipgloss.Center, renderedText)
 
-	// Center vertically: 1 empty line above, 1 text line, 1 empty line below
+	// Pre-wrap to size blank padding by line count; see CLAUDE.md "Known
+	// fragile points" for why this can't just rely on the outer Style's wrap.
+	wrapped := lipgloss.Wrap(centeredText, contentWidth, "")
+	lines := strings.Count(wrapped, "\n") + 1
+
 	var content strings.Builder
-	content.WriteString("\n")
-	content.WriteString(centeredText)
-	content.WriteString("\n")
+	if lines <= 1 {
+		content.WriteString("\n")
+		content.WriteString(wrapped)
+		content.WriteString("\n")
+	} else {
+		content.WriteString(wrapped)
+		if pad := 3 - lines; pad > 0 {
+			content.WriteString(strings.Repeat("\n", pad))
+		}
+	}
 
 	style := commandBarInactiveStyle.Copy().Width(width).Height(5)
 	if m.focusPane == focusCmdBar {
@@ -482,6 +490,13 @@ func truncateItem(s string, maxWidth int) string {
 		return string(runes[:available-1]) + "…"
 	}
 	return s
+}
+
+// inputPromptWidth returns the width of the rendered "%15s : " label prefix
+// used in renderInputPanes, so layoutViewports can size the textinput to
+// exactly fill the remaining box width without duplicating the format string.
+func inputPromptWidth(label string) int {
+	return len(fmt.Sprintf("%15s : ", label))
 }
 
 func (m mainModel) renderInputPanes(width, height int, combined []InputItem) string {
