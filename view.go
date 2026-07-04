@@ -38,6 +38,24 @@ func (m mainModel) View() tea.View {
 		return v
 	}
 
+	if m.docsEnlargedActive() {
+		leftWidth, rightWidth := m.getLayoutWidths()
+		height := m.height - 6 // 5 cmdBar + 1 helpBar
+		if height < 6 {
+			height = 6
+		}
+		docsPane := m.renderDescriptionBar(leftWidth, height)
+		rightPane := m.renderRightPane(rightWidth, height)
+		topSection := strings.TrimRight(lipgloss.JoinHorizontal(lipgloss.Top, docsPane, rightPane), "\n")
+		cmdBar := m.renderCommandBar(m.width)
+		helpBar := m.renderHelpBar(m.width)
+		content := lipgloss.JoinVertical(lipgloss.Left, topSection, cmdBar, helpBar)
+		v := tea.NewView(content)
+		v.AltScreen = true
+		v.MouseMode = tea.MouseModeCellMotion
+		return v
+	}
+
 	leftWidth, rightWidth := m.getLayoutWidths()
 
 	combined := m.getActiveCombined()

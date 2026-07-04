@@ -33,6 +33,7 @@ type mainModel struct {
 	xOffset         int
 	outputEnlarged  bool
 	docs            viewport.Model
+	docsEnlarged    bool
 	inputs          map[string]textinput.Model // keyed by flag Name
 	argInputs       map[string]textinput.Model // keyed by Arg Name
 	focusedInputIdx int
@@ -284,7 +285,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			}
 		case "o":
-			if m.focusPane != focusInputs && m.focusPane != focusOutput {
+			if m.focusPane != focusInputs && m.focusPane != focusOutput && !m.docsEnlarged {
 				if m.focusPane <= focusFlags {
 					m.lastFocusPane = m.focusPane
 				}
@@ -292,7 +293,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case "O":
-			if m.focusPane != focusInputs {
+			if m.focusPane != focusInputs && !m.docsEnlarged {
 				if m.focusPane <= focusFlags {
 					m.lastFocusPane = m.focusPane
 				}
@@ -307,6 +308,16 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.lastFocusPane = m.focusPane
 				}
 				m.focusPane = focusDocs
+				return m, nil
+			}
+		case "D":
+			if m.focusPane != focusInputs && !m.outputEnlarged {
+				if m.focusPane <= focusFlags {
+					m.lastFocusPane = m.focusPane
+				}
+				m.focusPane = focusDocs
+				m.docsEnlarged = true
+				m.layoutViewports()
 				return m, nil
 			}
 		}
@@ -994,10 +1005,42 @@ func (m mainModel) outputEnlargedActive() bool {
 	return m.outputEnlarged && m.focusPane == focusOutput
 }
 
+// docsEnlargedActive reports whether the docs pane should render in its
+// enlarged form, filling the composer-panes/input-pane region while the
+// output pane stays at its normal size. Mirrors outputEnlargedActive()'s
+// belt-and-suspenders guard against a stale flag reappearing on refocus.
+func (m mainModel) docsEnlargedActive() bool {
+	return m.docsEnlarged && m.focusPane == focusDocs
+}
+
 func (m *mainModel) layoutViewports() {
 	if m.outputEnlargedActive() {
 		height := m.height - 6 // 5 cmdBar + 1 helpBar
 		m.output.SetWidth(m.width - 4)
+		m.output.SetHeight(height - 4)
+		return
+	}
+
+	if m.docsEnlargedActive() {
+		leftWidth, rightWidth := m.getLayoutWidths()
+		height := m.height - 6 // 5 cmdBar + 1 helpBar
+		if height < 6 {
+			height = 6
+		}
+		// Task 3 swaps this (and the normal-path docs sizing below) over to
+		// the shared docsContentDims() helper when the title box is added;
+		// for now this matches the existing single-box convention exactly.
+		docsW := leftWidth - 4
+		docsH := height - 2
+		if docsW < 1 {
+			docsW = 1
+		}
+		if docsH < 1 {
+			docsH = 1
+		}
+		m.docs.SetWidth(docsW)
+		m.docs.SetHeight(docsH)
+		m.output.SetWidth(rightWidth - 4)
 		m.output.SetHeight(height - 4)
 		return
 	}
@@ -1389,9 +1432,12 @@ func (m mainModel) handleDocsKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, copyToClipboard(text)
 	case "tab":
 		m.focusPane = focusCmdBar
+		m.docsEnlarged = false
 	case "esc":
 		m.focusPane = m.lastFocusPane
+		m.docsEnlarged = false
 	}
+	m.layoutViewports()
 	return m, nil
 }
 
