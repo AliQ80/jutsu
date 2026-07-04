@@ -225,6 +225,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focusPane = focusCmdBar
 				m.outputEnlarged = false
 				m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+				m.layoutViewports()
 			}
 			return m, nil
 		}
@@ -296,6 +297,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.focusPane = focusOutput
 				m.outputEnlarged = true
+				m.layoutViewports()
 				return m, nil
 			}
 		case "d":
@@ -511,6 +513,7 @@ func (m mainModel) handleOutputKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.focusPane = m.lastFocusPane
 		m.outputEnlarged = false
 	}
+	m.layoutViewports()
 	return m, nil
 }
 
