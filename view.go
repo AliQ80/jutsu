@@ -326,14 +326,28 @@ func (m mainModel) renderRightPane(width, height int) string {
 }
 
 func (m mainModel) renderDescriptionBar(width, height int) string {
-	style := descriptionBarStyle
+	var tStyle, cStyle lipgloss.Style
 	if m.focusPane == focusDocs {
-		style = activeDescriptionBarStyle
+		tStyle = activeTitleBorderStyle.Copy()
+		cStyle = activeContentBorderStyle.Copy()
+	} else {
+		tStyle = inactiveTitleBorderStyle.Copy()
+		cStyle = inactiveContentBorderStyle.Copy()
 	}
+
+	title := "DOCS"
+	if m.docsEnlargedActive() {
+		title = "DOCS (ENLARGED)"
+	}
+	titleBox := tStyle.Width(width).Align(lipgloss.Center).Render(headerStyle.Render(title))
+
 	// Set dimensions on a local copy so View() renders at the right size.
-	m.docs.SetWidth(width - style.GetHorizontalFrameSize())
-	m.docs.SetHeight(height - style.GetVerticalFrameSize())
-	return style.Width(width).Height(height).Render(m.docs.View())
+	docsW, docsH := docsContentDims(width, height)
+	m.docs.SetWidth(docsW)
+	m.docs.SetHeight(docsH)
+	contentBox := cStyle.Width(width).Height(height - 3).Render(m.docs.View())
+
+	return lipgloss.JoinVertical(lipgloss.Left, titleBox, contentBox)
 }
 
 func (m mainModel) renderCommandBar(width int) string {
@@ -428,6 +442,7 @@ func (m mainModel) renderHelpBar(width int) string {
 	case focusDocs:
 		entries = []entry{
 			{"↑↓", "scroll"},
+			{"D", "enlarge"},
 			{"c", "copy"},
 			{"esc", "back"},
 		}
@@ -449,7 +464,7 @@ func (m mainModel) renderHelpBar(width int) string {
 		entries = []entry{
 			{"↑↓", "navigate"},
 			{"←→", "pane"},
-			{"d", "docs"},
+			{"d/D", "docs"},
 			{"o/O", "output"},
 			{"tab", "command"},
 			{"q", "quit"},

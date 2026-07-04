@@ -192,13 +192,6 @@ var (
 			Background(colorMantle).
 			PaddingLeft(1)
 
-	descriptionBarStyle = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(colorOverlay).
-				PaddingLeft(1).
-				PaddingRight(1).
-				Foreground(colorSubtext1)
-
 	errorStyle = lipgloss.NewStyle().
 			Foreground(colorRed).
 			Bold(true)
@@ -220,13 +213,6 @@ const (
 )
 
 var (
-	activeDescriptionBarStyle = lipgloss.NewStyle().
-					Border(lipgloss.RoundedBorder()).
-					BorderForeground(colorPeach).
-					PaddingLeft(1).
-					PaddingRight(1).
-					Foreground(colorSubtext1)
-
 	boldStyle = lipgloss.NewStyle().Bold(true)
 
 	versionGreenStyle = lipgloss.NewStyle().

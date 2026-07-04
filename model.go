@@ -1036,6 +1036,22 @@ func (m mainModel) docsEnlargedActive() bool {
 	return m.docsEnlarged && m.focusPane == focusDocs
 }
 
+// docsContentDims returns the width/height for m.docs' viewport given the
+// docs box's outer width and total height (title box = 3 rows). Shared by
+// layoutViewports() and renderDescriptionBar() so they can't drift apart
+// the way output's sizing once did (see CLAUDE.md "Known fragile points").
+func docsContentDims(width, barHeight int) (w, h int) {
+	w = width - inactiveContentBorderStyle.GetHorizontalFrameSize()
+	h = barHeight - 3 - inactiveContentBorderStyle.GetVerticalFrameSize()
+	if w < 1 {
+		w = 1
+	}
+	if h < 1 {
+		h = 1
+	}
+	return
+}
+
 func (m *mainModel) layoutViewports() {
 	if m.outputEnlargedActive() {
 		height := m.height - 6 // 5 cmdBar + 1 helpBar
@@ -1050,17 +1066,7 @@ func (m *mainModel) layoutViewports() {
 		if height < 6 {
 			height = 6
 		}
-		// Task 3 swaps this (and the normal-path docs sizing below) over to
-		// the shared docsContentDims() helper when the title box is added;
-		// for now this matches the existing single-box convention exactly.
-		docsW := leftWidth - 4
-		docsH := height - 2
-		if docsW < 1 {
-			docsW = 1
-		}
-		if docsH < 1 {
-			docsH = 1
-		}
+		docsW, docsH := docsContentDims(leftWidth, height)
 		m.docs.SetWidth(docsW)
 		m.docs.SetHeight(docsH)
 		m.output.SetWidth(rightWidth - 4)
@@ -1093,17 +1099,11 @@ func (m *mainModel) layoutViewports() {
 	}
 	m.paneH = leftBudget / 2
 
-	// Docs viewport: fits inside the description bar (rounded border = 2 height, 4 width)
+	// Docs viewport: fits inside the description bar's content box (title
+	// box + border consume 3 rows, handled by docsContentDims).
 	composerH := leftBudget / 2
 	descBarH := leftBudget - composerH
-	docsW := leftWidth - 4
-	docsH := descBarH - 2
-	if docsW < 1 {
-		docsW = 1
-	}
-	if docsH < 1 {
-		docsH = 1
-	}
+	docsW, docsH := docsContentDims(leftWidth, descBarH)
 	m.docs.SetWidth(docsW)
 	m.docs.SetHeight(docsH)
 
