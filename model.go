@@ -308,7 +308,10 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			}
 		case "o":
-			if m.focusPane != focusInputs && m.focusPane != focusOutput && !m.docsEnlarged {
+			if m.focusPane == focusOutput {
+				return m.exitOutput()
+			}
+			if m.focusPane != focusInputs && !m.docsEnlarged {
 				if m.focusPane <= focusFlags {
 					m.lastFocusPane = m.focusPane
 				}
@@ -316,6 +319,9 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case "O":
+			if m.outputEnlargedActive() {
+				return m.exitOutput()
+			}
 			if m.focusPane != focusInputs && !m.docsEnlarged {
 				if m.focusPane <= focusFlags {
 					m.lastFocusPane = m.focusPane
@@ -326,7 +332,10 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case "d":
-			if !m.outputEnlarged && m.focusPane != focusInputs && m.focusPane != focusDocs {
+			if m.focusPane == focusDocs {
+				return m.exitDocs()
+			}
+			if !m.outputEnlarged && m.focusPane != focusInputs {
 				if m.focusPane <= focusFlags {
 					m.lastFocusPane = m.focusPane
 				}
@@ -334,6 +343,9 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case "D":
+			if m.docsEnlargedActive() {
+				return m.exitDocs()
+			}
 			if m.focusPane != focusInputs && !m.outputEnlarged {
 				if m.focusPane <= focusFlags {
 					m.lastFocusPane = m.focusPane
@@ -1034,6 +1046,24 @@ func (m mainModel) outputEnlargedActive() bool {
 // belt-and-suspenders guard against a stale flag reappearing on refocus.
 func (m mainModel) docsEnlargedActive() bool {
 	return m.docsEnlarged && m.focusPane == focusDocs
+}
+
+// exitOutput returns focus to the last composer pane and clears the output
+// pane's enlarged state — the shared toggle-out action for both "o" and "O".
+func (m mainModel) exitOutput() (tea.Model, tea.Cmd) {
+	m.focusPane = m.lastFocusPane
+	m.outputEnlarged = false
+	m.layoutViewports()
+	return m, nil
+}
+
+// exitDocs returns focus to the last composer pane and clears the docs
+// pane's enlarged state — the shared toggle-out action for both "d" and "D".
+func (m mainModel) exitDocs() (tea.Model, tea.Cmd) {
+	m.focusPane = m.lastFocusPane
+	m.docsEnlarged = false
+	m.layoutViewports()
+	return m, nil
 }
 
 // docsContentDims returns the width/height for m.docs' viewport given the
