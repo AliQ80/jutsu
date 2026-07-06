@@ -111,6 +111,18 @@ func hasRequiredArgs(args []Arg) bool {
 	return false
 }
 
+// argsMarker returns the list-pane suffix hinting at positional args: "<…>" when at
+// least one is required, "[…]" when only optional ones exist, "" when there are none.
+func argsMarker(args []Arg) string {
+	if hasRequiredArgs(args) {
+		return " <…>"
+	}
+	if len(args) > 0 {
+		return " […]"
+	}
+	return ""
+}
+
 func (m mainModel) renderLeftPane(height int) string {
 	return lipgloss.JoinHorizontal(lipgloss.Top,
 		m.renderPane(0, "CATEGORIES", catPaneW, height),
@@ -133,19 +145,13 @@ func (m mainModel) renderPane(paneIdx int, title string, width, height int) stri
 	case focusCommands:
 		cmds := m.currentCommands()
 		for _, cmd := range cmds {
-			label := cmd.Name
-			if hasRequiredArgs(cmd.Args) {
-				label += " <…>"
-			}
+			label := cmd.Name + argsMarker(cmd.Args)
 			items = append(items, label)
 		}
 		selectedIdx = m.cmdIdx
 	case focusSubcmds:
 		for _, sub := range m.currentSubCommands() {
-			label := sub.Name
-			if hasRequiredArgs(sub.Args) {
-				label += " <…>"
-			}
+			label := sub.Name + argsMarker(sub.Args)
 			items = append(items, label)
 		}
 		selectedIdx = m.subIdx

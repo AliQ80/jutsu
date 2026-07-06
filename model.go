@@ -1020,8 +1020,9 @@ func (m mainModel) buildCommandStrings() (short, long string) {
 		}
 	}
 
-	// Append required positional arg values after flags.
-	for _, a := range m.getRequiredArgs() {
+	// Append positional arg values after flags. Optional args are simply
+	// omitted when empty, letting jj apply its own default (e.g. @).
+	for _, a := range m.currentArgs() {
 		if val := m.argInputs[a.Name].Value(); val != "" {
 			shortParts = append(shortParts, val)
 			longParts = append(longParts, val)
@@ -1367,15 +1368,22 @@ func (m mainModel) getRequiredArgs() []Arg {
 	return req
 }
 
-// getActiveCombined returns required positional args followed by selected flag inputs,
-// lazy-initializing arg textinputs as needed (safe from a value receiver because maps are reference types).
+// getActiveCombined returns positional args (required and optional) followed by selected
+// flag inputs, lazy-initializing arg textinputs as needed (safe from a value receiver
+// because maps are reference types). Optional args are included so the user can supply a
+// value, but hasIncompleteInputs() only validates required ones — leaving an optional arg
+// blank is fine and lets jj apply its own default.
 func (m mainModel) getActiveCombined() []InputItem {
 	var items []InputItem
-	for _, a := range m.getRequiredArgs() {
+	for _, a := range m.currentArgs() {
 		if _, exists := m.argInputs[a.Name]; !exists {
 			ti := textinput.New()
 			ti.Prompt = " "
-			ti.Placeholder = "enter " + strings.ToLower(a.Name) + "..."
+			placeholder := "enter " + strings.ToLower(a.Name)
+			if !a.Required {
+				placeholder += " (optional)"
+			}
+			ti.Placeholder = placeholder + "..."
 			ti.CharLimit = 256
 			m.argInputs[a.Name] = ti
 		}
