@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -45,6 +47,7 @@ type mainModel struct {
 	validationFlash bool
 	copyFlash       bool
 	jjVersion       string
+	cwd             string
 
 	width  int
 	height int
@@ -94,6 +97,11 @@ func newModel() mainModel {
 	dv.SetWidth(80)
 	dv.SetHeight(10)
 
+	cwd := "?"
+	if wd, err := os.Getwd(); err == nil {
+		cwd = filepath.Base(wd)
+	}
+
 	m := mainModel{
 		categories: cats,
 		focusPane:  focusCategories,
@@ -101,6 +109,7 @@ func newModel() mainModel {
 		docs:       dv,
 		inputs:     make(map[string]textinput.Model),
 		argInputs:  make(map[string]textinput.Model),
+		cwd:        cwd,
 	}
 
 	// Pre-initialize textinputs for mandatory flags so the input pane renders

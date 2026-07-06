@@ -508,13 +508,15 @@ func (m mainModel) renderHelpBar(width int) string {
 		leftBar += " " + copyFlashStyle.Render("✓ copied")
 	}
 
+	cwdBadge := cwdStyle.Render("📂 " + m.cwd)
 	badge := m.renderVersionBadge()
+	rightBar := cwdBadge + "   " + badge
 	// width-1 because helpBarStyle has PaddingLeft(1).
-	gap := (width - 1) - lipgloss.Width(leftBar) - lipgloss.Width(badge)
+	gap := (width - 1) - lipgloss.Width(leftBar) - lipgloss.Width(rightBar)
 	if gap < 1 {
 		gap = 1
 	}
-	return helpBarStyle.Width(width).Render(leftBar + strings.Repeat(" ", gap) + badge)
+	return helpBarStyle.Width(width).Render(leftBar + strings.Repeat(" ", gap) + rightBar)
 }
 
 // truncateItem truncates a string to fit within maxWidth, accounting for borders and padding

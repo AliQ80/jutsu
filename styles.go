@@ -224,6 +224,9 @@ var (
 	versionRedStyle = lipgloss.NewStyle().
 			Foreground(colorRed)
 
+	cwdStyle = lipgloss.NewStyle().
+			Foreground(colorSky)
+
 	copyFlashStyle = lipgloss.NewStyle().
 			Foreground(colorCrust).
 			Background(colorGreen).
