@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -978,6 +979,22 @@ func (m *mainModel) currentFlags() []Flag {
 	return cmd.Flags
 }
 
+func (m *mainModel) currentRequiredFlagGroup() []string {
+	cmds := m.currentCommands()
+	if len(cmds) == 0 || m.cmdIdx >= len(cmds) {
+		return nil
+	}
+	cmd := cmds[m.cmdIdx]
+
+	if len(cmd.SubCmds) > 0 {
+		if m.subIdx < len(cmd.SubCmds) {
+			return cmd.SubCmds[m.subIdx].RequiredFlagGroup
+		}
+		return nil
+	}
+	return cmd.RequiredFlagGroup
+}
+
 // buildCommandStrings returns (short, long) where short uses command/subcommand
 // aliases when available, and long always uses the full name.
 func (m mainModel) buildCommandStrings() (short, long string) {
@@ -1248,6 +1265,15 @@ func isConflicted(f Flag, flags []Flag) bool {
 	return false
 }
 
+// isRequiredGroupFlag reports whether f belongs to the current command's
+// RequiredFlagGroup while that group is still unsatisfied.
+func isRequiredGroupFlag(m mainModel, f Flag) bool {
+	if !m.requiredFlagGroupUnsatisfied() {
+		return false
+	}
+	return slices.Contains(m.currentRequiredFlagGroup(), f.Value)
+}
+
 func max(a, b int) int {
 	if a > b {
 		return a
@@ -1255,18 +1281,41 @@ func max(a, b int) int {
 	return b
 }
 
-func (m mainModel) hasIncompleteInputs() bool {
+func (m mainModel) hasEmptyRequiredFlagInput() bool {
 	for _, f := range m.currentFlags() {
 		if f.Selected && f.RequiresInput && m.inputs[f.Name].Value() == "" {
 			return true
 		}
 	}
+	return false
+}
+
+func (m mainModel) hasEmptyRequiredArg() bool {
 	for _, a := range m.getRequiredArgs() {
 		if m.argInputs[a.Name].Value() == "" {
 			return true
 		}
 	}
 	return false
+}
+
+// requiredFlagGroupUnsatisfied reports whether the current command declares a
+// RequiredFlagGroup and none of its member flags are currently selected.
+func (m mainModel) requiredFlagGroupUnsatisfied() bool {
+	group := m.currentRequiredFlagGroup()
+	if len(group) == 0 {
+		return false
+	}
+	for _, f := range m.currentFlags() {
+		if f.Selected && slices.Contains(group, f.Value) {
+			return false
+		}
+	}
+	return true
+}
+
+func (m mainModel) hasIncompleteInputs() bool {
+	return m.hasEmptyRequiredFlagInput() || m.hasEmptyRequiredArg() || m.requiredFlagGroupUnsatisfied()
 }
 
 func flashTimer() tea.Cmd {

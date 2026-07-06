@@ -20,21 +20,23 @@ type Arg struct {
 }
 
 type SubCommand struct {
-	Name        string
-	Alias       string // e.g. "a" for bookmark advance — populated by gen-descriptions
-	Description string
-	Value       string // overrides Name in the built command string when set
-	Args        []Arg
-	Flags       []Flag
+	Name              string
+	Alias             string // e.g. "a" for bookmark advance — populated by gen-descriptions
+	Description       string
+	Value             string // overrides Name in the built command string when set
+	Args              []Arg
+	Flags             []Flag
+	RequiredFlagGroup []string // Values of flags where at least one must be selected
 }
 
 type Command struct {
-	Name        string
-	Alias       string // e.g. "st" for status — populated by gen-descriptions
-	Description string
-	Args        []Arg
-	SubCmds     []SubCommand
-	Flags       []Flag
+	Name              string
+	Alias             string // e.g. "st" for status — populated by gen-descriptions
+	Description       string
+	Args              []Arg
+	SubCmds           []SubCommand
+	Flags             []Flag
+	RequiredFlagGroup []string // Values of flags where at least one must be selected
 }
 
 type Category struct {
@@ -622,9 +624,9 @@ func loadCategories() []Category {
 						{Name: "revision", Description: "Revision to squash into its parent (default: @). Incompatible with the experimental\n`-o`/`-A`/`-B` options", Value: "-r", RequiresInput: true, ConflictingFlags: []string{"-o", "-A", "-B"}, InputType: "REVSET"},
 						{Name: "from", Description: "Revision(s) to squash from (default: @)", Value: "-f", RequiresInput: true, InputType: "REVSETS"},
 						{Name: "into", Description: "Revision to squash into (default: @)\n\n[aliases: --to]", Value: "-t", RequiresInput: true, InputType: "REVSET"},
-						{Name: "onto", Description: "(Experimental) The revision(s) to use as parent for the new commit (can be repeated to\ncreate a merge commit)\n\n[aliases: -d, --destination]", Value: "-o", RequiresInput: true, ConflictingFlags: []string{"-r"}, InputType: "REVSETS"},
-						{Name: "insert-after", Description: "(Experimental) The revision(s) to insert the new commit after (can be repeated to create a\nmerge commit)\n\n[aliases: --after]", Value: "-A", RequiresInput: true, ConflictingFlags: []string{"-r"}, InputType: "REVSETS"},
-						{Name: "insert-before", Description: "(Experimental) The revision(s) to insert the new commit before (can be repeated to create\na merge commit)\n\n[aliases: --before]", Value: "-B", RequiresInput: true, ConflictingFlags: []string{"-r"}, InputType: "REVSETS"},
+						{Name: "onto", Description: "(Experimental) The revision(s) to use as parent for the new commit (can be repeated to\ncreate a merge commit)\n\n[aliases: -d, --destination]", Value: "-o", RequiresInput: true, ConflictingFlags: []string{"-r", "-A", "-B"}, InputType: "REVSETS"},
+						{Name: "insert-after", Description: "(Experimental) The revision(s) to insert the new commit after (can be repeated to create a\nmerge commit)\n\n[aliases: --after]", Value: "-A", RequiresInput: true, ConflictingFlags: []string{"-r", "-o"}, InputType: "REVSETS"},
+						{Name: "insert-before", Description: "(Experimental) The revision(s) to insert the new commit before (can be repeated to create\na merge commit)\n\n[aliases: --before]", Value: "-B", RequiresInput: true, ConflictingFlags: []string{"-r", "-o"}, InputType: "REVSETS"},
 						{Name: "message", Description: "The description to use for squashed revision (don't open editor)", Value: "-m", RequiresInput: true, NeedsQuotes: true, ConflictingFlags: []string{"--use-destination-message"}, InputType: "MESSAGE"},
 						{Name: "use-destination-message", Description: "Use the description of the destination revision and discard the description(s) of the\nsource revision(s)", Value: "--use-destination-message", ConflictingFlags: []string{"-m"}},
 						{Name: "keep-emptied", Description: "The source revision will not be abandoned", Value: "-k"},
@@ -655,6 +657,7 @@ func loadCategories() []Category {
 						{Name: "keep-divergent", Description: "Keep divergent commits while rebasing\n\nWithout this flag, divergent commits are abandoned while rebasing if another commit with\nthe same change ID is already present in the destination with identical changes.", Value: "--keep-divergent"},
 						{Name: "simplify-parents", Description: "Simplify parents of rebased commits, like `jj simplify-parents`, while rebasing them. Any\nparents that are ancestors of other parents will be removed", Value: "--simplify-parents"},
 					},
+					RequiredFlagGroup: []string{"-d", "--insert-after", "--insert-before"},
 				},
 				{
 					Name:        "absorb",
@@ -685,9 +688,9 @@ func loadCategories() []Category {
 						{Name: "REVSETS", Description: "The revision(s) to duplicate (default: @) [aliases: -r]", Variadic: true},
 					},
 					Flags: []Flag{
-						{Name: "onto", Description: "The revision(s) to duplicate onto (can be repeated to create a merge commit)\n\n[aliases: -d, --destination]", Value: "-o", RequiresInput: true, InputType: "REVSETS"},
-						{Name: "insert-after", Description: "The revision(s) to insert after (can be repeated to create a merge commit)\n\n[aliases: --after]", Value: "-A", RequiresInput: true, InputType: "REVSETS"},
-						{Name: "insert-before", Description: "The revision(s) to insert before (can be repeated to create a merge commit)\n\n[aliases: --before]", Value: "-B", RequiresInput: true, InputType: "REVSETS"},
+						{Name: "onto", Description: "The revision(s) to duplicate onto (can be repeated to create a merge commit)\n\n[aliases: -d, --destination]", Value: "-o", RequiresInput: true, ConflictingFlags: []string{"-A", "-B"}, InputType: "REVSETS"},
+						{Name: "insert-after", Description: "The revision(s) to insert after (can be repeated to create a merge commit)\n\n[aliases: --after]", Value: "-A", RequiresInput: true, ConflictingFlags: []string{"-o"}, InputType: "REVSETS"},
+						{Name: "insert-before", Description: "The revision(s) to insert before (can be repeated to create a merge commit)\n\n[aliases: --before]", Value: "-B", RequiresInput: true, ConflictingFlags: []string{"-o"}, InputType: "REVSETS"},
 					},
 				},
 				{
@@ -710,11 +713,12 @@ func loadCategories() []Category {
 					Name:        "revert",
 					Description: "Apply the reverse of the given revision(s)\n\nThe reverse of each of the given revisions is applied sequentially in reverse topological order at\nthe given location.\n\nThe description of the new revisions can be customized with the `templates.revert_description`\nconfig variable.",
 					Flags: []Flag{
-						{Name: "revision", Description: "The revision(s) to apply the reverse of", Value: "-r", RequiresInput: true, InputType: "REVSETS"},
+						{Name: "revision", Description: "The revision(s) to apply the reverse of", Value: "-r", RequiresInput: true, Mandatory: true, InputType: "REVSETS"},
 						{Name: "onto", Description: "The revision(s) to apply the reverse changes on top of\n\n[aliases: -d, --destination]", Value: "-o", RequiresInput: true, ConflictingFlags: []string{"-A", "-B"}, InputType: "REVSETS"},
 						{Name: "insert-after", Description: "The revision(s) to insert the reverse changes after (can be repeated to create a merge\ncommit)\n\n[aliases: --after]", Value: "-A", RequiresInput: true, ConflictingFlags: []string{"-o"}, InputType: "REVSETS"},
 						{Name: "insert-before", Description: "The revision(s) to insert the reverse changes before (can be repeated to create a merge\ncommit)\n\n[aliases: --before]", Value: "-B", RequiresInput: true, ConflictingFlags: []string{"-o"}, InputType: "REVSETS"},
 					},
+					RequiredFlagGroup: []string{"-o", "-A", "-B"},
 				},
 			},
 		},
@@ -925,6 +929,7 @@ func loadCategories() []Category {
 								{Name: "repo", Description: "Target the repo-level config", Value: "--repo", ConflictingFlags: []string{"--user", "--workspace"}},
 								{Name: "workspace", Description: "Target the workspace-level config", Value: "--workspace", ConflictingFlags: []string{"--user", "--repo"}},
 							},
+							RequiredFlagGroup: []string{"--user", "--repo", "--workspace"},
 						},
 						{
 							Name:        "set",
@@ -939,6 +944,7 @@ func loadCategories() []Category {
 								{Name: "repo", Description: "Target the repo-level config", Value: "--repo", ConflictingFlags: []string{"--user", "--workspace"}},
 								{Name: "workspace", Description: "Target the workspace-level config", Value: "--workspace", ConflictingFlags: []string{"--user", "--repo"}},
 							},
+							RequiredFlagGroup: []string{"--user", "--repo", "--workspace"},
 						},
 						{
 							Name:        "unset",
@@ -952,6 +958,7 @@ func loadCategories() []Category {
 								{Name: "repo", Description: "Target the repo-level config", Value: "--repo", ConflictingFlags: []string{"--user", "--workspace"}},
 								{Name: "workspace", Description: "Target the workspace-level config", Value: "--workspace", ConflictingFlags: []string{"--user", "--repo"}},
 							},
+							RequiredFlagGroup: []string{"--user", "--repo", "--workspace"},
 						},
 						{
 							Name:        "edit",
@@ -962,6 +969,7 @@ func loadCategories() []Category {
 								{Name: "repo", Description: "Target the repo-level config", Value: "--repo", ConflictingFlags: []string{"--user", "--workspace"}},
 								{Name: "workspace", Description: "Target the workspace-level config", Value: "--workspace", ConflictingFlags: []string{"--user", "--repo"}},
 							},
+							RequiredFlagGroup: []string{"--user", "--repo", "--workspace"},
 						},
 					},
 				},

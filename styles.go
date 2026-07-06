@@ -160,6 +160,16 @@ var (
 					Background(colorMaroon).
 					Bold(true)
 
+	// Flags belonging to an unsatisfied RequiredFlagGroup: yellow, "pick one of these".
+	flagRequiredStyle = lipgloss.NewStyle().
+				Foreground(colorYellow)
+
+	// Cursor landed on a required-group flag, same pattern as selected/conflicted/mandatory.
+	flagRequiredFocusedStyle = lipgloss.NewStyle().
+					Foreground(colorCrust).
+					Background(colorYellow).
+					Bold(true)
+
 	commandTextStyle = lipgloss.NewStyle().
 				Foreground(colorGreen).
 				Bold(true)

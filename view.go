@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -158,6 +159,8 @@ func (m mainModel) renderPane(paneIdx int, title string, width, height int) stri
 	case focusFlags:
 		flags := m.currentFlags()
 		if len(flags) > 0 {
+			group := m.currentRequiredFlagGroup()
+			groupUnsatisfied := m.requiredFlagGroupUnsatisfied()
 			for _, f := range flags {
 				check := "[ ]"
 				if f.Mandatory {
@@ -167,7 +170,11 @@ func (m mainModel) renderPane(paneIdx int, title string, width, height int) stri
 				} else if isConflicted(f, flags) {
 					check = "[-]" // blocked by a conflicting selection
 				}
-				items = append(items, fmt.Sprintf("%s %s", check, f.Name))
+				label := fmt.Sprintf("%s %s", check, f.Name)
+				if groupUnsatisfied && slices.Contains(group, f.Value) {
+					label += " *" // one of these is required
+				}
+				items = append(items, label)
 			}
 			selectedIdx = m.flagIdx
 		}
@@ -215,11 +222,15 @@ func (m mainModel) renderPane(paneIdx int, title string, width, height int) stri
 								content.WriteString(activeSelectionStyle.Render(truncateItem(items[itemIdx], width)))
 							} else if isConflicted(f, flags) {
 								content.WriteString(flagConflictedStyle.Render(truncateItem(items[itemIdx], width)))
+							} else if isRequiredGroupFlag(m, f) {
+								content.WriteString(flagRequiredStyle.Render(truncateItem(items[itemIdx], width)))
 							} else {
 								content.WriteString(flagUnselectedStyle.Render(truncateItem(items[itemIdx], width)))
 							}
 						case isConflicted(f, flags):
 							content.WriteString(flagConflictedFocusedStyle.Render(truncateItem(items[itemIdx], width)))
+						case isRequiredGroupFlag(m, f):
+							content.WriteString(flagRequiredFocusedStyle.Render(truncateItem(items[itemIdx], width)))
 						default:
 							content.WriteString(selectedItemStyle.Render(truncateItem(items[itemIdx], width)))
 						}
@@ -242,6 +253,8 @@ func (m mainModel) renderPane(paneIdx int, title string, width, height int) stri
 						content.WriteString(activeSelectionStyle.Render(truncateItem(items[itemIdx], width)))
 					} else if isConflicted(flags[itemIdx], flags) {
 						content.WriteString(flagConflictedStyle.Render(truncateItem(items[itemIdx], width)))
+					} else if isRequiredGroupFlag(m, flags[itemIdx]) {
+						content.WriteString(flagRequiredStyle.Render(truncateItem(items[itemIdx], width)))
 					} else {
 						content.WriteString(flagUnselectedStyle.Render(truncateItem(items[itemIdx], width)))
 					}
@@ -267,6 +280,10 @@ func (m mainModel) renderPane(paneIdx int, title string, width, height int) stri
 	} else {
 		tStyle = inactiveTitleBorderStyle.Copy()
 		cStyle = inactiveContentBorderStyle.Copy()
+	}
+	if paneIdx == focusFlags && m.validationFlash && m.requiredFlagGroupUnsatisfied() {
+		tStyle = tStyle.BorderForeground(colorRed)
+		cStyle = cStyle.BorderForeground(colorRed)
 	}
 
 	hasAbove := scrollOffset > 0
@@ -564,7 +581,7 @@ func (m mainModel) renderInputPanes(width, height int, combined []InputItem) str
 		borderColor = colorPeach
 		borderStyle = cmdBarBorderThick
 	}
-	if m.validationFlash {
+	if m.validationFlash && (m.hasEmptyRequiredFlagInput() || m.hasEmptyRequiredArg()) {
 		borderColor = colorRed
 		borderStyle = cmdBarBorderThick
 	}
