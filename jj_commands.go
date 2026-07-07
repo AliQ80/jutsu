@@ -998,7 +998,7 @@ func loadCategories() []Category {
 							Name:        "list",
 							Description: "List workspaces",
 							Flags: []Flag{
-								{Name: "verbose", Description: "Show verbose output", Value: "--verbose"},
+								{Name: "template", Description: "Render each workspace using the given template\n\nAll 0-argument methods of the [`WorkspaceRef` type] are available as keywords in the\ntemplate expression. See [`jj help -k templates`] for more information.", Value: "-T", RequiresInput: true, InputType: "TEMPLATE"},
 							},
 						},
 						{
