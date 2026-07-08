@@ -222,6 +222,11 @@ func loadCategories() []Category {
 						},
 					},
 				},
+				{
+					Name:        "root",
+					Description: "Show the current workspace root directory (shortcut for `jj workspace root`)",
+					Flags:       []Flag{},
+				},
 			},
 		},
 		{
@@ -845,11 +850,6 @@ func loadCategories() []Category {
 		{
 			Name: "Advanced",
 			Commands: []Command{
-				{
-					Name:        "root",
-					Description: "Show the current workspace root directory (shortcut for `jj workspace root`)",
-					Flags:       []Flag{},
-				},
 				{
 					Name:        "sign",
 					Description: "Cryptographically sign a revision\n\nThis command requires configuring a [commit signing] backend.\n\n[commit signing]: https://docs.jj-vcs.dev/latest/config/#commit-signing",
