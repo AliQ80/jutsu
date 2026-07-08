@@ -489,7 +489,7 @@ func (m mainModel) renderHelpBar(width int) string {
 			{"←→", "pane"},
 			{"d/D", "docs"},
 			{"o/O", "output"},
-			{"tab", "command"},
+			{"tab", "finalize"},
 			{"q", "quit"},
 		}
 		if m.lastCmd != nil {
