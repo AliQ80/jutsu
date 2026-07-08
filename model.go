@@ -1426,13 +1426,17 @@ func (m mainModel) getRequiredArgs() []Arg {
 	return req
 }
 
-// getActiveCombined returns positional args (required and optional) followed by selected
-// flag inputs, lazy-initializing arg textinputs as needed (safe from a value receiver
-// because maps are reference types). Optional args are included so the user can supply a
-// value, but hasIncompleteInputs() only validates required ones — leaving an optional arg
-// blank is fine and lets jj apply its own default.
+// getActiveCombined returns positional args and selected flag inputs ordered by two keys:
+// required items before optional items, and within each tier, flags before args — so a
+// mandatory flag always precedes an optional arg, and a selected optional flag always
+// precedes an optional arg too (args are always shown, so they read as the trailing,
+// lowest-priority fields). It lazy-initializes arg textinputs as needed (safe from a value
+// receiver because maps are reference types). Optional args are included so the user can
+// supply a value, but hasIncompleteInputs() only validates required ones — leaving an
+// optional arg blank is fine and lets jj apply its own default.
 func (m mainModel) getActiveCombined() []InputItem {
-	var items []InputItem
+	var requiredFlags, requiredArgs, optionalFlags, optionalArgs []InputItem
+
 	for _, a := range m.currentArgs() {
 		if _, exists := m.argInputs[a.Name]; !exists {
 			ti := textinput.New()
@@ -1445,11 +1449,25 @@ func (m mainModel) getActiveCombined() []InputItem {
 			ti.CharLimit = 256
 			m.argInputs[a.Name] = ti
 		}
-		items = append(items, InputItem{Name: a.Name, Label: a.Name, IsArg: true})
+		item := InputItem{Name: a.Name, Label: a.Name, IsArg: true}
+		if a.Required {
+			requiredArgs = append(requiredArgs, item)
+		} else {
+			optionalArgs = append(optionalArgs, item)
+		}
 	}
 	for _, f := range m.getActiveInputs() {
-		items = append(items, InputItem{Name: f.Name, Label: f.Name, IsArg: false})
+		item := InputItem{Name: f.Name, Label: f.Name, IsArg: false}
+		if f.Mandatory {
+			requiredFlags = append(requiredFlags, item)
+		} else {
+			optionalFlags = append(optionalFlags, item)
+		}
 	}
+
+	items := append(requiredFlags, requiredArgs...)
+	items = append(items, optionalFlags...)
+	items = append(items, optionalArgs...)
 	return items
 }
 

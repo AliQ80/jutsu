@@ -459,7 +459,7 @@ func (m mainModel) renderHelpBar(width int) string {
 			{"O", "enlarge"},
 			{"c", "copy"},
 			{"esc", "back"},
-			{"tab", "command"},
+			{"tab", "finalize"},
 			{"q", "quit"},
 		}
 	case focusDocs:
@@ -467,6 +467,7 @@ func (m mainModel) renderHelpBar(width int) string {
 			{"↑↓", "scroll"},
 			{"D", "enlarge"},
 			{"c", "copy"},
+			{"tab", "finalize"},
 			{"esc", "back"},
 		}
 	case focusCmdBar:
@@ -479,9 +480,9 @@ func (m mainModel) renderHelpBar(width int) string {
 	case focusInputs:
 		entries = []entry{
 			{"↑↓", "navigate"},
-			{"enter", "next / command"},
+			{"enter", "next"},
+			{"tab", "finalize"},
 			{"esc", "back"},
-			{"tab", "command"},
 		}
 	default: // composer panes 0-3
 		entries = []entry{
