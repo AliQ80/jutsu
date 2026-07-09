@@ -27,6 +27,8 @@ type doc struct {
 	description string
 	args        map[string]string // Arg Name -> description
 	options     map[string]string // flag token ("-r", "--revision", ...) -> description
+	usage       string            // raw "jj <path> ..." text from the "**Usage:**" line
+	subcommands map[string]string // child subcommand Name -> one-line summary
 }
 
 func main() {
@@ -61,7 +63,7 @@ func main() {
 	updated := src
 	applied, skipped := 0, 0
 	for _, e := range edits {
-		if e.newText == "" {
+		if e.newText == "" && !e.allowEmpty {
 			skipped++
 			continue
 		}
@@ -76,11 +78,12 @@ func main() {
 	fmt.Printf("gen-descriptions: updated %d descriptions, %d had no match in markdown-help\n", applied, skipped)
 }
 
-// edit is a byte-range replacement for one Description string literal.
+// edit is a byte-range replacement for one Description (or other) string literal.
 type edit struct {
 	start, end int // byte offsets of the literal (including quotes) in src
 	newText    string
 	label      string // for diagnostics
+	allowEmpty bool   // write newText even if "" (a genuinely empty result, not "no match found")
 }
 
 func collectEdits(fset *token.FileSet, file *ast.File, docs map[string]doc) []edit {
@@ -151,6 +154,77 @@ func collectEdits(fset *token.FileSet, file *ast.File, docs map[string]doc) []ed
 		edits = append(edits, edit{start: fset.Position(descLit.Pos()).Offset, end: fset.Position(descLit.End()).Offset, newText: newText, label: label})
 	}
 
+	recordRequiredUsage := func(lit *ast.CompositeLit, cmdPath string) {
+		val := fieldValue(lit, "RequiredUsage")
+		if val == nil {
+			return
+		}
+		bl, ok := val.(*ast.BasicLit)
+		if !ok || bl.Kind != token.STRING {
+			return
+		}
+		label := cmdPath + " (usage)"
+		d, ok := lookup(cmdPath)
+		if !ok || d.usage == "" {
+			missing = append(missing, label)
+			return
+		}
+		remainder := strings.TrimPrefix(d.usage, cmdPath)
+		if remainder == d.usage && remainder != cmdPath {
+			// The usage line didn't start with "jj <path>" as expected.
+			missing = append(missing, label+" (unexpected usage format)")
+			return
+		}
+		remainder = strings.TrimPrefix(remainder, " ")
+
+		tokens := tokenizeUsage(remainder)
+		// markdown-help inconsistently includes a leading "[OPTIONS]" token
+		// (present for e.g. rebase/log, absent for revert/status/config set),
+		// unlike `jj <cmd> --help` which always shows it. Jitsu already adds
+		// its own "[OPTIONS]" unconditionally, so drop this one to avoid a
+		// duplicate.
+		if len(tokens) > 0 && tokens[0] == "[OPTIONS]" {
+			tokens = tokens[1:]
+		}
+		argCount := min(len(compositeElts(fieldValue(lit, "Args"))), len(tokens))
+		fragment := strings.Join(tokens[:len(tokens)-argCount], " ")
+		edits = append(edits, edit{
+			start: fset.Position(bl.Pos()).Offset, end: fset.Position(bl.End()).Offset,
+			newText: fragment, label: label, allowEmpty: true,
+		})
+	}
+
+	recordSummary := func(lit *ast.CompositeLit, parentPath, name string) {
+		val := fieldValue(lit, "Summary")
+		if val == nil {
+			return
+		}
+		bl, ok := val.(*ast.BasicLit)
+		if !ok || bl.Kind != token.STRING {
+			return
+		}
+		label := parentPath + " " + name + " (summary)"
+		// Some entries flatten a nested jj command group into one Name, e.g.
+		// "remote add" under "jj git" really means "jj git remote"'s own
+		// Subcommands listing has the "add" bullet, not "jj git"'s.
+		lookupPath, childName := parentPath, name
+		if group, rest, ok := strings.Cut(name, " "); ok {
+			lookupPath = parentPath + " " + group
+			childName = rest
+		}
+		d, ok := lookup(lookupPath)
+		if !ok {
+			missing = append(missing, label)
+			return
+		}
+		newText, ok := d.subcommands[childName]
+		if !ok {
+			missing = append(missing, label)
+			return
+		}
+		edits = append(edits, edit{start: fset.Position(bl.Pos()).Offset, end: fset.Position(bl.End()).Offset, newText: newText, label: label})
+	}
+
 	var walkFlags = func(lit *ast.CompositeLit, cmdPath string) {
 		for _, el := range compositeElts(fieldValue(lit, "Flags")) {
 			recordFlag(el, cmdPath)
@@ -169,6 +243,7 @@ func collectEdits(fset *token.FileSet, file *ast.File, docs map[string]doc) []ed
 		recordDescription(lit, path)
 		walkArgs(lit, path)
 		walkFlags(lit, path)
+		recordRequiredUsage(lit, path)
 	}
 
 	var walkCommand func(lit *ast.CompositeLit)
@@ -178,7 +253,9 @@ func collectEdits(fset *token.FileSet, file *ast.File, docs map[string]doc) []ed
 		recordDescription(lit, path)
 		walkArgs(lit, path)
 		walkFlags(lit, path)
+		recordRequiredUsage(lit, path)
 		for _, el := range compositeElts(fieldValue(lit, "SubCmds")) {
+			recordSummary(el, path, stringField(el, "Name"))
 			walkSubCommand(el, path)
 		}
 	}
@@ -263,10 +340,11 @@ func compositeElts(expr ast.Expr) []*ast.CompositeLit {
 }
 
 var (
-	headerRe  = regexp.MustCompile("^## `(jj[^`]*)`$")
-	sectionRe = regexp.MustCompile(`^###### \*\*(.+):\*\*$`)
-	usageRe   = regexp.MustCompile(`^\*\*Usage:\*\*`)
-	bulletRe  = regexp.MustCompile(`^\* (.+)$`)
+	headerRe    = regexp.MustCompile("^## `(jj[^`]*)`$")
+	sectionRe   = regexp.MustCompile(`^###### \*\*(.+):\*\*$`)
+	usageRe     = regexp.MustCompile(`^\*\*Usage:\*\*`)
+	usageLineRe = regexp.MustCompile("^\\*\\*Usage:\\*\\* `(.+)`$")
+	bulletRe    = regexp.MustCompile(`^\* (.+)$`)
 )
 
 // parseMarkdownHelp splits `jj util markdown-help` output into one doc per
@@ -299,7 +377,7 @@ func parseMarkdownHelp(text string) map[string]doc {
 // parseSection parses the lines that follow one "## `jj ...`" header, up to
 // (but not including) the next header.
 func parseSection(lines []string) doc {
-	d := doc{args: map[string]string{}, options: map[string]string{}}
+	d := doc{args: map[string]string{}, options: map[string]string{}, subcommands: map[string]string{}}
 
 	// Description: everything before "**Usage:**", reflowed into paragraphs.
 	i := 0
@@ -310,8 +388,15 @@ func parseSection(lines []string) doc {
 	}
 	d.description = joinParagraphs(descLines)
 
+	// Capture the raw "jj <path> ..." text of the "**Usage:**" line, if present.
+	if i < len(lines) {
+		if m := usageLineRe.FindStringSubmatch(strings.TrimSpace(lines[i])); m != nil {
+			d.usage = m[1]
+		}
+	}
+
 	// Walk remaining "###### **Section:**" blocks (Arguments / Options /
-	// Subcommands...); we only care about Arguments and Options.
+	// Subcommands...).
 	for i < len(lines) {
 		m := sectionRe.FindStringSubmatch(strings.TrimSpace(lines[i]))
 		if m == nil {
@@ -330,6 +415,8 @@ func parseSection(lines []string) doc {
 			parseArgItems(blockLines, d.args)
 		case "Options":
 			parseOptionItems(blockLines, d.options)
+		case "Subcommands":
+			parseSubcommandItems(blockLines, d.subcommands)
 		}
 	}
 	return d
@@ -363,6 +450,19 @@ var argNameRe = regexp.MustCompile("^\\* `<([A-Za-z0-9_]+)>`(?:.*? — (.*))?$")
 func parseArgItems(lines []string, out map[string]string) {
 	for _, item := range splitItems(lines) {
 		m := argNameRe.FindStringSubmatch(item[0])
+		if m == nil {
+			continue
+		}
+		name, first := m[1], m[2]
+		out[name] = joinItemBody(first, item[1:])
+	}
+}
+
+var subcmdNameRe = regexp.MustCompile("^\\* `([a-z][a-z0-9-]*)`(?:.*? — (.*))?$")
+
+func parseSubcommandItems(lines []string, out map[string]string) {
+	for _, item := range splitItems(lines) {
+		m := subcmdNameRe.FindStringSubmatch(item[0])
 		if m == nil {
 			continue
 		}
@@ -425,4 +525,39 @@ func splitParagraphs(lines []string) []string {
 
 func joinParagraphs(lines []string) string {
 	return strings.Join(splitParagraphs(lines), "\n\n")
+}
+
+// tokenizeUsage splits a Usage-line remainder (e.g. "--revision <REVSETS>
+// <--onto <REVSETS>|--insert-after <REVSETS>>") on top-level spaces, treating
+// anything inside <...> or [...] as part of the same token so multi-word
+// alternation groups stay together.
+func tokenizeUsage(s string) []string {
+	var tokens []string
+	var cur strings.Builder
+	depth := 0
+	for _, r := range s {
+		switch r {
+		case '<', '[':
+			depth++
+			cur.WriteRune(r)
+		case '>', ']':
+			depth--
+			cur.WriteRune(r)
+		case ' ':
+			if depth == 0 {
+				if cur.Len() > 0 {
+					tokens = append(tokens, cur.String())
+					cur.Reset()
+				}
+			} else {
+				cur.WriteRune(r)
+			}
+		default:
+			cur.WriteRune(r)
+		}
+	}
+	if cur.Len() > 0 {
+		tokens = append(tokens, cur.String())
+	}
+	return tokens
 }

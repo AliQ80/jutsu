@@ -23,10 +23,12 @@ type SubCommand struct {
 	Name              string
 	Alias             string // e.g. "a" for bookmark advance — populated by gen-descriptions
 	Description       string
+	Summary           string // one-line summary shown in the parent command's Subcommands listing — populated by gen-descriptions
 	Value             string // overrides Name in the built command string when set
 	Args              []Arg
 	Flags             []Flag
 	RequiredFlagGroup []string // Values of flags where at least one must be selected
+	RequiredUsage     string   // required-flag portion of the Usage line, e.g. "<--onto|--insert-after|--insert-before>" — populated by gen-descriptions
 }
 
 type Command struct {
@@ -37,6 +39,7 @@ type Command struct {
 	SubCmds           []SubCommand
 	Flags             []Flag
 	RequiredFlagGroup []string // Values of flags where at least one must be selected
+	RequiredUsage     string   // required-flag portion of the Usage line, e.g. "--revision <REVSETS> <--onto|...>" — populated by gen-descriptions
 }
 
 type Category struct {
@@ -177,7 +180,7 @@ func loadCategories() []Category {
 					Description: "File operations",
 					SubCmds: []SubCommand{
 						{
-							Name:        "list",
+							Summary: "List files in a revision", Name: "list",
 							Description: "List files in a revision",
 							Args: []Arg{
 								{Name: "FILESETS", Description: "Only list files matching these prefixes (instead of all files)", Variadic: true},
@@ -188,7 +191,7 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Name:        "show",
+							Summary: "Print contents of files in a revision", Name: "show",
 							Description: "Print contents of files in a revision\n\nIf the given path is a directory, files in the directory will be visited recursively.",
 							Args: []Arg{
 								{Name: "FILESETS", Description: "Paths to print", Variadic: true, Required: true},
@@ -199,7 +202,7 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Name:        "annotate",
+							Summary: "Show the source change for each line of the target file", Name: "annotate",
 							Description: "Show the source change for each line of the target file.\n\nAnnotates a revision line by line. Each line includes the source change that introduced the associated line. A path to the desired file must be provided.",
 							Args: []Arg{
 								{Name: "PATH", Description: "the file to annotate", Required: true},
@@ -210,7 +213,7 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Name:        "search",
+							Summary: "Search for content in files", Name: "search",
 							Description: "Search for content in files\n\nLists files containing the specified pattern.\n\nThis is an early version of the command. It only supports glob matching for now, it doesn't search files concurrently, and it doesn't indicate where in the file the match was found.",
 							Args: []Arg{
 								{Name: "FILESETS", Description: "Only search files matching these prefixes (instead of all files)", Variadic: true},
@@ -343,7 +346,7 @@ func loadCategories() []Category {
 					Description: "File operations",
 					SubCmds: []SubCommand{
 						{
-							Name:        "track",
+							Summary: "Start tracking specified paths in the working copy", Name: "track",
 							Description: "Start tracking specified paths in the working copy\n\nWithout arguments, all paths that are not ignored will be tracked.\n\nBy default, new files in the working copy are automatically tracked, so this command has no effect. You can configure which paths to automatically track by setting `snapshot.auto-track` (e.g. to `\"none()\"` or `\"glob:**/*.rs\"`). Files that don't match the pattern can be manually tracked using this command. The default pattern is `all()`.",
 							Args: []Arg{
 								{Name: "FILESETS", Description: "Paths to track", Variadic: true, Required: true},
@@ -353,7 +356,7 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Name:        "untrack",
+							Summary: "Stop tracking specified paths in the working copy", Name: "untrack",
 							Description: "Stop tracking specified paths in the working copy",
 							Args: []Arg{
 								{Name: "FILESETS", Description: "Paths to untrack. They must already be ignored.\n\nThe paths could be ignored via a .gitignore or .git/info/exclude (in colocated workspaces).", Variadic: true, Required: true},
@@ -361,7 +364,7 @@ func loadCategories() []Category {
 							Flags: []Flag{},
 						},
 						{
-							Name:        "chmod",
+							Summary: "Sets or removes the executable bit for paths in the repo", Name: "chmod",
 							Description: "Sets or removes the executable bit for paths in the repo\n\nUnlike the POSIX `chmod`, `jj file chmod` also works on Windows, on conflicted files, and on arbitrary revisions.",
 							Args: []Arg{
 								{Name: "MODE", Description: "Possible values: - `n`: Make a path non-executable (alias: normal) - `x`: Make a path executable (alias: executable)", Required: true},
@@ -384,7 +387,7 @@ func loadCategories() []Category {
 					Description: "Manage bookmarks [default alias: b]\n\nSee [`jj help -k bookmarks`] for more information.\n\n[`jj help -k bookmarks`]: https://docs.jj-vcs.dev/latest/bookmarks",
 					SubCmds: []SubCommand{
 						{
-							Name:        "list",
+							Summary: "List bookmarks and their targets", Name: "list",
 							Alias:       "l",
 							Description: "List bookmarks and their targets\n\nBy default, a tracked remote bookmark will be included only if its target is different from the local target. An untracked remote bookmark won't be listed. For a conflicted bookmark (both local and remote), old target revisions are preceded by a \"-\" and new target revisions are preceded by a \"+\".\n\nSee [`jj help -k bookmarks`] for more information.\n\n[`jj help -k bookmarks`]: https://docs.jj-vcs.dev/latest/bookmarks",
 							Args: []Arg{
@@ -399,7 +402,7 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Name:        "advance",
+							Summary: "Advance the closest bookmarks to a target revision", Name: "advance",
 							Alias:       "a",
 							Description: "Advance the closest bookmarks to a target revision\n\nThe target `--to` defaults to `revsets.bookmark-advance-to` (which defaults to `@`).\n\nThe bookmarks to advance are determined by `revsets.bookmark-advance-from` (which defaults to `heads(::to & bookmarks())`).\n\nNote that the from revset has access to `to`.\n\nPositional bookmark name arguments can target specific bookmarks to advance to the target, in this case the default from revset is ignored.\n\nExample:\n\n`jj bookmark advance --to x` - Does the equivalent of `jj bookmark move --from 'heads(::x & bookmarks())' --to x`.",
 							Args: []Arg{
@@ -410,7 +413,7 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Name:        "move",
+							Summary: "Move existing bookmarks to target revision", Name: "move",
 							Alias:       "m",
 							Description: "Move existing bookmarks to target revision\n\nUnlike `jj bookmark set`, this command cannot create new bookmarks.\n\nIf bookmark names are given, the specified bookmarks will be updated to point to the target revision.\n\nIf `--from` options are given, bookmarks currently pointing to the specified revisions will be updated. The bookmarks can also be filtered by names.",
 							Args: []Arg{
@@ -423,7 +426,7 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Name:        "set",
+							Summary: "Create a new bookmark, or update an existing one by name", Name: "set",
 							Alias:       "s",
 							Description: "Create a new bookmark, or update an existing one by name\n\nIf you want to move bookmarks based on their current location rather than by name, use `jj bookmark move --from <REVSETS>`.",
 							Args: []Arg{
@@ -435,7 +438,7 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Name:        "create",
+							Summary: "Create a new bookmark", Name: "create",
 							Alias:       "c",
 							Description: "Create a new bookmark",
 							Args: []Arg{
@@ -446,7 +449,7 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Name:        "rename",
+							Summary: "Rename `old` bookmark name to `new` bookmark name", Name: "rename",
 							Alias:       "r",
 							Description: "Rename `old` bookmark name to `new` bookmark name\n\nThe new bookmark name points at the same commit as the old bookmark name.",
 							Args: []Arg{
@@ -458,7 +461,7 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Name:        "track",
+							Summary: "Start tracking given remote bookmarks", Name: "track",
 							Alias:       "t",
 							Description: "Start tracking given remote bookmarks\n\nA tracked remote bookmark will be imported as a local bookmark of the same name. Changes to it will propagate to the existing local bookmark on future pulls.",
 							Args: []Arg{
@@ -469,7 +472,7 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Name:        "untrack",
+							Summary: "Stop tracking given remote bookmarks", Name: "untrack",
 							Description: "Stop tracking given remote bookmarks\n\nAn untracked remote bookmark is just a pointer to the last-fetched remote bookmark. It won't be imported as a local bookmark on future pulls.\n\nIf you want to forget a local bookmark while also untracking the corresponding remote bookmarks, use `jj bookmark forget` instead.",
 							Args: []Arg{
 								{Name: "BOOKMARK", Description: "Bookmark names to untrack\n\nBy default, the specified pattern matches bookmark names with glob syntax. You can also use other [string pattern syntax].\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Variadic: true, Required: true},
@@ -479,7 +482,7 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Name:        "forget",
+							Summary: "Forget a bookmark without marking it as a deletion to be pushed", Name: "forget",
 							Alias:       "f",
 							Description: "Forget a bookmark without marking it as a deletion to be pushed\n\nIf a local bookmark is forgotten, any corresponding remote bookmarks will become untracked to ensure that the forgotten bookmark will not impact remotes on future pushes.",
 							Args: []Arg{
@@ -490,7 +493,7 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Name:        "delete",
+							Summary: "Delete an existing bookmark and propagate the deletion to remotes on the next push", Name: "delete",
 							Description: "Delete an existing bookmark and propagate the deletion to remotes on the next push\n\nRevisions referred to by the deleted bookmarks are not abandoned. To delete revisions as well as bookmarks, use `jj abandon`. For example, `jj abandon main..<bookmark>` will abandon revisions belonging to the `<bookmark>` branch (relative to the `main` branch.)\n\nIf you don't want the deletion of the local bookmark to propagate to any tracked remote bookmarks, use `jj bookmark forget` instead.",
 							Args: []Arg{
 								{Name: "NAMES", Description: "The bookmarks to delete\n\nBy default, the specified pattern matches bookmark names with glob syntax. You can also use other [string pattern syntax].\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Variadic: true, Required: true},
@@ -504,7 +507,7 @@ func loadCategories() []Category {
 					Description: "Commands for working with Git remotes and the underlying Git repo\n\nSee this [comparison], including a [table of commands].\n\n[comparison]: https://docs.jj-vcs.dev/latest/git-comparison/.\n\n[table of commands]: https://docs.jj-vcs.dev/latest/git-command-table",
 					SubCmds: []SubCommand{
 						{
-							Name:        "fetch",
+							Summary: "Fetch from a Git remote", Name: "fetch",
 							Description: "Fetch from a Git remote\n\nIf no remotes are specified, fetches the remotes specified by the `git.fetch` setting. If that is not configured and there are multiple remotes, the remote named \"origin\" will be used.\n\nIf no branches nor tags are specified, fetches bookmarks and tags specified by the `remotes.<name>.fetch-bookmarks`/`fetch-tags` settings. If `remotes.<name>.fetch-bookmarks` is not configured, the default fetch refspecs for the selected remotes are read from the Git configuration.\n\nCommits that are no longer reachable from any branch on the remote will be considered abandoned by the remote, and will be abandoned in the local repo to match the remote. Set `git.abandon-unreachable-commits` to `false` to disable this behavior.\n\nIf a working-copy commit gets abandoned, it will be given a new, empty commit. This is true in general; it is not specific to this command.",
 							Flags: []Flag{
 								{Name: "remote", Description: "The remote to fetch from (only named remotes are supported, can be repeated)\n\nBy default, the specified pattern matches remote names with glob syntax, e.g. `--remote '*'`. You can also use other [string pattern syntax].\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "--remote", RequiresInput: true, ConflictingFlags: []string{"--all-remotes"}, InputType: "REMOTE"},
@@ -514,7 +517,7 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Name:        "push",
+							Summary: "Push to a Git remote", Name: "push",
 							Description: "Push to a Git remote\n\nBy default, pushes tracking bookmarks pointing to `remote_bookmarks(remote=<remote>)..@`. Use `--bookmark` to push specific bookmarks. Use `--all` to push all bookmarks. Use `--change` to generate bookmark names based on the change IDs of specific commits.\n\nWhen pushing a bookmark, the command pushes all commits in the range from the remote's current position up to and including the bookmark's target commit. Any descendant commits beyond the bookmark are not pushed.\n\nIf the local bookmark has changed from the last fetch, push will update the remote bookmark to the new position after passing safety checks. This is similar to `git push --force-with-lease` - the remote is updated only if its current state matches what Jujutsu last fetched.\n\nUnlike in Git, the remote to push to is not derived from the tracked remote bookmarks. Use `--remote` to select the remote Git repository by name. There is no option to push to multiple remotes.\n\nBefore the command actually moves, creates, or deletes a remote bookmark, it makes several [safety checks]. If there is a problem, you may need to run `jj git fetch --remote <remote name>` and/or resolve some [bookmark conflicts].\n\n[safety checks]: https://docs.jj-vcs.dev/latest/bookmarks/#pushing-bookmarks-safety-checks\n\n[bookmark conflicts]: https://docs.jj-vcs.dev/latest/bookmarks/#conflicts",
 							Flags: []Flag{
 								{Name: "remote", Description: "The remote to push to (only named remotes are supported)\n\nThis defaults to the `git.push` setting. If that is not configured, and if there are multiple remotes, the remote named \"origin\" will be used.", Value: "--remote", RequiresInput: true, InputType: "REMOTE"},
@@ -531,17 +534,17 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Name:        "import",
+							Summary: "Update repo with changes made in the underlying Git repo", Name: "import",
 							Description: "Update repo with changes made in the underlying Git repo\n\nCommits that are no longer reachable from any branch in the Git repo will be considered abandoned in the Git repo, and will be abandoned in the jj repo to match the Git repo. Set `git.abandon-unreachable-commits` to `false` to disable this behavior.\n\nIf a working-copy commit gets abandoned, it will be given a new, empty commit. This is true in general; it is not specific to this command.\n\nThere is no need to run this command if you're in colocated workspace because the import happens automatically there.",
 							Flags:       []Flag{},
 						},
 						{
-							Name:        "export",
+							Summary: "Update the underlying Git repo with changes made in the repo", Name: "export",
 							Description: "Update the underlying Git repo with changes made in the repo\n\nThere is no need to run this command if you're in colocated workspace because the export happens automatically there.",
 							Flags:       []Flag{},
 						},
 						{
-							Name:        "remote add",
+							Summary: "Add a Git remote", Name: "remote add",
 							Description: "Add a Git remote",
 							Args: []Arg{
 								{Name: "REMOTE", Description: "The remote's name", Required: true},
@@ -550,12 +553,12 @@ func loadCategories() []Category {
 							Flags: []Flag{},
 						},
 						{
-							Name:        "remote list",
+							Summary: "List Git remotes", Name: "remote list",
 							Description: "List Git remotes",
 							Flags:       []Flag{},
 						},
 						{
-							Name:        "remote remove",
+							Summary: "Remove a Git remote and forget its bookmarks", Name: "remote remove",
 							Description: "Remove a Git remote and forget its bookmarks",
 							Args: []Arg{
 								{Name: "REMOTE", Description: "The remote's name", Required: true},
@@ -563,7 +566,7 @@ func loadCategories() []Category {
 							Flags: []Flag{},
 						},
 						{
-							Name:        "remote rename",
+							Summary: "Rename a Git remote", Name: "remote rename",
 							Description: "Rename a Git remote",
 							Args: []Arg{
 								{Name: "OLD", Description: "The name of an existing remote", Required: true},
@@ -578,7 +581,7 @@ func loadCategories() []Category {
 					Description: "Manage tags",
 					SubCmds: []SubCommand{
 						{
-							Name:        "list",
+							Summary: "List tags and their targets", Name: "list",
 							Alias:       "l",
 							Description: "List tags and their targets\n\nBy default, a tracked remote tag will be included only if its target is different from the local tag. An untracked remote tag won't be listed. For a conflicted tag (both local and remote), old target revisions are preceded by a \"-\" and new target revisions are preceded by a \"+\".\n\nThe `-r` flag combined with revset expressions can be used for filtering. For example:\n\n* `jj tag list -r 'REV::'` shows tags whose targets are descendants of REV (similar to `git tag --contains REV`).\n\n* `jj tag list -r '::REV'` shows tags whose targets are ancestors of REV (similar to `git tag --merged REV`).",
 							Args: []Arg{
@@ -589,7 +592,7 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Name:        "set",
+							Summary: "Create or update tags", Name: "set",
 							Alias:       "s",
 							Description: "Create or update tags",
 							Args: []Arg{
@@ -601,7 +604,7 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Name:        "delete",
+							Summary: "Delete existing tags", Name: "delete",
 							Alias:       "d",
 							Description: "Delete existing tags\n\nRevisions referred to by the deleted tags are not abandoned.",
 							Args: []Arg{
@@ -660,6 +663,7 @@ func loadCategories() []Category {
 						{Name: "simplify-parents", Description: "Simplify parents of rebased commits, like `jj simplify-parents`, while rebasing them. Any parents that are ancestors of other parents will be removed", Value: "--simplify-parents"},
 					},
 					RequiredFlagGroup: []string{"-o", "--insert-after", "--insert-before"},
+					RequiredUsage:     "<--onto <REVSETS>|--insert-after <REVSETS>|--insert-before <REVSETS>>",
 				},
 				{
 					Name:        "absorb",
@@ -721,6 +725,7 @@ func loadCategories() []Category {
 						{Name: "insert-before", Description: "The revision(s) to insert the reverse changes before (can be repeated to create a merge commit)", Value: "-B", RequiresInput: true, ConflictingFlags: []string{"-o"}, InputType: "REVSETS"},
 					},
 					RequiredFlagGroup: []string{"-o", "-A", "-B"},
+					RequiredUsage:     "--revision <REVSETS> <--onto <REVSETS>|--insert-after <REVSETS>|--insert-before <REVSETS>>",
 				},
 			},
 		},
@@ -733,7 +738,7 @@ func loadCategories() []Category {
 					Description: "Commands for working with the operation log\n\nSee the [operation log documentation] for more information.\n\n[operation log documentation]: https://docs.jj-vcs.dev/latest/operation-log/",
 					SubCmds: []SubCommand{
 						{
-							Name:        "log",
+							Summary: "Show the operation log", Name: "log",
 							Description: "Show the operation log\n\nLike other commands, `jj op log` snapshots the current working-copy changes and reconciles divergent operations. Use `--at-op=@ --ignore-working-copy` to inspect the current state without mutation.",
 							Flags: []Flag{
 								{Name: "template", Description: "Render each operation using the given template\n\nYou can specify arbitrary template expressions using the [built-in keywords]. See [`jj help -k templates`] for more information.\n\n[built-in keywords]: https://docs.jj-vcs.dev/latest/templates/#operation-keywords\n\n[`jj help -k templates`]: https://docs.jj-vcs.dev/latest/templates/", Value: "-T", RequiresInput: true, InputType: "TEMPLATE"},
@@ -754,7 +759,7 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Name:        "show",
+							Summary: "Show changes to the repository in an operation", Name: "show",
 							Description: "Show changes to the repository in an operation",
 							Args: []Arg{
 								{Name: "OPERATION", Description: "Show repository changes in this operation, compared to its parent(s)\n\nDefault value: `@`"},
@@ -778,7 +783,7 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Name:        "diff",
+							Summary: "Compare changes to the repository between two operations", Name: "diff",
 							Description: "Compare changes to the repository between two operations",
 							Flags: []Flag{
 								{Name: "operation", Description: "Show repository changes in this operation, compared to its parent", Value: "--operation", RequiresInput: true, InputType: "OPERATION"},
@@ -800,7 +805,7 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Name:        "restore",
+							Summary: "Create a new operation that restores the repo to an earlier state", Name: "restore",
 							Description: "Create a new operation that restores the repo to an earlier state\n\nThis restores the repo to the state at the specified operation, effectively undoing all later operations. It does so by creating a new operation.",
 							Args: []Arg{
 								{Name: "OPERATION", Description: "The operation to restore to\n\nUse `jj op log` to find an operation to restore to. Use e.g. `jj --at-op=<operation ID> log` before restoring to an operation to see the state of the repo at that operation.", Required: true},
@@ -810,7 +815,7 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Name:        "revert",
+							Summary: "Create a new operation that reverts an earlier operation", Name: "revert",
 							Description: "Create a new operation that reverts an earlier operation\n\nThis reverts an individual operation by applying the inverse of the operation.",
 							Args: []Arg{
 								{Name: "OPERATION", Description: "The operation to revert\n\nUse `jj op log` to find an operation to revert.\n\nDefault value: `@`"},
@@ -818,7 +823,7 @@ func loadCategories() []Category {
 							Flags: []Flag{},
 						},
 						{
-							Name:        "abandon",
+							Summary: "Abandon operation history", Name: "abandon",
 							Description: "Abandon operation history\n\nTo discard old operation history, use `jj op abandon ..<operation ID>`. It will abandon the specified operation and all its ancestors. The descendants will be reparented onto the root operation.\n\nTo discard recent operations, use `jj op restore <operation ID>` followed by `jj op abandon <operation ID>..@-`.\n\nPrevious versions of a change (or predecessors) are also discarded if they become unreachable from the operation history. The abandoned operations, commits, and other unreachable objects can later be garbage collected by using `jj util gc` command.",
 							Args: []Arg{
 								{Name: "OPERATION", Description: "The operation or operation range to abandon", Required: true},
@@ -826,7 +831,7 @@ func loadCategories() []Category {
 							Flags: []Flag{},
 						},
 						{
-							Name:        "integrate",
+							Summary: "Make an operation part of the operation log", Name: "integrate",
 							Description: "Make an operation part of the operation log\n\nBy default, operations are automatically integrated into the operation log, but `--no-integrate-operation` or internal errors may cause that to not happen. This command can then be used for making such operations part of the operation log.\n\nRunning this command on an operation that is already in the operation log (`jj op log`) has no effect.",
 							Args: []Arg{
 								{Name: "OPERATION", Description: "The operation to integrate"},
@@ -870,12 +875,12 @@ func loadCategories() []Category {
 					Description: "Manage which paths from the working-copy commit are present in the working copy",
 					SubCmds: []SubCommand{
 						{
-							Name:        "list",
+							Summary: "List the patterns that are currently present in the working copy", Name: "list",
 							Description: "List the patterns that are currently present in the working copy\n\nBy default, a newly cloned or initialized repo will have have a pattern matching all files from the repo root. That pattern is rendered as `.` (a single period).",
 							Flags:       []Flag{},
 						},
 						{
-							Name:        "set",
+							Summary: "Update the patterns that are present in the working copy", Name: "set",
 							Description: "Update the patterns that are present in the working copy\n\nFor example, if all you need is the `README.md` and the `lib/` directory, use `jj sparse set --clear --add README.md --add lib`. If you no longer need the `lib` directory, use `jj sparse set --remove lib`.",
 							Flags: []Flag{
 								{Name: "add", Description: "Patterns to add to the working copy", Value: "--add", RequiresInput: true, InputType: "ADD"},
@@ -884,7 +889,7 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Name:        "reset",
+							Summary: "Reset the patterns to include all files in the working copy", Name: "reset",
 							Description: "Reset the patterns to include all files in the working copy",
 							Flags:       []Flag{},
 						},
@@ -895,7 +900,7 @@ func loadCategories() []Category {
 					Description: "Manage config options\n\nOperates on jj configuration, which comes from the config file and environment variables.\n\nSee [`jj help -k config`] to know more about file locations, supported config options, and other details about `jj config`.\n\n[`jj help -k config`]: https://docs.jj-vcs.dev/latest/config/",
 					SubCmds: []SubCommand{
 						{
-							Name:        "get",
+							Summary: "Get the value of a given config option.", Name: "get",
 							Alias:       "g",
 							Description: "Get the value of a given config option.\n\nUnlike `jj config list`, the result of `jj config get` is printed without extra formatting and therefore is usable in scripting. For example:\n\n$ jj config list user.name user.name=\"Martin von Zweigbergk\" $ jj config get user.name Martin von Zweigbergk",
 							Args: []Arg{
@@ -904,7 +909,7 @@ func loadCategories() []Category {
 							Flags: []Flag{},
 						},
 						{
-							Name:        "list",
+							Summary: "List variables set in config files, along with their values", Name: "list",
 							Alias:       "l",
 							Description: "List variables set in config files, along with their values",
 							Args: []Arg{
@@ -918,7 +923,7 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Name:        "path",
+							Summary: "Print the paths to the config files", Name: "path",
 							Alias:       "p",
 							Description: "Print the paths to the config files\n\nA config file at that path may or may not exist.\n\nIf `--repo` or `--workspace` is specified and the config file does not exist, jj will generate a new config directory for this repo/workspace and print the path to the config file in that directory.\n\nSee `jj config edit` if you'd like to immediately edit a file.",
 							Flags: []Flag{
@@ -927,9 +932,10 @@ func loadCategories() []Category {
 								{Name: "workspace", Description: "Target the workspace-level config", Value: "--workspace", ConflictingFlags: []string{"--user", "--repo"}},
 							},
 							RequiredFlagGroup: []string{"--user", "--repo", "--workspace"},
+							RequiredUsage:     "<--user|--repo|--workspace>",
 						},
 						{
-							Name:        "set",
+							Summary: "Update a config file to set the given option to a given value", Name: "set",
 							Alias:       "s",
 							Description: "Update a config file to set the given option to a given value",
 							Args: []Arg{
@@ -942,9 +948,10 @@ func loadCategories() []Category {
 								{Name: "workspace", Description: "Target the workspace-level config", Value: "--workspace", ConflictingFlags: []string{"--user", "--repo"}},
 							},
 							RequiredFlagGroup: []string{"--user", "--repo", "--workspace"},
+							RequiredUsage:     "<--user|--repo|--workspace>",
 						},
 						{
-							Name:        "unset",
+							Summary: "Update a config file to unset the given option", Name: "unset",
 							Alias:       "u",
 							Description: "Update a config file to unset the given option",
 							Args: []Arg{
@@ -956,9 +963,10 @@ func loadCategories() []Category {
 								{Name: "workspace", Description: "Target the workspace-level config", Value: "--workspace", ConflictingFlags: []string{"--user", "--repo"}},
 							},
 							RequiredFlagGroup: []string{"--user", "--repo", "--workspace"},
+							RequiredUsage:     "<--user|--repo|--workspace>",
 						},
 						{
-							Name:        "edit",
+							Summary: "Start an editor on a jj config file", Name: "edit",
 							Alias:       "e",
 							Description: "Start an editor on a jj config file.\n\nCreates the file if it doesn't already exist regardless of what the editor does.",
 							Flags: []Flag{
@@ -967,6 +975,7 @@ func loadCategories() []Category {
 								{Name: "workspace", Description: "Target the workspace-level config", Value: "--workspace", ConflictingFlags: []string{"--user", "--repo"}},
 							},
 							RequiredFlagGroup: []string{"--user", "--repo", "--workspace"},
+							RequiredUsage:     "<--user|--repo|--workspace>",
 						},
 					},
 				},
@@ -977,13 +986,13 @@ func loadCategories() []Category {
 						{Name: "COMMAND", Description: "Print help for the subcommand(s)", Variadic: true},
 					},
 					SubCmds: []SubCommand{
-						{Name: "bookmarks", Value: "-k bookmarks", Description: "Print this message or the help of the given subcommand(s)"},
-						{Name: "config", Value: "-k config", Description: "Print this message or the help of the given subcommand(s)"},
-						{Name: "filesets", Value: "-k filesets", Description: "Print this message or the help of the given subcommand(s)"},
-						{Name: "glossary", Value: "-k glossary", Description: "Print this message or the help of the given subcommand(s)"},
-						{Name: "revsets", Value: "-k revsets", Description: "Print this message or the help of the given subcommand(s)"},
-						{Name: "templates", Value: "-k templates", Description: "Print this message or the help of the given subcommand(s)"},
-						{Name: "tutorial", Value: "-k tutorial", Description: "Print this message or the help of the given subcommand(s)"},
+						{Summary: "", Name: "bookmarks", Value: "-k bookmarks", Description: "Print this message or the help of the given subcommand(s)"},
+						{Summary: "", Name: "config", Value: "-k config", Description: "Print this message or the help of the given subcommand(s)"},
+						{Summary: "", Name: "filesets", Value: "-k filesets", Description: "Print this message or the help of the given subcommand(s)"},
+						{Summary: "", Name: "glossary", Value: "-k glossary", Description: "Print this message or the help of the given subcommand(s)"},
+						{Summary: "", Name: "revsets", Value: "-k revsets", Description: "Print this message or the help of the given subcommand(s)"},
+						{Summary: "", Name: "templates", Value: "-k templates", Description: "Print this message or the help of the given subcommand(s)"},
+						{Summary: "", Name: "tutorial", Value: "-k tutorial", Description: "Print this message or the help of the given subcommand(s)"},
 					},
 					Flags: []Flag{},
 				},
@@ -992,19 +1001,19 @@ func loadCategories() []Category {
 					Description: "Commands for working with workspaces\n\nWorkspaces let you add additional working copies attached to the same repo. A common use case is so you can run a slow build or test in one workspace while you're continuing to write code in another workspace.\n\nEach workspace has its own working-copy commit. When you have more than one workspace attached to a repo, they are indicated by `<workspace name>@` in `jj log`.\n\nEach workspace also has own sparse patterns.",
 					SubCmds: []SubCommand{
 						{
-							Name:        "list",
+							Summary: "List workspaces", Name: "list",
 							Description: "List workspaces",
 							Flags: []Flag{
 								{Name: "template", Description: "Render each workspace using the given template\n\nAll 0-argument methods of the [`WorkspaceRef` type] are available as keywords in the template expression. See [`jj help -k templates`] for more information.\n\n[`WorkspaceRef` type]: https://docs.jj-vcs.dev/latest/templates/#workspaceref-type\n\n[`jj help -k templates`]: https://docs.jj-vcs.dev/latest/templates/", Value: "-T", RequiresInput: true, InputType: "TEMPLATE"},
 							},
 						},
 						{
-							Name:        "root",
+							Summary: "Show the workspace root directory", Name: "root",
 							Description: "Show the workspace root directory",
 							Flags:       []Flag{},
 						},
 						{
-							Name:        "add",
+							Summary: "Add a workspace", Name: "add",
 							Description: "Add a workspace\n\nBy default, the new workspace inherits the sparse patterns of the current workspace. You can override this with the `--sparse-patterns` option.",
 							Args: []Arg{
 								{Name: "DESTINATION", Description: "Where to create the new workspace", Required: true},
@@ -1017,7 +1026,7 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Name:        "rename",
+							Summary: "Renames the current workspace", Name: "rename",
 							Description: "Renames the current workspace",
 							Args: []Arg{
 								{Name: "NEW_WORKSPACE_NAME", Description: "The name of the workspace to update to"},
@@ -1025,7 +1034,7 @@ func loadCategories() []Category {
 							Flags: []Flag{},
 						},
 						{
-							Name:        "forget",
+							Summary: "Stop tracking a workspace's working-copy commit in the repo", Name: "forget",
 							Description: "Stop tracking a workspace's working-copy commit in the repo\n\nThe workspace will not be touched on disk. It can be deleted from disk before or after running this command.",
 							Args: []Arg{
 								{Name: "WORKSPACES", Description: "Names of the workspaces to forget. By default, forgets only the current workspace", Variadic: true},
@@ -1033,7 +1042,7 @@ func loadCategories() []Category {
 							Flags: []Flag{},
 						},
 						{
-							Name:        "update-stale",
+							Summary: "Update a workspace that has become stale", Name: "update-stale",
 							Description: "Update a workspace that has become stale\n\nSee the [stale working copy documentation] for more information.\n\n[stale working copy documentation]: https://docs.jj-vcs.dev/latest/working-copy/#stale-working-copy",
 							Flags:       []Flag{},
 						},
@@ -1044,14 +1053,14 @@ func loadCategories() []Category {
 					Description: "Infrequently used commands such as for generating shell completions",
 					SubCmds: []SubCommand{
 						{
-							Name:        "gc",
+							Summary: "Run backend-dependent garbage collection", Name: "gc",
 							Description: "Run backend-dependent garbage collection.\n\nTo garbage-collect old operations and the commits/objects referenced by them, run `jj op abandon ..<some old operation>` before `jj util gc`.",
 							Flags: []Flag{
 								{Name: "expire", Description: "Time threshold\n\nBy default, only obsolete objects and operations older than 2 weeks are pruned.\n\nOnly the string \"now\" can be passed to this parameter. Support for arbitrary absolute and relative timestamps will come in a subsequent release.", Value: "--expire", RequiresInput: true, InputType: "EXPIRE"},
 							},
 						},
 						{
-							Name:        "completion bash",
+							Summary: "", Name: "completion bash",
 							Description: "Print a command-line-completion script\n\nApply it by running one of these:\n\n- Bash: `source <(jj util completion bash)`\n- Fish: `jj util completion fish | source`\n- Nushell:\n```nu\njj util completion nushell | save -f \"completions-jj.nu\"\nuse \"completions-jj.nu\" *  # Or `source \"completions-jj.nu\"`\n```\n- Zsh:\n```shell\nautoload -U compinit\ncompinit\nsource <(jj util completion zsh)\n```\n\nSee the docs on [command-line completion] for more details.\n\n[command-line completion]:\nhttps://docs.jj-vcs.dev/latest/install-and-setup/#command-line-completion",
 							Args: []Arg{
 								{Name: "SHELL", Description: "[possible values: bash, elvish, fish, nushell, power-shell, zsh]"},
@@ -1059,7 +1068,7 @@ func loadCategories() []Category {
 							Flags: []Flag{},
 						},
 						{
-							Name:        "completion zsh",
+							Summary: "", Name: "completion zsh",
 							Description: "Print a command-line-completion script\n\nApply it by running one of these:\n\n- Bash: `source <(jj util completion bash)`\n- Fish: `jj util completion fish | source`\n- Nushell:\n```nu\njj util completion nushell | save -f \"completions-jj.nu\"\nuse \"completions-jj.nu\" *  # Or `source \"completions-jj.nu\"`\n```\n- Zsh:\n```shell\nautoload -U compinit\ncompinit\nsource <(jj util completion zsh)\n```\n\nSee the docs on [command-line completion] for more details.\n\n[command-line completion]:\nhttps://docs.jj-vcs.dev/latest/install-and-setup/#command-line-completion",
 							Args: []Arg{
 								{Name: "SHELL", Description: "[possible values: bash, elvish, fish, nushell, power-shell, zsh]"},
@@ -1067,7 +1076,7 @@ func loadCategories() []Category {
 							Flags: []Flag{},
 						},
 						{
-							Name:        "completion fish",
+							Summary: "", Name: "completion fish",
 							Description: "Print a command-line-completion script\n\nApply it by running one of these:\n\n- Bash: `source <(jj util completion bash)`\n- Fish: `jj util completion fish | source`\n- Nushell:\n```nu\njj util completion nushell | save -f \"completions-jj.nu\"\nuse \"completions-jj.nu\" *  # Or `source \"completions-jj.nu\"`\n```\n- Zsh:\n```shell\nautoload -U compinit\ncompinit\nsource <(jj util completion zsh)\n```\n\nSee the docs on [command-line completion] for more details.\n\n[command-line completion]:\nhttps://docs.jj-vcs.dev/latest/install-and-setup/#command-line-completion",
 							Args: []Arg{
 								{Name: "SHELL", Description: "[possible values: bash, elvish, fish, nushell, power-shell, zsh]"},
@@ -1086,7 +1095,7 @@ func loadCategories() []Category {
 					Description: "Commands for working with Git remotes and the underlying Git repo\n\nSee this [comparison], including a [table of commands].\n\n[comparison]: https://docs.jj-vcs.dev/latest/git-comparison/.\n\n[table of commands]: https://docs.jj-vcs.dev/latest/git-command-table",
 					SubCmds: []SubCommand{
 						{
-							Name:        "clone",
+							Summary: "Create a new repo backed by a clone of a Git repo", Name: "clone",
 							Description: "Create a new repo backed by a clone of a Git repo",
 							Args: []Arg{
 								{Name: "SOURCE", Description: "URL or path of the Git repo to clone\n\nLocal path will be resolved to absolute form.", Required: true},
@@ -1098,7 +1107,7 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Name:        "init",
+							Summary: "Create a new Git backed repo", Name: "init",
 							Description: "Create a new Git backed repo",
 							Args: []Arg{
 								{Name: "DESTINATION", Description: "The destination directory where the `jj` repo will be created. If the directory does not exist, it will be created. If no directory is given, the current directory is used.\n\nBy default the `git` repo is under `$destination/.jj`\n\nDefault value: `.`"},

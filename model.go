@@ -261,6 +261,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.docsEnlarged = false
 				m.cmdText, m.cmdTextLong = m.buildCommandStrings()
 				m.layoutViewports()
+				m.refreshDocs()
 			}
 			return m, nil
 		}
@@ -363,6 +364,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focusPane = focusDocs
 				m.docsEnlarged = true
 				m.layoutViewports()
+				m.refreshDocs()
 				return m, nil
 			}
 		}
@@ -1090,6 +1092,7 @@ func (m mainModel) exitDocs() (tea.Model, tea.Cmd) {
 	m.focusPane = m.lastFocusPane
 	m.docsEnlarged = false
 	m.layoutViewports()
+	m.refreshDocs()
 	return m, nil
 }
 
@@ -1118,16 +1121,13 @@ func (m *mainModel) layoutViewports() {
 	}
 
 	if m.docsEnlargedActive() {
-		leftWidth, rightWidth := m.getLayoutWidths()
 		height := m.height - 6 // 5 cmdBar + 1 helpBar
 		if height < 6 {
 			height = 6
 		}
-		docsW, docsH := docsContentDims(leftWidth, height)
+		docsW, docsH := docsContentDims(m.width, height)
 		m.docs.SetWidth(docsW)
 		m.docs.SetHeight(docsH)
-		m.output.SetWidth(rightWidth - 4)
-		m.output.SetHeight(height - 4)
 		return
 	}
 
@@ -1610,19 +1610,30 @@ func (m mainModel) docsContent() string {
 	case focusSubcmds:
 		if m.subIdx < len(cmd.SubCmds) {
 			sub := cmd.SubCmds[m.subIdx]
-			return buildDocsBlock(sub.Name, cmd.Name+" "+sub.Name, sub.Alias, sub.Description, sub.Args, sub.Flags)
+			return buildDocsBlock(sub.Name, cmd.Name+" "+sub.Name, sub.Alias, sub.Description, sub.Args, sub.Flags, sub.RequiredUsage, nil)
 		}
 	}
-	return buildDocsBlock(cmd.Name, cmd.Name, cmd.Alias, cmd.Description, cmd.Args, cmd.Flags)
+	return buildDocsBlock(cmd.Name, cmd.Name, cmd.Alias, cmd.Description, cmd.Args, cmd.Flags, cmd.RequiredUsage, cmd.SubCmds)
 }
 
-func buildDocsBlock(name, usagePath, alias, desc string, args []Arg, flags []Flag) string {
+func buildDocsBlock(name, usagePath, alias, desc string, args []Arg, flags []Flag, requiredUsage string, subCmds []SubCommand) string {
 	var b strings.Builder
 
-	// Build usage synopsis: jj <path> [OPTIONS] [ARG[...]]
-	usage := "jj " + usagePath
-	if len(flags) > 0 {
-		usage += " [OPTIONS]"
+	// Build usage synopsis: jj <path> [OPTIONS] <required flags> [ARG[...]]
+	// jj always shows [OPTIONS] (global options apply to every command), and
+	// required-flag/group syntax (e.g. "<--onto|--insert-after|--insert-before>")
+	// is sourced verbatim from `jj util markdown-help` by gen-descriptions,
+	// since Jitsu's own Mandatory flag doesn't reliably mean "jj requires this".
+	usage := "jj " + usagePath + " [OPTIONS]"
+	if requiredUsage != "" {
+		usage += " " + requiredUsage
+	}
+	// A command that dispatches to subcommands and has no Args of its own
+	// (e.g. config, bookmark, git) always takes a required COMMAND
+	// positional in real jj usage. "help" is excluded since it already
+	// models this itself via a variadic, optional Args entry.
+	if len(subCmds) > 0 && len(args) == 0 {
+		usage += " <COMMAND>"
 	}
 	for _, a := range args {
 		if a.Required {
@@ -1640,7 +1651,7 @@ func buildDocsBlock(name, usagePath, alias, desc string, args []Arg, flags []Fla
 		}
 	}
 
-	// Section order matches `jj --help`: Name → Alias → Description → Usage → Arguments → Options
+	// Section order matches `jj --help`: Name → Alias → Description → Usage → Subcommands → Arguments → Options
 	b.WriteString(headerStyle.Render(name))
 	if alias != "" {
 		b.WriteString("\n\n" + headerStyle.Render("Alias") + "\n  " + alias)
@@ -1649,6 +1660,16 @@ func buildDocsBlock(name, usagePath, alias, desc string, args []Arg, flags []Fla
 		b.WriteString("\n\n" + desc)
 	}
 	b.WriteString("\n\n" + headerStyle.Render("Usage") + "\n  " + usage)
+	if len(subCmds) > 0 {
+		b.WriteString("\n\n" + headerStyle.Render("Subcommands"))
+		for _, s := range subCmds {
+			line := boldStyle.Render(s.Name)
+			if s.Summary != "" {
+				line += " — " + s.Summary
+			}
+			b.WriteString("\n  " + line)
+		}
+	}
 	if len(args) > 0 {
 		b.WriteString("\n\n" + headerStyle.Render("Arguments"))
 		for _, a := range args {
