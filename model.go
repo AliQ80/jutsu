@@ -246,10 +246,14 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.outputEnlargedActive() {
 			height := m.height - 6 // 5 cmdBar + 1 helpBar
 			if msg.Y >= height && msg.Y < height+5 {
-				m.focusPane = focusCmdBar
 				m.outputEnlarged = false
-				m.cmdText, m.cmdTextLong = m.buildCommandStrings()
 				m.layoutViewports()
+				if m.hasIncompleteInputs() {
+					m.validationFlash = true
+					return m, flashTimer()
+				}
+				m.focusPane = focusCmdBar
+				m.cmdText, m.cmdTextLong = m.buildCommandStrings()
 			}
 			return m, nil
 		}
@@ -257,11 +261,15 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.docsEnlargedActive() {
 			height := m.height - 6 // 5 cmdBar + 1 helpBar
 			if msg.Y >= height && msg.Y < height+5 {
-				m.focusPane = focusCmdBar
 				m.docsEnlarged = false
-				m.cmdText, m.cmdTextLong = m.buildCommandStrings()
 				m.layoutViewports()
 				m.refreshDocs()
+				if m.hasIncompleteInputs() {
+					m.validationFlash = true
+					return m, flashTimer()
+				}
+				m.focusPane = focusCmdBar
+				m.cmdText, m.cmdTextLong = m.buildCommandStrings()
 			}
 			return m, nil
 		}
@@ -287,6 +295,10 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.focusPane = focusDocs
 		case msg.Y >= topHeight+inputsHeight && msg.Y < topHeight+inputsHeight+5:
+			if m.hasIncompleteInputs() {
+				m.validationFlash = true
+				return m, flashTimer()
+			}
 			if m.focusPane <= focusFlags {
 				m.lastFocusPane = m.focusPane
 			}
