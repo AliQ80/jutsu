@@ -15,6 +15,9 @@ const (
 	cmdPaneW  = 22 // "simplify-parents" = 16
 	subPaneW  = 22 // "completion bash" = 15
 	flagPaneW = 22 // full name visible in docs box on hover
+
+	scrollbarW    = 1 // column reserved for the output/docs viewport scroll indicator
+	scrollbarGapW = 1 // blank column separating content from the scroll indicator
 )
 
 func (m mainModel) getLayoutWidths() (int, int) {
@@ -335,6 +338,13 @@ func (m mainModel) renderRightPane(width, height int) string {
 
 	content := strings.Join(lines, "\n")
 
+	total, visible := m.output.TotalLineCount(), m.output.VisibleLineCount()
+	if m.running {
+		total, visible = 0, 0 // metrics are stale mid-exec; show a blank column instead
+	}
+	scrollbar := renderScrollbar(contentHeight, total, visible, m.output.YOffset())
+	content = lipgloss.JoinHorizontal(lipgloss.Top, content, blankColumn(contentHeight), scrollbar)
+
 	title := "OUTPUT"
 	if m.outputEnlargedActive() {
 		title = "OUTPUT (ENLARGED)"
@@ -365,7 +375,9 @@ func (m mainModel) renderDescriptionBar(width, height int) string {
 	docsW, docsH := docsContentDims(width, height)
 	m.docs.SetWidth(docsW)
 	m.docs.SetHeight(docsH)
-	contentBox := cStyle.Width(width).Height(height - 3).Render(m.docs.View())
+	scrollbar := renderScrollbar(docsH, m.docs.TotalLineCount(), m.docs.VisibleLineCount(), m.docs.YOffset())
+	docsContent := lipgloss.JoinHorizontal(lipgloss.Top, m.docs.View(), blankColumn(docsH), scrollbar)
+	contentBox := cStyle.Width(width).Height(height - 3).Render(docsContent)
 
 	return lipgloss.JoinVertical(lipgloss.Left, titleBox, contentBox)
 }
@@ -532,6 +544,45 @@ func (m mainModel) renderHelpBar(width int) string {
 		gap = 1
 	}
 	return helpBarStyle.Width(width).Render(leftBar + strings.Repeat(" ", gap) + rightBar)
+}
+
+// blankColumn returns a height-tall, 1-column string of spaces, used to
+// reserve width without rendering visible content (scrollbar gap, or the
+// scrollbar itself when there's nothing to scroll).
+func blankColumn(height int) string {
+	if height < 1 {
+		return ""
+	}
+	return strings.Repeat(" \n", height-1) + " "
+}
+
+// renderScrollbar draws a height-tall, 1-column vertical scroll indicator: a
+// bright thumb over a dim track, sized to visible/total and positioned to
+// yOffset/(total-visible). Returns a blank column when everything already
+// fits (total <= visible), so it disappears rather than clutter the pane.
+func renderScrollbar(height, total, visible, yOffset int) string {
+	if height < 1 {
+		return ""
+	}
+	if total <= visible {
+		return blankColumn(height)
+	}
+
+	thumbSize := min(height, max(1, height*visible/total))
+	thumbStart := 0
+	if maxOffset := total - visible; maxOffset > 0 {
+		thumbStart = yOffset * (height - thumbSize) / maxOffset
+	}
+
+	lines := make([]string, height)
+	for i := range lines {
+		if i >= thumbStart && i < thumbStart+thumbSize {
+			lines[i] = scrollbarThumbStyle.Render("█")
+		} else {
+			lines[i] = scrollbarTrackStyle.Render("│")
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // truncateItem truncates a string to fit within maxWidth, accounting for borders and padding

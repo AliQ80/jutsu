@@ -209,6 +209,12 @@ var (
 	runningStyle = lipgloss.NewStyle().
 			Foreground(colorMauve).
 			Italic(true)
+
+	scrollbarTrackStyle = lipgloss.NewStyle().
+				Foreground(colorSurface1)
+
+	scrollbarThumbStyle = lipgloss.NewStyle().
+				Foreground(colorOverlay2)
 )
 
 const (

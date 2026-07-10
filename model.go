@@ -1101,7 +1101,7 @@ func (m mainModel) exitDocs() (tea.Model, tea.Cmd) {
 // layoutViewports() and renderDescriptionBar() so they can't drift apart
 // the way output's sizing once did (see CLAUDE.md "Known fragile points").
 func docsContentDims(width, barHeight int) (w, h int) {
-	w = width - inactiveContentBorderStyle.GetHorizontalFrameSize()
+	w = width - inactiveContentBorderStyle.GetHorizontalFrameSize() - scrollbarW - scrollbarGapW
 	h = barHeight - 3 - inactiveContentBorderStyle.GetVerticalFrameSize()
 	if w < 1 {
 		w = 1
@@ -1115,7 +1115,7 @@ func docsContentDims(width, barHeight int) (w, h int) {
 func (m *mainModel) layoutViewports() {
 	if m.outputEnlargedActive() {
 		height := m.height - 6 // 5 cmdBar + 1 helpBar
-		m.output.SetWidth(m.width - 4)
+		m.output.SetWidth(m.width - 4 - scrollbarW - scrollbarGapW)
 		m.output.SetHeight(height - 4)
 		return
 	}
@@ -1143,7 +1143,7 @@ func (m *mainModel) layoutViewports() {
 	if outputHeight < 6 {
 		outputHeight = 6
 	}
-	paneContentWidth := rightWidth - 4
+	paneContentWidth := rightWidth - 4 - scrollbarW - scrollbarGapW
 	paneContentHeight := outputHeight - 4 // title box (3) + content bottom border (1)
 
 	m.output.SetWidth(paneContentWidth)
