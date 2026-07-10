@@ -993,6 +993,7 @@ func loadCategories() []Category {
 						{Summary: "", Name: "revsets", Value: "-k revsets", Description: "Print this message or the help of the given subcommand(s)"},
 						{Summary: "", Name: "templates", Value: "-k templates", Description: "Print this message or the help of the given subcommand(s)"},
 						{Summary: "", Name: "tutorial", Value: "-k tutorial", Description: "Print this message or the help of the given subcommand(s)"},
+						{Summary: "", Name: "global-options", Value: "--help | awk '$0~/Global Options/,0'", Description: "List flags accepted by every jj command (--repository, --color, --config, --at-operation, --ignore-working-copy, etc.) — these are global options, not specific to any single subcommand."},
 					},
 					Flags: []Flag{},
 				},
