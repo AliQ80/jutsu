@@ -525,7 +525,7 @@ func (m mainModel) handleCmdBarKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, executeCommand(m.cmdText)
 		}
 	case "c":
-		return m, copyToClipboard(m.cmdText)
+		return m, copyToClipboard(m.cmdTextLong)
 	case "esc":
 		m.focusPane = m.lastFocusPane
 		return m, nil
