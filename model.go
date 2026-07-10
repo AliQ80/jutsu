@@ -373,10 +373,10 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.focusPane <= focusFlags {
 					m.lastFocusPane = m.focusPane
 				}
-				m.focusPane = focusDocs
 				m.docsEnlarged = true
 				m.layoutViewports()
 				m.refreshDocs()
+				m.focusPane = focusDocs
 				return m, nil
 			}
 		}
