@@ -1061,28 +1061,49 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Summary: "", Name: "completion bash",
-							Description: "Print a command-line-completion script\n\nApply it by running one of these:\n\n- Bash: `source <(jj util completion bash)`\n- Fish: `jj util completion fish | source`\n- Nushell:\n```nu\njj util completion nushell | save -f \"completions-jj.nu\"\nuse \"completions-jj.nu\" *  # Or `source \"completions-jj.nu\"`\n```\n- Zsh:\n```shell\nautoload -U compinit\ncompinit\nsource <(jj util completion zsh)\n```\n\nSee the docs on [command-line completion] for more details.\n\n[command-line completion]:\nhttps://docs.jj-vcs.dev/latest/install-and-setup/#command-line-completion",
+							Summary: "Print a command-line-completion script", Name: "completion",
+							Description: "Print a command-line-completion script\n\nApply it by running one of these:\n\n- Bash: `source <(jj util completion bash)` - Fish: `jj util completion fish | source` - Nushell: ```nu jj util completion nushell | save -f \"completions-jj.nu\" use \"completions-jj.nu\" *  # Or `source \"completions-jj.nu\"` ``` - Zsh: ```shell autoload -U compinit compinit source <(jj util completion zsh) ```\n\nSee the docs on [command-line completion] for more details.\n\n[command-line completion]: https://docs.jj-vcs.dev/latest/install-and-setup/#command-line-completion",
 							Args: []Arg{
-								{Name: "SHELL", Description: "[possible values: bash, elvish, fish, nushell, power-shell, zsh]"},
+								{Name: "SHELL", Description: "Possible values: `bash`, `elvish`, `fish`, `nushell`, `power-shell`, `zsh`", Required: true},
 							},
 							Flags: []Flag{},
 						},
 						{
-							Summary: "", Name: "completion zsh",
-							Description: "Print a command-line-completion script\n\nApply it by running one of these:\n\n- Bash: `source <(jj util completion bash)`\n- Fish: `jj util completion fish | source`\n- Nushell:\n```nu\njj util completion nushell | save -f \"completions-jj.nu\"\nuse \"completions-jj.nu\" *  # Or `source \"completions-jj.nu\"`\n```\n- Zsh:\n```shell\nautoload -U compinit\ncompinit\nsource <(jj util completion zsh)\n```\n\nSee the docs on [command-line completion] for more details.\n\n[command-line completion]:\nhttps://docs.jj-vcs.dev/latest/install-and-setup/#command-line-completion",
+							Summary: "Print the name of the backend used in the current repo", Name: "backend name",
+							Description: "Print the name of the backend used in the current repo",
+							Flags:       []Flag{},
+						},
+						{
+							Summary: "Print the JSON schema for the jj TOML config format", Name: "config-schema",
+							Description: "Print the JSON schema for the jj TOML config format",
+							Flags:       []Flag{},
+						},
+						{
+							Summary: "Execute an external command via jj", Name: "exec",
+							Description: "Execute an external command via jj\n\nThis command will have access to the environment variable JJ_WORKSPACE_ROOT.\n\nThis is useful for arbitrary aliases.\n\n!! WARNING !!\n\nThe following technique just provides a convenient syntax for running arbitrary code on your system. Using it irresponsibly may cause damage ranging from breaking the behavior of `jj undo` to wiping your file system. Exercise the same amount of caution while writing these aliases as you would when typing commands into the terminal!\n\nThis feature may be removed or replaced by an embedded scripting language in the future.\n\nLet's assume you have a script called \"my-jj-script\" in you $PATH and you would like to execute it as \"jj my-script\". You would add the following line to your configuration file to achieve that:\n\n```toml [aliases] my-script = [\"util\", \"exec\", \"--\", \"my-jj-script\"] #                            ^^^^ # This makes sure that flags are passed to your script instead of parsed by jj. ```\n\nIf you don't want to manage your script as a separate file, you can even inline it into your config file:\n\n```toml [aliases] my-inline-script = [\"util\", \"exec\", \"--\", \"bash\", \"-c\", \"\"\" set -euo pipefail echo \"Look Ma, everything in one file!\" echo \"args: $@\" \"\"\", \"\"] #    ^^ # This last empty string will become \"$0\" in bash, so your actual arguments # are all included in \"$@\" and start at \"$1\" as expected. ```\n\n> Note: Shebangs (e.g. `#!/usr/bin/env`) aren't necessary since you're > already explicitly passing your script into the right shell.",
 							Args: []Arg{
-								{Name: "SHELL", Description: "[possible values: bash, elvish, fish, nushell, power-shell, zsh]"},
+								{Name: "COMMAND", Description: "External command to execute", Required: true},
+								{Name: "ARGS", Description: "Arguments to pass to the external command", Variadic: true},
 							},
 							Flags: []Flag{},
 						},
 						{
-							Summary: "", Name: "completion fish",
-							Description: "Print a command-line-completion script\n\nApply it by running one of these:\n\n- Bash: `source <(jj util completion bash)`\n- Fish: `jj util completion fish | source`\n- Nushell:\n```nu\njj util completion nushell | save -f \"completions-jj.nu\"\nuse \"completions-jj.nu\" *  # Or `source \"completions-jj.nu\"`\n```\n- Zsh:\n```shell\nautoload -U compinit\ncompinit\nsource <(jj util completion zsh)\n```\n\nSee the docs on [command-line completion] for more details.\n\n[command-line completion]:\nhttps://docs.jj-vcs.dev/latest/install-and-setup/#command-line-completion",
+							Summary: "Install Jujutsu's manpages to the provided path", Name: "install-man-pages",
+							Description: "Install Jujutsu's manpages to the provided path",
 							Args: []Arg{
-								{Name: "SHELL", Description: "[possible values: bash, elvish, fish, nushell, power-shell, zsh]"},
+								{Name: "PATH", Description: "The path where manpages will installed. An example path might be `/usr/share/man`. The provided path will be appended with `man1`, etc., as appropriate", Required: true},
 							},
 							Flags: []Flag{},
+						},
+						{
+							Summary: "Print the CLI help for all subcommands in Markdown", Name: "markdown-help",
+							Description: "Print the CLI help for all subcommands in Markdown",
+							Flags:       []Flag{},
+						},
+						{
+							Summary: "Snapshot the working copy if needed", Name: "snapshot",
+							Description: "Snapshot the working copy if needed\n\nSnapshots the working copy and updates the working-copy commit if the working copy has changed since the last snapshot. Since almost every command snapshots the working copy, there is very little reason to run this command as a human; it is mostly meant for scripts.\n\nIf you want to see the ID of the current operation after this command, run `jj operation log --limit 1`. However, since that command also snapshots the working copy, there would be no need to run `jj util snapshot` first.",
+							Flags:       []Flag{},
 						},
 					},
 				},
