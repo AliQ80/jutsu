@@ -373,10 +373,11 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.focusPane <= focusFlags {
 					m.lastFocusPane = m.focusPane
 				}
+				content := m.docsContent() // capture against the pre-switch focus pane
 				m.docsEnlarged = true
-				m.layoutViewports()
-				m.refreshDocs()
 				m.focusPane = focusDocs
+				m.layoutViewports() // now sees docsEnlargedActive() == true, sizes for enlarged width
+				m.setDocsContent(content)
 				return m, nil
 			}
 		}
@@ -1592,12 +1593,20 @@ func (m mainModel) handleDocsKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // refreshDocs rebuilds the docs viewport content from the currently focused item.
 func (m *mainModel) refreshDocs() {
+	m.setDocsContent(m.docsContent())
+}
+
+// setDocsContent wraps and applies pre-computed docs text at the viewport's
+// current width. Split out from refreshDocs so callers that must resize the
+// viewport (e.g. entering enlarge) before the focus pane changes can capture
+// docsContent() against the old focus, then apply it once the new width is set.
+func (m *mainModel) setDocsContent(content string) {
 	m.docs.SetYOffset(0)
 	width := m.docs.Width()
 	if width < 10 {
 		width = 78 // fallback before first WindowSizeMsg
 	}
-	m.docs.SetContent(wordWrap(m.docsContent(), width))
+	m.docs.SetContent(wordWrap(content, width))
 }
 
 // docsContent returns the full documentation text for the focused item.
@@ -1715,8 +1724,14 @@ func buildDocsBlock(name, usagePath, alias, desc string, args []Arg, flags []Fla
 	return b.String()
 }
 
-// wordWrap wraps s so no visible line exceeds width characters.
-// It preserves existing newlines and handles paragraph breaks (blank lines).
+// wordWrap wraps s so no visible line exceeds width characters. It preserves
+// existing newlines and handles paragraph breaks (blank lines). Whitespace
+// within a line is always normalized to single spaces (source docs sometimes
+// contain multi-space runs, e.g. flattened ASCII diagrams with no real line
+// breaks; without real rows to align, preserving that spacing just produces
+// odd gaps, so normal-looking prose spacing wins instead) — this must apply
+// regardless of whether the line needs to wrap, so short and long lines, and
+// normal vs. enlarged panes, render identically.
 func wordWrap(s string, width int) string {
 	if width <= 0 {
 		return s
@@ -1727,12 +1742,12 @@ func wordWrap(s string, width int) string {
 		if i > 0 {
 			out.WriteByte('\n')
 		}
-		// Lines that start with ANSI escape or are very short: pass through.
-		if len(line) <= width || strings.HasPrefix(line, "\x1b") {
+		// Already-styled lines (e.g. rendered headers) pass through untouched.
+		if strings.HasPrefix(line, "\x1b") {
 			out.WriteString(line)
 			continue
 		}
-		// Word-wrap at width.
+		// Word-wrap at width, collapsing whitespace to single spaces.
 		words := strings.Fields(line)
 		col := 0
 		for wi, w := range words {
