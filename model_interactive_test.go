@@ -107,6 +107,10 @@ func TestIsInteractiveInvocation(t *testing.T) {
 			focusCommand(t, m, "squash", "")
 			selectFlag(t, m, "--use-destination-message", "")
 		}, false},
+		{"squash with -k never prompts even without -m", func(t *testing.T, m *mainModel) {
+			focusCommand(t, m, "squash", "")
+			selectFlag(t, m, "-k", "")
+		}, false},
 		{"config edit opens editor", func(t *testing.T, m *mainModel) {
 			focusCommand(t, m, "config", "edit")
 		}, true},

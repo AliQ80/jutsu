@@ -143,15 +143,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case execResultMsg:
 		m.running = false
-		var lines []string
-
-		cmdParts := strings.SplitN(msg.cmdStr, " ", 2)
-		cmdLine := promptStyle.Render("❯") + " " + promptCmdStyle.Render(cmdParts[0])
-		if len(cmdParts) > 1 {
-			cmdLine += " " + cmdParts[1]
-		}
-		lines = append(lines, cmdLine)
-		lines = append(lines, "")
+		lines := commandEchoLines(msg.cmdStr)
 
 		if msg.err != nil {
 			// Always show errors
@@ -175,20 +167,19 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case execInteractiveResultMsg:
-		// The subprocess wrote directly to the terminal while the TUI was
-		// suspended, so there is no captured output — just success/failure.
+		// The subprocess ran on a pty; msg.output holds the plain-text tail
+		// recovered after its alternate screen closed, if any was found.
 		m.running = false
-		var lines []string
-
-		cmdParts := strings.SplitN(msg.cmdStr, " ", 2)
-		cmdLine := promptStyle.Render("❯") + " " + promptCmdStyle.Render(cmdParts[0])
-		if len(cmdParts) > 1 {
-			cmdLine += " " + cmdParts[1]
-		}
-		lines = append(lines, cmdLine, "")
+		lines := commandEchoLines(msg.cmdStr)
 
 		if msg.err != nil {
-			lines = append(lines, "Error: "+msg.err.Error())
+			errorMsg := msg.err.Error()
+			if msg.output != "" {
+				errorMsg = msg.output + "\n" + errorMsg
+			}
+			lines = append(lines, strings.Split(errorMsg, "\n")...)
+		} else if msg.output != "" {
+			lines = append(lines, strings.Split(msg.output, "\n")...)
 		} else {
 			lines = append(lines, "✓ Command completed (output shown in the terminal)")
 		}
@@ -1416,8 +1407,10 @@ func (m mainModel) isInteractiveInvocation() bool {
 		return m.selectedFlagValue("-m") == ""
 	case "squash":
 		// No -m and no --use-destination-message → jj may open $EDITOR to
-		// combine the source and destination descriptions.
-		return m.selectedFlagValue("-m") == "" && !m.isFlagSelected("--use-destination-message")
+		// combine the source and destination descriptions. -k (--keep-emptied)
+		// keeps the source revision alive, so jj never needs to combine
+		// descriptions and never prompts, regardless of -m.
+		return m.selectedFlagValue("-m") == "" && !m.isFlagSelected("--use-destination-message") && !m.isFlagSelected("-k")
 	case "resolve":
 		// Bare resolve runs the merge tool; --list only prints conflicts.
 		return !m.isFlagSelected("--list")
@@ -1448,6 +1441,17 @@ func copyFlashTimer() tea.Cmd {
 	return tea.Tick(1500*time.Millisecond, func(time.Time) tea.Msg {
 		return clearCopyFlashMsg{}
 	})
+}
+
+// commandEchoLines returns the "❯ cmd args" header line plus a following
+// blank line, as shown at the top of the output pane after any command run.
+func commandEchoLines(cmdStr string) []string {
+	cmdParts := strings.SplitN(cmdStr, " ", 2)
+	cmdLine := promptStyle.Render("❯") + " " + promptCmdStyle.Render(cmdParts[0])
+	if len(cmdParts) > 1 {
+		cmdLine += " " + cmdParts[1]
+	}
+	return []string{cmdLine, ""}
 }
 
 // stripANSI removes ANSI CSI escape sequences from s, returning plain text.
