@@ -9,7 +9,7 @@ import (
 
 const (
 	jitsuVersion    = "0.1.0"
-	compatJJVersion = "0.42.0"
+	compatJJVersion = "0.43.0"
 )
 
 func main() {

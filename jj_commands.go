@@ -95,6 +95,7 @@ func loadCategories() []Category {
 					},
 					Flags: []Flag{
 						{Name: "template", Description: "Render each revision using the given template\n\nYou can specify arbitrary template expressions using the [built-in keywords]. See [`jj help -k templates`] for more information.\n\n[built-in keywords]: https://docs.jj-vcs.dev/latest/templates/#commit-keywords\n\n[`jj help -k templates`]: https://docs.jj-vcs.dev/latest/templates/", Value: "-T", RequiresInput: true, InputType: "TEMPLATE"},
+						{Name: "reversed", Description: "Show revisions in the opposite order (older revisions first)", Value: "--reversed"},
 						{Name: "no-patch", Description: "Do not show the patch", Value: "--no-patch"},
 						{Name: "summary", Description: "For each path, show only whether it was modified, added, or deleted", Value: "-s", ConflictingFlags: []string{"--stat", "--types", "--name-only"}},
 						{Name: "stat", Description: "Show a histogram of the changes", Value: "--stat", ConflictingFlags: []string{"-s", "--types", "--name-only"}},
@@ -187,7 +188,7 @@ func loadCategories() []Category {
 							},
 							Flags: []Flag{
 								{Name: "revision", Description: "The revision to list files in\n\nDefault value: `@`", Value: "-r", RequiresInput: true, InputType: "REVSET"},
-								{Name: "template", Description: "Render each file entry using the given template\n\nAll 0-argument methods of the [`TreeEntry` type] are available as keywords in the template expression. See [`jj help -k templates`] for more information.\n\n[`TreeEntry` type]: https://docs.jj-vcs.dev/latest/templates/#treeentry-type\n\n[`jj help -k templates`]: https://docs.jj-vcs.dev/latest/templates/", Value: "-T", RequiresInput: true, InputType: "TEMPLATE"},
+								{Name: "template", Description: "Render each file entry using the given template\n\nAll 0-argument methods of the [`TreeEntry` type] are available as keywords in the template expression. See [`jj help -k templates`] for more information.\n\nThe default template can be set by the `templates.file_list` setting.\n\n[`TreeEntry` type]: https://docs.jj-vcs.dev/latest/templates/#treeentry-type\n\n[`jj help -k templates`]: https://docs.jj-vcs.dev/latest/templates/", Value: "-T", RequiresInput: true, InputType: "TEMPLATE"},
 							},
 						},
 						{
@@ -614,6 +615,44 @@ func loadCategories() []Category {
 						},
 					},
 				},
+				{
+					Name:        "gerrit",
+					Description: "Interact with Gerrit Code Review",
+					SubCmds: []SubCommand{
+						{
+							Summary: "Upload changes to Gerrit for code review, or update existing changes", Name: "upload",
+							Description: "Upload changes to Gerrit for code review, or update existing changes.\n\nUploading in a set of revisions to Gerrit creates a single \"change\" for each revision included in the revset. These changes are then available for review on your Gerrit instance.\n\nNote: The Gerrit commit Id may not match that of your local commit Id, since we add a `Change-Id` footer to the commit message if one does not already exist. This ID is based off the jj Change-Id, but is not the same.\n\nIf a change already exists for a given revision (i.e. it contains the same `Change-Id`), this command will update the contents of the existing change to match.\n\nNote: this command takes 1-or-more revsets arguments, each of which can resolve to multiple revisions; so you may post trees or ranges of commits to Gerrit for review all at once.",
+							Flags: []Flag{
+								{Name: "revision", Description: "The revset, selecting which revisions are sent in to Gerrit\n\nThis can be any arbitrary set of commits. Note that when you push a commit at the head of a stack, all ancestors are pushed too. This means that `jj gerrit upload -r foo` is equivalent to `jj gerrit upload -r 'mutable()::foo`.\n\nIf this is not provided, it will check whether @ has a description. * If it does, it will upload @ * Otherwise, it will upload @-", Value: "-r", RequiresInput: true, InputType: "REVSETS"},
+								{Name: "remote-branch", Description: "The location where your changes are intended to land\n\nThis should be a branch on the remote. Can be configured with the `gerrit.default-remote-branch` repository option.", Value: "-b", RequiresInput: true, InputType: "REMOTE_BRANCH"},
+								{Name: "remote", Description: "The Gerrit remote to push to\n\nCan be configured with the `gerrit.default-remote` repository option as well. This is typically a full SSH URL for your Gerrit instance.", Value: "--remote", RequiresInput: true, InputType: "REMOTE"},
+								{Name: "dry-run", Description: "Do not actually push the changes to Gerrit", Value: "-n"},
+								{Name: "reviewer", Description: "Add these emails as a reviewer (can be repeated)", Value: "--reviewer", RequiresInput: true, InputType: "REVIEWER"},
+								{Name: "cc", Description: "CC these emails on the change (can be repeated)", Value: "--cc", RequiresInput: true, InputType: "CC"},
+								{Name: "label", Description: "Add the following labels configured by Gerrit (can be repeated)\n\nGerrit silently ignores labels not present on your gerrit host. Defaults to +1 if no value is set. Eg. --label=Commit-Queue will set the Commit-Queue label to +1. Eg. --label=Commit-Queue+2 will set it to +2.", Value: "-l", RequiresInput: true, InputType: "LABEL"},
+								{Name: "topic", Description: "Applies a topic to the change\n\nSee https://gerrit-review.googlesource.com/Documentation/intro-user.html#topics. Changes can be grouped by topic, and Gerrit can be configured to submit all changes in a topic together in a single click.", Value: "--topic", RequiresInput: true, InputType: "TOPIC"},
+								{Name: "hashtag", Description: "Applies a hashtag to the change (can be repeated)\n\nSee https://gerrit-review.googlesource.com/Documentation/intro-user.html#hashtags. Hashtags are freeform strings associated with a change, like on social media platforms. Similar to topics, hashtags can be used to group related changes together, and to search using the hashtag: operator. Unlike topics, a change can have multiple hashtags, and they are only used for informational grouping. Changes with the same hashtags are not necessarily submitted together.", Value: "--hashtag", RequiresInput: true, InputType: "HASHTAG"},
+								{Name: "message", Description: "A patch set description for the new patch set", Value: "-m", RequiresInput: true, InputType: "MESSAGE"},
+								{Name: "edit", Description: "Push the change as a change edit\n\nTo push a change edit the underlying change need to already exist on the gerrit server. Change edits don't immediately create a new patchset, but need to be published from the web UI first. There can only be one edit for each change. Pushing a new change edit will replace the previous one.", Value: "--edit"},
+								{Name: "wip", Description: "Marks the change as WIP (work in progress)\n\nSee https://gerrit-review.googlesource.com/Documentation/intro-user.html#wip.", Value: "--wip", ConflictingFlags: []string{"--ready"}},
+								{Name: "ready", Description: "Unmarks the change as WIP (work in progress)", Value: "--ready", ConflictingFlags: []string{"--wip"}},
+								{Name: "private", Description: "Marks the change as private\n\nSee https://gerrit-review.googlesource.com/Documentation/intro-user.html#private-changes.", Value: "--private", ConflictingFlags: []string{"--remove-private"}},
+								{Name: "remove-private", Description: "Unmarks the change as private", Value: "--remove-private", ConflictingFlags: []string{"--private"}},
+								{Name: "publish-comments", Description: "Publishes any draft comments for the given change", Value: "--publish-comments", ConflictingFlags: []string{"--no-publish-comments"}},
+								{Name: "no-publish-comments", Description: "Disables publishing of any draft comments for the given change\n\nThis is only useful if the user has configured Gerrit to publish comments by default.", Value: "--no-publish-comments", ConflictingFlags: []string{"--publish-comments"}},
+								{Name: "notify", Description: "Who to email notifications to (defaults to all)\n\nPossible values: - `none`: No emails - `owner`: Only the change owner is notified - `owner-reviewers`: Only the change owner and reviewers will be notified - `all`: All relevant users, including owner, reviewers, cc'd, users that have starred the change, and users who have configured a watch on files in the change", Value: "--notify", RequiresInput: true, InputType: "NOTIFY"},
+								{Name: "submit", Description: "Directly submit the changes, bypassing code review", Value: "--submit"},
+								{Name: "skip-validation", Description: "When --submit is provided, skip performing validations", Value: "--skip-validation"},
+								{Name: "merged", Description: "Create a new change, even if the change has already been merged", Value: "--merged"},
+								{Name: "ignore-attention-set", Description: "Do not modify the attention set upon uploading", Value: "--ignore-attention-set"},
+								{Name: "deadline", Description: "The deadline after which the push should be aborted", Value: "--deadline", RequiresInput: true, InputType: "DEADLINE"},
+								{Name: "custom", Description: "Send the following custom keyed values to Gerrit (can be repeated)\n\nSee https://gerrit-review.googlesource.com/Documentation/user-upload.html#custom_keyed_values", Value: "--custom", RequiresInput: true, InputType: "CUSTOM"},
+								{Name: "option", Description: "Send a `git push -o` option (can be repeated)", Value: "-o", RequiresInput: true, InputType: "OPTION"},
+								{Name: "trace", Description: "For debugging Gerrit\n\nSee https://gerrit-review.googlesource.com/Documentation/user-upload.html#trace", Value: "--trace", RequiresInput: true, InputType: "TRACE"},
+							},
+						},
+					},
+				},
 			},
 		},
 		{
@@ -726,6 +765,21 @@ func loadCategories() []Category {
 					},
 					RequiredFlagGroup: []string{"-o", "-A", "-B"},
 					RequiredUsage:     "--revision <REVSETS> <--onto <REVSETS>|--insert-after <REVSETS>|--insert-before <REVSETS>>",
+				},
+				{
+					Name:        "run",
+					Description: "Run a command across a set of revisions.\n\nChecks out each revision in an isolated working copy, runs the command, then amends the revision with the resulting working copy. By default, descendants are rebased on top of the amended revisions, propagating the diff. Use `--restore-descendants` to keep descendants' content unchanged instead.\n\nThe command is executed with the following environment variables set:\n\n- JJ_CHANGE_ID - JJ_COMMIT_ID - JJ_WORKSPACE_ROOT\n\n# Example\n\n```shell # Run pre-commit on your local work $ jj run -j 4 -- pre-commit run .github/pre-commit.yaml ```",
+					Args: []Arg{
+						{Name: "COMMAND", Description: "Command to run across all selected revisions", Required: true},
+						{Name: "ARGS", Description: "Arguments to pass to the command\n\nHint: Use a `--` separator to allow passing arguments starting with `-`. For example `jj run --revisions=... -- cargo build --release`.", Variadic: true},
+					},
+					Flags: []Flag{
+						{Name: "revision", Description: "The revisions to change", Value: "-r", RequiresInput: true, InputType: "REVSETS"},
+						{Name: "jobs", Description: "How many processes should run in parallel\n\nOverrides the `run.jobs` config setting. Defaults to 1 if neither is set.", Value: "-j", RequiresInput: true, InputType: "JOBS"},
+						{Name: "root", Description: "Run the command from the working-copy root in each commit instead of from the subdirectory `jj run` was invoked from", Value: "--root"},
+						{Name: "clean", Description: "Delete each working copy before running the command\n\nBy default `jj run` reuses working copies between invocations so build artifacts are preserved. With `--clean`, every commit starts from a freshly checked-out tree.", Value: "--clean"},
+						{Name: "restore-descendants", Description: "Preserve the content (not the diff) when rebasing descendants", Value: "--restore-descendants"},
+					},
 				},
 			},
 		},
@@ -977,6 +1031,11 @@ func loadCategories() []Category {
 							RequiredFlagGroup: []string{"--user", "--repo", "--workspace"},
 							RequiredUsage:     "<--user|--repo|--workspace>",
 						},
+						{
+							Summary: "Find and optionally delete repo-level config directories whose repo path no longer exists", Name: "gc",
+							Description: "Find and optionally delete repo-level config directories whose repo path no longer exists",
+							Flags:       []Flag{},
+						},
 					},
 				},
 				{
@@ -1005,7 +1064,7 @@ func loadCategories() []Category {
 							Summary: "List workspaces", Name: "list",
 							Description: "List workspaces",
 							Flags: []Flag{
-								{Name: "template", Description: "Render each workspace using the given template\n\nAll 0-argument methods of the [`WorkspaceRef` type] are available as keywords in the template expression. See [`jj help -k templates`] for more information.\n\n[`WorkspaceRef` type]: https://docs.jj-vcs.dev/latest/templates/#workspaceref-type\n\n[`jj help -k templates`]: https://docs.jj-vcs.dev/latest/templates/", Value: "-T", RequiresInput: true, InputType: "TEMPLATE"},
+								{Name: "template", Description: "Render each workspace using the given template\n\nAll 0-argument methods of the [`WorkspaceRef` type] are available as keywords in the template expression. See [`jj help -k templates`] for more information.\n\nThe default template can be set by the `templates.workspace_list` setting.\n\n[`WorkspaceRef` type]: https://docs.jj-vcs.dev/latest/templates/#workspaceref-type\n\n[`jj help -k templates`]: https://docs.jj-vcs.dev/latest/templates/", Value: "-T", RequiresInput: true, InputType: "TEMPLATE"},
 							},
 						},
 						{
@@ -1104,6 +1163,24 @@ func loadCategories() []Category {
 							Summary: "Snapshot the working copy if needed", Name: "snapshot",
 							Description: "Snapshot the working copy if needed\n\nSnapshots the working copy and updates the working-copy commit if the working copy has changed since the last snapshot. Since almost every command snapshots the working copy, there is very little reason to run this command as a human; it is mostly meant for scripts.\n\nIf you want to see the ID of the current operation after this command, run `jj operation log --limit 1`. However, since that command also snapshots the working copy, there would be no need to run `jj util snapshot` first.",
 							Flags:       []Flag{},
+						},
+					},
+				},
+				{
+					Name:        "bisect",
+					Description: "Find a bad revision by bisection",
+					SubCmds: []SubCommand{
+						{
+							Summary: "Run a given command to find the first bad revision", Name: "run",
+							Description: "Run a given command to find the first bad revision\n\nUses binary search to find the first \"bad\" revision. Revisions are evaluated by running the given command (see the documentation for `<COMMAND>` for details).\n\nIt is assumed that if a given revision is \"bad\", then all its descendants in the input range are also \"bad\".\n\nThe target of the bisection can be inverted to look for the first \"good\" revision by passing `--find-good`.\n\nHint: You can pass your shell as the command, then run manual tests in a script. When you're done, make sure to exit the shell with an appropriate error code depending on the desired outcome (e.g., `exit 0` to mark the revision as \"good\").\n\nExample: To run `cargo test` with the changes from revision `xyz` applied: ```shell jj bisect run --range v1.0..main -- bash -c \"jj duplicate xyz -B @ && cargo test\" ```",
+							Args: []Arg{
+								{Name: "COMMAND", Description: "Command to run to determine the status of a revision\n\nEach revision being checked will be directly edited (will become the current working copy) before running this command. The exit status of the command will be used to mark revisions as \"good\" or \"bad\": status 0 means \"good\", 125 means to skip the revision, 127 (command not found) will abort the bisection, and any other non-zero exit status means the revision is \"bad\".\n\nThe target's commit ID is available to the command in the `$JJ_BISECT_TARGET` environment variable."},
+								{Name: "ARGS", Description: "Arguments to pass to the command\n\nHint: Use a `--` separator to allow passing arguments starting with `-`. For example: `jj bisect run --range=... -- test -f some-file`.", Variadic: true},
+							},
+							Flags: []Flag{
+								{Name: "range", Description: "Range of revisions to bisect (can be repeated)\n\nThis is typically a range like `v1.0..main`. The heads of the range are assumed to be bad. Ancestors of the range that are not also in the range are assumed to be good.\n\nThe union of all given ranges are used as the input for the bisection.", Value: "-r", RequiresInput: true, Mandatory: true, InputType: "REVSETS"},
+								{Name: "find-good", Description: "Find the first good revision instead\n\nThe interpretation of exit statuses will be inverted (excluding special exit statuses), so status 0 means bad and other non-zero statuses mean good.\n\nDefault value: `false`", Value: "--find-good"},
+							},
 						},
 					},
 				},
