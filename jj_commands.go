@@ -9,6 +9,7 @@ type Flag struct {
 	RequiresInput    bool
 	NeedsQuotes      bool
 	Mandatory        bool     // always selected, cannot be deselected
+	Interactive      bool     // selecting this flag makes the invocation open an editor/picker (TTY handoff)
 	ConflictingFlags []string // Values of flags this flag cannot be combined with
 }
 
@@ -27,6 +28,7 @@ type SubCommand struct {
 	Value             string // overrides Name in the built command string when set
 	Args              []Arg
 	Flags             []Flag
+	Interactive       bool     // always opens an editor/picker — runs via TTY handoff
 	RequiredFlagGroup []string // Values of flags where at least one must be selected
 	RequiredUsage     string   // required-flag portion of the Usage line, e.g. "<--onto|--insert-after|--insert-before>" — populated by gen-descriptions
 }
@@ -38,6 +40,7 @@ type Command struct {
 	Args              []Arg
 	SubCmds           []SubCommand
 	Flags             []Flag
+	Interactive       bool     // always opens an editor/picker — runs via TTY handoff
 	RequiredFlagGroup []string // Values of flags where at least one must be selected
 	RequiredUsage     string   // required-flag portion of the Usage line, e.g. "--revision <REVSETS> <--onto|...>" — populated by gen-descriptions
 }
@@ -244,7 +247,8 @@ func loadCategories() []Category {
 						{Name: "FILESETS", Description: "Put these paths in the current commit", Variadic: true},
 					},
 					Flags: []Flag{
-						{Name: "message", Description: "The change description to use (don't open editor)", Value: "-m", RequiresInput: true, NeedsQuotes: true, Mandatory: true, Selected: true, InputType: "MESSAGE"},
+						{Name: "message", Description: "The change description to use (don't open editor)", Value: "-m", RequiresInput: true, NeedsQuotes: true, InputType: "MESSAGE"},
+						{Name: "interactive", Description: "Interactively choose which changes to include in the current commit", Value: "-i", Interactive: true},
 					},
 				},
 				{
@@ -268,7 +272,7 @@ func loadCategories() []Category {
 						{Name: "REVSETS", Description: "The revision(s) whose description to edit (default: @) [aliases: -r]", Variadic: true},
 					},
 					Flags: []Flag{
-						{Name: "message", Description: "The change description to use (don't open editor)\n\nIf multiple revisions are specified, the same description will be used for all of them.", Value: "-m", RequiresInput: true, NeedsQuotes: true, Mandatory: true, Selected: true, InputType: "MESSAGE"},
+						{Name: "message", Description: "The change description to use (don't open editor)\n\nIf multiple revisions are specified, the same description will be used for all of them.", Value: "-m", RequiresInput: true, NeedsQuotes: true, InputType: "MESSAGE"},
 						{Name: "revision", Description: "Describe this revision instead of @", Value: "-r", RequiresInput: true},
 					},
 				},
@@ -674,6 +678,7 @@ func loadCategories() []Category {
 						{Name: "message", Description: "The description to use for squashed revision (don't open editor)", Value: "-m", RequiresInput: true, NeedsQuotes: true, ConflictingFlags: []string{"--use-destination-message"}, InputType: "MESSAGE"},
 						{Name: "use-destination-message", Description: "Use the description of the destination revision and discard the description(s) of the source revision(s)", Value: "--use-destination-message", ConflictingFlags: []string{"-m"}},
 						{Name: "keep-emptied", Description: "The source revision will not be abandoned", Value: "-k"},
+						{Name: "interactive", Description: "Interactively choose which parts to squash", Value: "-i", Interactive: true},
 					},
 				},
 				{
@@ -685,6 +690,46 @@ func loadCategories() []Category {
 					Flags: []Flag{
 						{Name: "revision", Description: "The revision to split\n\nDefault value: `@`", Value: "-r", RequiresInput: true, InputType: "REVSET"},
 						{Name: "message", Description: "The change description to use for the selected changes (don't open editor)\n\nSets the description for the revision containing the selected changes. The other revision will keep its original description, if any.", Value: "-m", RequiresInput: true, NeedsQuotes: true, InputType: "MESSAGE"},
+						{Name: "interactive", Description: "Interactively choose which parts to split\n\nThis is the default if no filesets are provided.", Value: "-i", Interactive: true},
+					},
+				},
+				{
+					Name:        "diffedit",
+					Description: "Touch up the content changes in a revision with a diff editor\n\nWith the `-r` option, starts a [diff editor] on the changes in the revision.\n\nWith the `--from` and/or `--to` options, starts a [diff editor] comparing the \"from\" revision to the \"to\" revision.\n\n[diff editor]: https://docs.jj-vcs.dev/latest/config/#editing-diffs\n\nEdit the right side of the diff until it looks the way you want. Once you close the editor, the revision specified with `-r` or `--to` will be updated. Unless `--restore-descendants` is used, descendants will be rebased on top as usual, which may result in conflicts.\n\nSee `jj restore` if you want to move entire files from one revision to another. For moving changes between revisions, see `jj squash -i`.",
+					Interactive: true,
+					Args: []Arg{
+						{Name: "FILESETS", Description: "Edit only these paths (unmatched paths will remain unchanged)", Variadic: true},
+					},
+					Flags: []Flag{
+						{Name: "revision", Description: "The revision to touch up\n\nDefaults to @ if neither --to nor --from are specified.", Value: "-r", RequiresInput: true, ConflictingFlags: []string{"-f", "-t"}, InputType: "REVSET"},
+						{Name: "from", Description: "Show changes from this revision\n\nDefaults to @ if --to is specified.", Value: "-f", RequiresInput: true, ConflictingFlags: []string{"-r"}, InputType: "REVSET"},
+						{Name: "to", Description: "Edit changes in this revision\n\nDefaults to @ if --from is specified.", Value: "-t", RequiresInput: true, ConflictingFlags: []string{"-r"}, InputType: "REVSET"},
+						{Name: "restore-descendants", Description: "Preserve the content (not the diff) when rebasing descendants\n\nWhen rebasing a descendant on top of the rewritten revision, its diff compared to its parent(s) is normally preserved, i.e. the same way that descendants are always rebased. This flag makes it so the content/state is preserved instead of preserving the diff.", Value: "--restore-descendants"},
+					},
+				},
+				{
+					Name:        "arrange",
+					Description: "Interactively arrange the commit graph",
+					Interactive: true,
+					Args: []Arg{
+						{Name: "REVSETS", Description: "The revisions to arrange [aliases: -r]\n\nIf no revisions are specified, this defaults to the `revsets.arrange` setting.", Variadic: true},
+					},
+					Flags: []Flag{},
+				},
+				{
+					Name:        "metaedit",
+					Description: "Modify the metadata of a revision without changing its content\n\nWhenever any metadata is updated, the committer name, email, and timestamp are also updated for all rebased commits. The name and email may come from the `JJ_USER` and `JJ_EMAIL` environment variables, as well as by passing `--config user.name` and `--config user.email`.",
+					Args: []Arg{
+						{Name: "REVSETS", Description: "The revision(s) to modify (default: @) [aliases: -r]", Variadic: true},
+					},
+					Flags: []Flag{
+						{Name: "message", Description: "Update the change description\n\nThis updates the change description, without opening the editor.\n\nUse `jj describe` if you want to use an editor.", Value: "-m", RequiresInput: true, NeedsQuotes: true, InputType: "MESSAGE"},
+						{Name: "update-change-id", Description: "Generate a new change-id\n\nThis generates a new change-id for the revision.", Value: "--update-change-id"},
+						{Name: "update-author", Description: "Update the author to the configured user\n\nThis updates the author name and email. The author timestamp is not modified – use --update-author-timestamp to update the author timestamp.\n\nYou can use it in combination with the JJ_USER and JJ_EMAIL environment variables to set a different author:\n\n$ JJ_USER='Foo Bar' JJ_EMAIL=foo@bar.com jj metaedit --update-author", Value: "--update-author"},
+						{Name: "update-author-timestamp", Description: "Update the author timestamp\n\nThis updates the author date to the current time, without modifying the author.", Value: "--update-author-timestamp"},
+						{Name: "author", Description: "Set author to the provided string\n\nThis changes author name and email while retaining author timestamp for non-discardable commits.\n\n```shell $ jj metaedit --author \"Foo Bar <foo@bar.com>\" ```", Value: "--author", RequiresInput: true, NeedsQuotes: true, InputType: "AUTHOR"},
+						{Name: "author-timestamp", Description: "Set the author date to the given date\n\nThe date can either be human readable ([RFC2822], eg 'Sun, 23 Jan 2000 01:23:45 PST') or a time stamp ([RFC3339], eg '2000-01-23T01:23:45-08:00').\n\n[RFC2822]: https://datatracker.ietf.org/doc/html/rfc2822\n\n[RFC3339]: https://datatracker.ietf.org/doc/html/rfc3339", Value: "--author-timestamp", RequiresInput: true, InputType: "AUTHOR_TIMESTAMP"},
+						{Name: "force-rewrite", Description: "Rewrite the commit, even if no other metadata changed\n\nThis updates the committer timestamp to the current time, as well as the committer name and email.\n\nEven if this option is not passed, the committer name, email, and timestamp will be updated if other metadata is updated. This option just forces every commit to be rewritten whether or not there are other changes.\n\nYou can use it in combination with the `JJ_USER` and `JJ_EMAIL` environment variables to set a different committer:\n\n$ JJ_USER='Foo Bar' JJ_EMAIL=foo@bar.com jj metaedit --force-rewrite", Value: "--force-rewrite"},
 					},
 				},
 				{
@@ -947,6 +992,12 @@ func loadCategories() []Category {
 							Description: "Reset the patterns to include all files in the working copy",
 							Flags:       []Flag{},
 						},
+						{
+							Summary: "Start an editor to update the patterns that are present in the working copy", Name: "edit",
+							Description: "Start an editor to update the patterns that are present in the working copy",
+							Interactive: true,
+							Flags:       []Flag{},
+						},
 					},
 				},
 				{
@@ -1023,6 +1074,7 @@ func loadCategories() []Category {
 							Summary: "Start an editor on a jj config file", Name: "edit",
 							Alias:       "e",
 							Description: "Start an editor on a jj config file.\n\nCreates the file if it doesn't already exist regardless of what the editor does.",
+							Interactive: true,
 							Flags: []Flag{
 								{Name: "user", Description: "Target the user-level config", Value: "--user", ConflictingFlags: []string{"--repo", "--workspace"}},
 								{Name: "repo", Description: "Target the repo-level config", Value: "--repo", ConflictingFlags: []string{"--user", "--workspace"}},

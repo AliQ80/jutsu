@@ -38,6 +38,23 @@ func copyToClipboard(text string) tea.Cmd {
 	}
 }
 
+type execInteractiveResultMsg struct {
+	cmdStr string
+	err    error
+}
+
+// executeInteractive suspends the TUI via tea.ExecProcess and hands the real
+// terminal to the subprocess (editor, diff picker, merge tool). Unlike
+// executeCommand, no --color=always is injected: the subprocess owns a TTY
+// and detects colour support itself. Output goes straight to the terminal,
+// so the result message carries only the error.
+func executeInteractive(cmdStr string) tea.Cmd {
+	cmd := exec.Command("sh", "-c", cmdStr)
+	return tea.ExecProcess(cmd, func(err error) tea.Msg {
+		return execInteractiveResultMsg{cmdStr: cmdStr, err: err}
+	})
+}
+
 func executeCommand(cmdStr string) tea.Cmd {
 	return func() tea.Msg {
 		// Inject --color=always for jj commands since we're running in a pipe,

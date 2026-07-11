@@ -174,6 +174,32 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resetCurrentFlags()
 		return m, nil
 
+	case execInteractiveResultMsg:
+		// The subprocess wrote directly to the terminal while the TUI was
+		// suspended, so there is no captured output — just success/failure.
+		m.running = false
+		var lines []string
+
+		cmdParts := strings.SplitN(msg.cmdStr, " ", 2)
+		cmdLine := promptStyle.Render("❯") + " " + promptCmdStyle.Render(cmdParts[0])
+		if len(cmdParts) > 1 {
+			cmdLine += " " + cmdParts[1]
+		}
+		lines = append(lines, cmdLine, "")
+
+		if msg.err != nil {
+			lines = append(lines, "Error: "+msg.err.Error())
+		} else {
+			lines = append(lines, "✓ Command completed (output shown in the terminal)")
+		}
+
+		m.outputLines = lines
+		m.xOffset = 0
+		m.applyXOffset()
+		m.output.GotoTop()
+		m.resetCurrentFlags()
+		return m, nil
+
 	case jjVersionMsg:
 		m.jjVersion = string(msg)
 		return m, nil
@@ -535,6 +561,9 @@ func (m mainModel) handleCmdBarKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.lastCmd = m.captureSnapshot()
 			m.running = true
 			m.focusPane = m.lastFocusPane
+			if m.isInteractiveInvocation() {
+				return m, executeInteractive(m.cmdText)
+			}
 			return m, executeCommand(m.cmdText)
 		}
 	case "c":
@@ -1329,6 +1358,80 @@ func (m mainModel) requiredFlagGroupUnsatisfied() bool {
 
 func (m mainModel) hasIncompleteInputs() bool {
 	return m.hasEmptyRequiredFlagInput() || m.hasEmptyRequiredArg() || m.requiredFlagGroupUnsatisfied()
+}
+
+// selectedFlagValue returns the trimmed input value of the flag with the given
+// Value string, or "" if the flag is not selected (or has no input).
+func (m mainModel) selectedFlagValue(value string) string {
+	for _, f := range m.currentFlags() {
+		if f.Value == value && f.Selected {
+			return strings.TrimSpace(m.inputs[f.Name].Value())
+		}
+	}
+	return ""
+}
+
+// isFlagSelected reports whether the flag with the given Value string is
+// currently selected on the composed command.
+func (m mainModel) isFlagSelected(value string) bool {
+	for _, f := range m.currentFlags() {
+		if f.Value == value && f.Selected {
+			return true
+		}
+	}
+	return false
+}
+
+// isInteractiveInvocation reports whether the composed command will open an
+// editor, diff picker, or merge tool, and must therefore run through the
+// tea.ExecProcess TTY handoff instead of CombinedOutput (which would hang).
+func (m mainModel) isInteractiveInvocation() bool {
+	cmds := m.currentCommands()
+	if len(cmds) == 0 || m.cmdIdx >= len(cmds) {
+		return false
+	}
+	cmd := cmds[m.cmdIdx]
+
+	// Statically interactive command or subcommand (diffedit, arrange,
+	// config edit, sparse edit, ...).
+	if cmd.Interactive {
+		return true
+	}
+	if len(cmd.SubCmds) > 0 && m.subIdx < len(cmd.SubCmds) && cmd.SubCmds[m.subIdx].Interactive {
+		return true
+	}
+
+	// A selected interactivity-triggering flag (-i on commit/split/squash).
+	for _, f := range m.currentFlags() {
+		if f.Selected && f.Interactive {
+			return true
+		}
+	}
+
+	// Interactive-unless commands: these fall back to an editor or picker
+	// when their non-interactive inputs are absent.
+	switch cmd.Name {
+	case "describe", "commit":
+		// No message → jj opens $EDITOR for one.
+		return m.selectedFlagValue("-m") == ""
+	case "resolve":
+		// Bare resolve runs the merge tool; --list only prints conflicts.
+		return !m.isFlagSelected("--list")
+	case "split":
+		// Paths select the changes non-interactively, but without -m jj may
+		// still open $EDITOR asking for a description.
+		return strings.TrimSpace(m.argInputs["FILESETS"].Value()) == "" ||
+			m.selectedFlagValue("-m") == ""
+	case "metaedit":
+		// Any metadata flag applies directly; bare metaedit opens an editor.
+		for _, f := range m.currentFlags() {
+			if f.Selected {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }
 
 func flashTimer() tea.Cmd {
