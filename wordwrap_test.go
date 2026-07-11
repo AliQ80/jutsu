@@ -37,6 +37,21 @@ func TestWordWrap(t *testing.T) {
 		}
 	})
 
+	t.Run("indented lines are preformatted: pass through verbatim", func(t *testing.T) {
+		in := "  B   C\n   \\ /\n    @"
+		if got := wordWrap(in, 80); got != in {
+			t.Errorf("got %q, want %q (unchanged)", got, in)
+		}
+	})
+
+	t.Run("over-width preformatted line truncates instead of wrapping", func(t *testing.T) {
+		in := "  B   C   =>    @   with   trailing   overflow"
+		want := "  B   C   ="
+		if got := wordWrap(in, 11); got != want {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
+
 	t.Run("ANSI-prefixed lines pass through untouched", func(t *testing.T) {
 		in := "\x1b[1mHeader   With   Spacing\x1b[0m"
 		if got := wordWrap(in, 10); got != in {

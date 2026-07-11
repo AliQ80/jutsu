@@ -1867,13 +1867,13 @@ func buildDocsBlock(name, usagePath, alias, desc string, args []Arg, flags []Fla
 }
 
 // wordWrap wraps s so no visible line exceeds width characters. It preserves
-// existing newlines and handles paragraph breaks (blank lines). Whitespace
-// within a line is always normalized to single spaces (source docs sometimes
-// contain multi-space runs, e.g. flattened ASCII diagrams with no real line
-// breaks; without real rows to align, preserving that spacing just produces
-// odd gaps, so normal-looking prose spacing wins instead) — this must apply
+// existing newlines and handles paragraph breaks (blank lines). Prose lines
+// have their whitespace normalized to single spaces — this must apply
 // regardless of whether the line needs to wrap, so short and long lines, and
-// normal vs. enlarged panes, render identically.
+// normal vs. enlarged panes, render identically. Lines starting with
+// whitespace are preformatted (fenced diagram/code blocks, emitted indented
+// by gen-descriptions): they pass through verbatim, hard-truncated at width
+// so they can never wrap and grow a fixed-size box.
 func wordWrap(s string, width int) string {
 	if width <= 0 {
 		return s
@@ -1886,6 +1886,14 @@ func wordWrap(s string, width int) string {
 		}
 		// Already-styled lines (e.g. rendered headers) pass through untouched.
 		if strings.HasPrefix(line, "\x1b") {
+			out.WriteString(line)
+			continue
+		}
+		// Preformatted lines: verbatim, truncated instead of wrapped.
+		if strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") {
+			if r := []rune(line); len(r) > width {
+				line = string(r[:width])
+			}
 			out.WriteString(line)
 			continue
 		}

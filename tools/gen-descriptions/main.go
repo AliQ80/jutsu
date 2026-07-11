@@ -526,7 +526,10 @@ func joinItemBody(first string, rest []string) string {
 
 // splitParagraphs groups lines into blank-line-separated paragraphs,
 // trimming indentation and joining any wrapped physical lines within a
-// paragraph with a single space.
+// paragraph with a single space. Fenced code blocks (```...```) are the
+// exception: their lines (ASCII diagrams, config examples) are kept verbatim
+// as one paragraph — fence markers stripped, dedented, and re-indented two
+// spaces, the marker wordWrap (model.go) uses to skip reflowing a line.
 func splitParagraphs(lines []string) []string {
 	var paras []string
 	var cur []string
@@ -536,16 +539,73 @@ func splitParagraphs(lines []string) []string {
 			cur = nil
 		}
 	}
+	var fence []string
+	inFence := false
+	flushFence := func() {
+		if block := preformatBlock(fence); block != "" {
+			paras = append(paras, block)
+		}
+		fence = nil
+	}
 	for _, line := range lines {
 		t := strings.TrimSpace(line)
+		if strings.HasPrefix(t, "```") {
+			if inFence {
+				flushFence()
+			} else {
+				flush()
+			}
+			inFence = !inFence
+			continue
+		}
+		if inFence {
+			fence = append(fence, line)
+			continue
+		}
 		if t == "" {
 			flush()
 			continue
 		}
 		cur = append(cur, t)
 	}
+	if inFence {
+		flushFence()
+	}
 	flush()
 	return paras
+}
+
+// preformatBlock renders a fenced code block's lines for the docs pane:
+// leading/trailing blank lines dropped, common leading whitespace dedented,
+// every line re-indented by two spaces (interior blank lines preserved).
+func preformatBlock(lines []string) string {
+	for len(lines) > 0 && strings.TrimSpace(lines[0]) == "" {
+		lines = lines[1:]
+	}
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	indent := -1
+	for _, l := range lines {
+		if strings.TrimSpace(l) == "" {
+			continue
+		}
+		n := len(l) - len(strings.TrimLeft(l, " "))
+		if indent < 0 || n < indent {
+			indent = n
+		}
+	}
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		if strings.TrimSpace(l) == "" {
+			continue // out[i] stays "" — preserved blank line
+		}
+		out[i] = "  " + strings.TrimRight(l[indent:], " ")
+	}
+	return strings.Join(out, "\n")
 }
 
 func joinParagraphs(lines []string) string {
