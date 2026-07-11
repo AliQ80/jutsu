@@ -1074,8 +1074,8 @@ func (m mainModel) buildCommandStrings() (short, long string) {
 	for _, f := range flags {
 		if f.Selected {
 			if f.Value != "" {
-				shortParts = append(shortParts, f.Value)
-				longParts = append(longParts, f.Value)
+				shortParts = append(shortParts, flagExecForm(f))
+				longParts = append(longParts, flagBarForm(f))
 			}
 			if f.RequiresInput {
 				val := m.inputs[f.Name].Value()
@@ -1740,7 +1740,39 @@ func (m mainModel) docsContent() string {
 	return buildDocsBlock(cmd.Name, cmd.Name, cmd.Alias, cmd.Description, cmd.Args, cmd.Flags, cmd.RequiredUsage, cmd.SubCmds)
 }
 
-// flagDocsLabel renders a flag as jj --help shows it: "-m, --message <MESSAGE>".
+// flagLongForm returns the canonical long spelling ("--insert-after").
+func flagLongForm(f Flag) string {
+	if strings.HasPrefix(f.Value, "--") {
+		return f.Value
+	}
+	return "--" + f.Name
+}
+
+// flagBarForm returns the spelling shown in the command bar and copied to the
+// clipboard: the shortest full-word form. The alias wins only when it beats
+// the long name ("--after" over "--insert-after") — some aliases are longer
+// ("--destination" for "--onto") and lose.
+func flagBarForm(f Flag) string {
+	long := flagLongForm(f)
+	if f.Alias != "" && len(f.Alias)+2 < len(long) {
+		return "--" + f.Alias
+	}
+	return long
+}
+
+// flagExecForm returns the spelling used in the executed command: the
+// shortest of all — the short flag when one exists ("-A"), else whatever
+// flagBarForm picked.
+func flagExecForm(f Flag) string {
+	bar := flagBarForm(f)
+	if f.Value != "" && len(f.Value) < len(bar) {
+		return f.Value
+	}
+	return bar
+}
+
+// flagDocsLabel renders a flag as jj --help shows it:
+// "-m, --message <MESSAGE>" or "-A, --insert-after <REVSETS> [aliases: --after]".
 func flagDocsLabel(f Flag) string {
 	label := f.Value
 	if len(f.Value) == 2 && f.Value[0] == '-' && f.Value[1] != '-' {
@@ -1748,6 +1780,9 @@ func flagDocsLabel(f Flag) string {
 	}
 	if f.InputType != "" {
 		label += " <" + f.InputType + ">"
+	}
+	if f.Alias != "" {
+		label += " [aliases: --" + f.Alias + "]"
 	}
 	return label
 }

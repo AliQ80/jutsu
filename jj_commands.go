@@ -4,6 +4,7 @@ type Flag struct {
 	Name             string
 	Description      string
 	Value            string
+	Alias            string // word alias from jj help, e.g. "after" for --insert-after — hand-authored, drift-checked by gen-descriptions
 	InputType        string // e.g. "REVSET", "PATH", "TEMPLATE" — populated by gen-descriptions
 	Selected         bool
 	RequiresInput    bool
@@ -259,8 +260,8 @@ func loadCategories() []Category {
 					},
 					Flags: []Flag{
 						{Name: "message", Description: "The change description to use", Value: "-m", RequiresInput: true, NeedsQuotes: true, InputType: "MESSAGE"},
-						{Name: "insert-after", Description: "Insert the new change after the given commit(s)\n\nExample: `jj new --insert-after A` creates a new change between `A` and its children:\n\n```text B   C \\ / B   C   =>    @ \\ /          | A           A ```\n\nSpecifying `--insert-after` multiple times will relocate all children of the given commits.\n\nExample: `jj new --insert-after A --insert-after X` creates a change with `A` and `X` as parents, and rebases all children on top of the new change:\n\n```text B   Y \\ / B  Y    =>    @ |  |         / \\ A  X        A   X ```", Value: "--insert-after", RequiresInput: true, InputType: "REVSETS"},
-						{Name: "insert-before", Description: "Insert the new change before the given commit(s)\n\nExample: `jj new --insert-before C` creates a new change between `C` and its parents:\n\n```text C | C     =>     @ / \\          / \\ A   B        A   B ```\n\n`--insert-after` and `--insert-before` can be combined.\n\nExample: `jj new --insert-after A --insert-before D`:\n\n```text\n\nD            D |           / \\ C          |   C |    =>    @   | B          |   B |           \\ / A            A ```\n\nSimilar to `--insert-after`, you can specify `--insert-before` multiple times.", Value: "--insert-before", RequiresInput: true, InputType: "REVSETS"},
+						{Name: "insert-after", Description: "Insert the new change after the given commit(s)\n\nExample: `jj new --insert-after A` creates a new change between `A` and its children:\n\n```text B   C \\ / B   C   =>    @ \\ /          | A           A ```\n\nSpecifying `--insert-after` multiple times will relocate all children of the given commits.\n\nExample: `jj new --insert-after A --insert-after X` creates a change with `A` and `X` as parents, and rebases all children on top of the new change:\n\n```text B   Y \\ / B  Y    =>    @ |  |         / \\ A  X        A   X ```", Value: "-A", Alias: "after", RequiresInput: true, InputType: "REVSETS"},
+						{Name: "insert-before", Description: "Insert the new change before the given commit(s)\n\nExample: `jj new --insert-before C` creates a new change between `C` and its parents:\n\n```text C | C     =>     @ / \\          / \\ A   B        A   B ```\n\n`--insert-after` and `--insert-before` can be combined.\n\nExample: `jj new --insert-after A --insert-before D`:\n\n```text\n\nD            D |           / \\ C          |   C |    =>    @   | B          |   B |           \\ / A            A ```\n\nSimilar to `--insert-after`, you can specify `--insert-before` multiple times.", Value: "-B", Alias: "before", RequiresInput: true, InputType: "REVSETS"},
 						{Name: "no-edit", Description: "Do not edit the newly created change", Value: "--no-edit"},
 					},
 				},
@@ -329,7 +330,7 @@ func loadCategories() []Category {
 					},
 					Flags: []Flag{
 						{Name: "from", Description: "Revision to restore from (source)", Value: "--from", RequiresInput: true, InputType: "REVSET"},
-						{Name: "into", Description: "Revision to restore into (destination)", Value: "--into", RequiresInput: true, InputType: "REVSET"},
+						{Name: "into", Description: "Revision to restore into (destination)", Value: "-t", Alias: "to", RequiresInput: true, InputType: "REVSET"},
 						{Name: "changes-in", Description: "Undo the changes in a revision as compared to the merge of its parents.\n\nThis undoes the changes that can be seen with `jj diff -r REVSET`. If `REVSET` only has a single parent, this option is equivalent to `jj restore --into REVSET --from REVSET-`.\n\nThe default behavior of `jj restore` is equivalent to `jj restore --changes-in @`.", Value: "--changes-in", RequiresInput: true, InputType: "REVSET"},
 						{Name: "restore-descendants", Description: "Preserve the content (not the diff) when rebasing descendants", Value: "--restore-descendants"},
 					},
@@ -438,7 +439,7 @@ func loadCategories() []Category {
 								{Name: "NAMES", Description: "The bookmarks to update", Variadic: true, Required: true},
 							},
 							Flags: []Flag{
-								{Name: "revision", Description: "The bookmark's target revision\n\nDefault value: `@`", Value: "-r", RequiresInput: true, InputType: "REVSET"},
+								{Name: "revision", Description: "The bookmark's target revision\n\nDefault value: `@`", Value: "-r", Alias: "to", RequiresInput: true, InputType: "REVSET"},
 								{Name: "allow-backwards", Description: "Allow moving the bookmark backwards or sideways", Value: "--allow-backwards"},
 							},
 						},
@@ -450,7 +451,7 @@ func loadCategories() []Category {
 								{Name: "NAMES", Description: "The bookmarks to create", Variadic: true, Required: true},
 							},
 							Flags: []Flag{
-								{Name: "revision", Description: "The bookmark's target revision\n\nDefault value: `@`", Value: "-r", RequiresInput: true, InputType: "REVSET"},
+								{Name: "revision", Description: "The bookmark's target revision\n\nDefault value: `@`", Value: "-r", Alias: "to", RequiresInput: true, InputType: "REVSET"},
 							},
 						},
 						{
@@ -604,7 +605,7 @@ func loadCategories() []Category {
 								{Name: "NAMES", Description: "Tag names to create or update", Variadic: true, Required: true},
 							},
 							Flags: []Flag{
-								{Name: "revision", Description: "Target revision to point to\n\nDefault value: `@`", Value: "-r", RequiresInput: true, InputType: "REVSET"},
+								{Name: "revision", Description: "Target revision to point to\n\nDefault value: `@`", Value: "-r", Alias: "to", RequiresInput: true, InputType: "REVSET"},
 								{Name: "allow-move", Description: "Allow moving existing tags", Value: "--allow-move"},
 							},
 						},
@@ -671,10 +672,10 @@ func loadCategories() []Category {
 					Flags: []Flag{
 						{Name: "revision", Description: "Revision to squash into its parent (default: @). Incompatible with the experimental `-o`/`-A`/`-B` options", Value: "-r", RequiresInput: true, ConflictingFlags: []string{"-o", "-A", "-B"}, InputType: "REVSET"},
 						{Name: "from", Description: "Revision(s) to squash from (default: @)", Value: "-f", RequiresInput: true, InputType: "REVSETS"},
-						{Name: "into", Description: "Revision to squash into (default: @)", Value: "-t", RequiresInput: true, InputType: "REVSET"},
-						{Name: "onto", Description: "(Experimental) The revision(s) to use as parent for the new commit (can be repeated to create a merge commit)", Value: "-o", RequiresInput: true, ConflictingFlags: []string{"-r", "-A", "-B"}, InputType: "REVSETS"},
-						{Name: "insert-after", Description: "(Experimental) The revision(s) to insert the new commit after (can be repeated to create a merge commit)", Value: "-A", RequiresInput: true, ConflictingFlags: []string{"-r", "-o"}, InputType: "REVSETS"},
-						{Name: "insert-before", Description: "(Experimental) The revision(s) to insert the new commit before (can be repeated to create a merge commit)", Value: "-B", RequiresInput: true, ConflictingFlags: []string{"-r", "-o"}, InputType: "REVSETS"},
+						{Name: "into", Description: "Revision to squash into (default: @)", Value: "-t", Alias: "to", RequiresInput: true, InputType: "REVSET"},
+						{Name: "onto", Description: "(Experimental) The revision(s) to use as parent for the new commit (can be repeated to create a merge commit)", Value: "-o", Alias: "destination", RequiresInput: true, ConflictingFlags: []string{"-r", "-A", "-B"}, InputType: "REVSETS"},
+						{Name: "insert-after", Description: "(Experimental) The revision(s) to insert the new commit after (can be repeated to create a merge commit)", Value: "-A", Alias: "after", RequiresInput: true, ConflictingFlags: []string{"-r", "-o"}, InputType: "REVSETS"},
+						{Name: "insert-before", Description: "(Experimental) The revision(s) to insert the new commit before (can be repeated to create a merge commit)", Value: "-B", Alias: "before", RequiresInput: true, ConflictingFlags: []string{"-r", "-o"}, InputType: "REVSETS"},
 						{Name: "message", Description: "The description to use for squashed revision (don't open editor)", Value: "-m", RequiresInput: true, NeedsQuotes: true, ConflictingFlags: []string{"--use-destination-message"}, InputType: "MESSAGE"},
 						{Name: "use-destination-message", Description: "Use the description of the destination revision and discard the description(s) of the source revision(s)", Value: "--use-destination-message", ConflictingFlags: []string{"-m"}},
 						{Name: "keep-emptied", Description: "The source revision will not be abandoned", Value: "-k"},
@@ -739,14 +740,14 @@ func loadCategories() []Category {
 						{Name: "revision", Description: "Rebase the given revisions, rebasing descendants onto this revision's parent(s)\n\nUnlike `-s` or `-b`, you may `jj rebase -r` a revision `A` onto a descendant of `A`.\n\nIf none of `-b`, `-s`, or `-r` is provided, then the default is `-b @`.", Value: "-r", RequiresInput: true, ConflictingFlags: []string{"-s", "-b"}, InputType: "REVSETS"},
 						{Name: "source", Description: "Rebase specified revision(s) together with their trees of descendants (can be repeated)\n\nEach specified revision will become a direct child of the destination revision(s), even if some of the source revisions are descendants of others.\n\nIf none of `-b`, `-s`, or `-r` is provided, then the default is `-b @`.", Value: "-s", RequiresInput: true, ConflictingFlags: []string{"-r", "-b"}, InputType: "REVSETS"},
 						{Name: "branch", Description: "Rebase the whole branch relative to destination's ancestors (can be repeated)\n\n`jj rebase -b=br -o=dst` is equivalent to `jj rebase '-s=roots(dst..br)' -o=dst`.\n\nIf none of `-b`, `-s`, or `-r` is provided, then the default is `-b @`.", Value: "-b", RequiresInput: true, ConflictingFlags: []string{"-r", "-s"}, InputType: "REVSETS"},
-						{Name: "onto", Description: "The revision(s) to rebase onto (can be repeated to create a merge commit)", Value: "-o", RequiresInput: true, ConflictingFlags: []string{"--insert-after", "--insert-before"}, InputType: "REVSETS"},
-						{Name: "insert-after", Description: "The revision(s) to insert after (can be repeated to create a merge commit)", Value: "--insert-after", RequiresInput: true, ConflictingFlags: []string{"-o"}, InputType: "REVSETS"},
-						{Name: "insert-before", Description: "The revision(s) to insert before (can be repeated to create a merge commit)", Value: "--insert-before", RequiresInput: true, ConflictingFlags: []string{"-o"}, InputType: "REVSETS"},
+						{Name: "onto", Description: "The revision(s) to rebase onto (can be repeated to create a merge commit)", Value: "-o", Alias: "destination", RequiresInput: true, ConflictingFlags: []string{"-A", "-B"}, InputType: "REVSETS"},
+						{Name: "insert-after", Description: "The revision(s) to insert after (can be repeated to create a merge commit)", Value: "-A", Alias: "after", RequiresInput: true, ConflictingFlags: []string{"-o"}, InputType: "REVSETS"},
+						{Name: "insert-before", Description: "The revision(s) to insert before (can be repeated to create a merge commit)", Value: "-B", Alias: "before", RequiresInput: true, ConflictingFlags: []string{"-o"}, InputType: "REVSETS"},
 						{Name: "skip-emptied", Description: "If true, when rebasing would produce an empty commit, the commit is abandoned. It will not be abandoned if it was already empty before the rebase. Will never skip merge commits with multiple non-empty parents", Value: "--skip-emptied"},
 						{Name: "keep-divergent", Description: "Keep divergent commits while rebasing\n\nWithout this flag, divergent commits are abandoned while rebasing if another commit with the same change ID is already present in the destination with identical changes.", Value: "--keep-divergent"},
 						{Name: "simplify-parents", Description: "Simplify parents of rebased commits, like `jj simplify-parents`, while rebasing them. Any parents that are ancestors of other parents will be removed", Value: "--simplify-parents"},
 					},
-					RequiredFlagGroup: []string{"-o", "--insert-after", "--insert-before"},
+					RequiredFlagGroup: []string{"-o", "-A", "-B"},
 					RequiredUsage:     "<--onto <REVSETS>|--insert-after <REVSETS>|--insert-before <REVSETS>>",
 				},
 				{
@@ -757,7 +758,7 @@ func loadCategories() []Category {
 					},
 					Flags: []Flag{
 						{Name: "from", Description: "Source revision to absorb from\n\nDefault value: `@`", Value: "-f", RequiresInput: true, InputType: "REVSET"},
-						{Name: "into", Description: "Destination revisions to absorb into\n\nOnly ancestors of the source revision will be considered.\n\nDefault value: `mutable()`", Value: "-t", RequiresInput: true, InputType: "REVSETS"},
+						{Name: "into", Description: "Destination revisions to absorb into\n\nOnly ancestors of the source revision will be considered.\n\nDefault value: `mutable()`", Value: "-t", Alias: "to", RequiresInput: true, InputType: "REVSETS"},
 					},
 				},
 				{
@@ -778,9 +779,9 @@ func loadCategories() []Category {
 						{Name: "REVSETS", Description: "The revision(s) to duplicate (default: @) [aliases: -r]", Variadic: true},
 					},
 					Flags: []Flag{
-						{Name: "onto", Description: "The revision(s) to duplicate onto (can be repeated to create a merge commit)", Value: "-o", RequiresInput: true, ConflictingFlags: []string{"-A", "-B"}, InputType: "REVSETS"},
-						{Name: "insert-after", Description: "The revision(s) to insert after (can be repeated to create a merge commit)", Value: "-A", RequiresInput: true, ConflictingFlags: []string{"-o"}, InputType: "REVSETS"},
-						{Name: "insert-before", Description: "The revision(s) to insert before (can be repeated to create a merge commit)", Value: "-B", RequiresInput: true, ConflictingFlags: []string{"-o"}, InputType: "REVSETS"},
+						{Name: "onto", Description: "The revision(s) to duplicate onto (can be repeated to create a merge commit)", Value: "-o", Alias: "destination", RequiresInput: true, ConflictingFlags: []string{"-A", "-B"}, InputType: "REVSETS"},
+						{Name: "insert-after", Description: "The revision(s) to insert after (can be repeated to create a merge commit)", Value: "-A", Alias: "after", RequiresInput: true, ConflictingFlags: []string{"-o"}, InputType: "REVSETS"},
+						{Name: "insert-before", Description: "The revision(s) to insert before (can be repeated to create a merge commit)", Value: "-B", Alias: "before", RequiresInput: true, ConflictingFlags: []string{"-o"}, InputType: "REVSETS"},
 					},
 				},
 				{
@@ -804,9 +805,9 @@ func loadCategories() []Category {
 					Description: "Apply the reverse of the given revision(s)\n\nThe reverse of each of the given revisions is applied sequentially in reverse topological order at the given location.\n\nThe description of the new revisions can be customized with the `templates.revert_description` config variable.",
 					Flags: []Flag{
 						{Name: "revision", Description: "The revision(s) to apply the reverse of", Value: "-r", RequiresInput: true, Mandatory: true, InputType: "REVSETS"},
-						{Name: "onto", Description: "The revision(s) to apply the reverse changes on top of", Value: "-o", RequiresInput: true, ConflictingFlags: []string{"-A", "-B"}, InputType: "REVSETS"},
-						{Name: "insert-after", Description: "The revision(s) to insert the reverse changes after (can be repeated to create a merge commit)", Value: "-A", RequiresInput: true, ConflictingFlags: []string{"-o"}, InputType: "REVSETS"},
-						{Name: "insert-before", Description: "The revision(s) to insert the reverse changes before (can be repeated to create a merge commit)", Value: "-B", RequiresInput: true, ConflictingFlags: []string{"-o"}, InputType: "REVSETS"},
+						{Name: "onto", Description: "The revision(s) to apply the reverse changes on top of", Value: "-o", Alias: "destination", RequiresInput: true, ConflictingFlags: []string{"-A", "-B"}, InputType: "REVSETS"},
+						{Name: "insert-after", Description: "The revision(s) to insert the reverse changes after (can be repeated to create a merge commit)", Value: "-A", Alias: "after", RequiresInput: true, ConflictingFlags: []string{"-o"}, InputType: "REVSETS"},
+						{Name: "insert-before", Description: "The revision(s) to insert the reverse changes before (can be repeated to create a merge commit)", Value: "-B", Alias: "before", RequiresInput: true, ConflictingFlags: []string{"-o"}, InputType: "REVSETS"},
 					},
 					RequiredFlagGroup: []string{"-o", "-A", "-B"},
 					RequiredUsage:     "--revision <REVSETS> <--onto <REVSETS>|--insert-after <REVSETS>|--insert-before <REVSETS>>",
@@ -885,7 +886,7 @@ func loadCategories() []Category {
 							Summary: "Compare changes to the repository between two operations", Name: "diff",
 							Description: "Compare changes to the repository between two operations",
 							Flags: []Flag{
-								{Name: "operation", Description: "Show repository changes in this operation, compared to its parent", Value: "--operation", RequiresInput: true, InputType: "OPERATION"},
+								{Name: "operation", Description: "Show repository changes in this operation, compared to its parent", Value: "--operation", Alias: "op", RequiresInput: true, InputType: "OPERATION"},
 								{Name: "from", Description: "Show repository changes from this operation", Value: "--from", RequiresInput: true, InputType: "FROM"},
 								{Name: "to", Description: "Show repository changes to this operation", Value: "--to", RequiresInput: true, InputType: "TO"},
 								{Name: "no-graph", Description: "Don't show the graph, show a flat list of modified changes", Value: "-G"},

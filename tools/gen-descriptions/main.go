@@ -24,11 +24,12 @@ import (
 // markdown-help: its own description, plus per-argument and per-flag
 // descriptions found in that section's Arguments/Options lists.
 type doc struct {
-	description string
-	args        map[string]string // Arg Name -> description
-	options     map[string]string // flag token ("-r", "--revision", ...) -> description
-	usage       string            // raw "jj <path> ..." text from the "**Usage:**" line
-	subcommands map[string]string // child subcommand Name -> one-line summary
+	description   string
+	args          map[string]string // Arg Name -> description
+	options       map[string]string // flag token ("-r", "--revision", ...) -> description
+	optionAliases map[string]string // flag token -> word alias ("after" for --insert-after)
+	usage         string            // raw "jj <path> ..." text from the "**Usage:**" line
+	subcommands   map[string]string // child subcommand Name -> one-line summary
 }
 
 func main() {
@@ -131,6 +132,22 @@ func collectEdits(fset *token.FileSet, file *ast.File, docs map[string]doc) []ed
 			return
 		}
 		edits = append(edits, edit{start: fset.Position(descLit.Pos()).Offset, end: fset.Position(descLit.End()).Offset, newText: newText, label: label})
+
+		// Alias drift check: the Alias field is hand-authored (no AST field
+		// insertion here), so rewrite it when present and report when the DB
+		// and jj help disagree about its existence.
+		helpAlias := d.optionAliases[flagValue]
+		aliasLit, _ := fieldValue(lit, "Alias").(*ast.BasicLit)
+		switch {
+		case aliasLit != nil && aliasLit.Kind == token.STRING:
+			if helpAlias == "" {
+				missing = append(missing, label+" (has Alias but jj help declares none — remove by hand)")
+			} else if cur, _ := strconv.Unquote(aliasLit.Value); cur != helpAlias {
+				edits = append(edits, edit{start: fset.Position(aliasLit.Pos()).Offset, end: fset.Position(aliasLit.End()).Offset, newText: helpAlias, label: label + " (alias)"})
+			}
+		case helpAlias != "":
+			missing = append(missing, label+" (jj help declares alias \""+helpAlias+"\" — add Alias field by hand)")
+		}
 	}
 
 	recordArg := func(lit *ast.CompositeLit, cmdPath string) {
@@ -288,7 +305,7 @@ func collectEdits(fset *token.FileSet, file *ast.File, docs map[string]doc) []ed
 	})
 
 	if len(missing) > 0 {
-		fmt.Fprintln(os.Stderr, "gen-descriptions: no markdown-help text found for:")
+		fmt.Fprintln(os.Stderr, "gen-descriptions: drift against jj markdown-help (fix by hand):")
 		for _, m := range missing {
 			fmt.Fprintln(os.Stderr, "  -", m)
 		}
@@ -377,7 +394,7 @@ func parseMarkdownHelp(text string) map[string]doc {
 // parseSection parses the lines that follow one "## `jj ...`" header, up to
 // (but not including) the next header.
 func parseSection(lines []string) doc {
-	d := doc{args: map[string]string{}, options: map[string]string{}, subcommands: map[string]string{}}
+	d := doc{args: map[string]string{}, options: map[string]string{}, optionAliases: map[string]string{}, subcommands: map[string]string{}}
 
 	// Description: everything before "**Usage:**", reflowed into paragraphs.
 	i := 0
@@ -414,7 +431,7 @@ func parseSection(lines []string) doc {
 		case "Arguments":
 			parseArgItems(blockLines, d.args)
 		case "Options":
-			parseOptionItems(blockLines, d.options)
+			parseOptionItems(blockLines, d.options, d.optionAliases)
 		case "Subcommands":
 			parseSubcommandItems(blockLines, d.subcommands)
 		}
@@ -473,17 +490,25 @@ func parseSubcommandItems(lines []string, out map[string]string) {
 
 var optFormsRe = regexp.MustCompile(`^\* (.+?)(?: — (.*))?$`)
 var optTokenRe = regexp.MustCompile("`(-{1,2}[A-Za-z0-9][A-Za-z0-9-]*)(?:\\s+<[^>]*>)?`")
+var optAliasRe = regexp.MustCompile("\\[alias: `([^`]+)`\\]")
 
-func parseOptionItems(lines []string, out map[string]string) {
+func parseOptionItems(lines []string, out, aliases map[string]string) {
 	for _, item := range splitItems(lines) {
 		m := optFormsRe.FindStringSubmatch(item[0])
 		if m == nil {
 			continue
 		}
 		forms, first := m[1], m[2]
+		var alias string
+		if am := optAliasRe.FindStringSubmatch(forms); am != nil {
+			alias = am[1]
+		}
 		desc := joinItemBody(first, item[1:])
 		for _, tok := range optTokenRe.FindAllStringSubmatch(forms, -1) {
 			out[tok[1]] = desc
+			if alias != "" {
+				aliases[tok[1]] = alias
+			}
 		}
 	}
 }
