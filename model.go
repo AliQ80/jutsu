@@ -1725,7 +1725,7 @@ func (m mainModel) docsContent() string {
 		flags := m.currentFlags()
 		if m.flagIdx < len(flags) {
 			f := flags[m.flagIdx]
-			header := headerStyle.Render(f.Name)
+			header := headerStyle.Render(flagDocsLabel(f))
 			if f.Description == "" {
 				return header
 			}
@@ -1738,6 +1738,18 @@ func (m mainModel) docsContent() string {
 		}
 	}
 	return buildDocsBlock(cmd.Name, cmd.Name, cmd.Alias, cmd.Description, cmd.Args, cmd.Flags, cmd.RequiredUsage, cmd.SubCmds)
+}
+
+// flagDocsLabel renders a flag as jj --help shows it: "-m, --message <MESSAGE>".
+func flagDocsLabel(f Flag) string {
+	label := f.Value
+	if len(f.Value) == 2 && f.Value[0] == '-' && f.Value[1] != '-' {
+		label = f.Value + ", --" + f.Name
+	}
+	if f.InputType != "" {
+		label += " <" + f.InputType + ">"
+	}
+	return label
 }
 
 func buildDocsBlock(name, usagePath, alias, desc string, args []Arg, flags []Flag, requiredUsage string, subCmds []SubCommand) string {
@@ -1810,15 +1822,7 @@ func buildDocsBlock(name, usagePath, alias, desc string, args []Arg, flags []Fla
 	if len(flags) > 0 {
 		b.WriteString("\n\n" + headerStyle.Render("Options"))
 		for _, f := range flags {
-			// Build flag label: "-x, --long-name <TYPE>" or "--long-name <TYPE>"
-			flagLabel := f.Value
-			if len(f.Value) == 2 && f.Value[0] == '-' && f.Value[1] != '-' {
-				flagLabel = f.Value + ", --" + f.Name
-			}
-			if f.InputType != "" {
-				flagLabel += " <" + f.InputType + ">"
-			}
-			b.WriteString("\n  " + boldStyle.Render(flagLabel))
+			b.WriteString("\n  " + boldStyle.Render(flagDocsLabel(f)))
 			if f.Description != "" {
 				b.WriteString("\n  " + f.Description)
 			}
