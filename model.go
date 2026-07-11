@@ -1414,6 +1414,10 @@ func (m mainModel) isInteractiveInvocation() bool {
 	case "describe", "commit":
 		// No message → jj opens $EDITOR for one.
 		return m.selectedFlagValue("-m") == ""
+	case "squash":
+		// No -m and no --use-destination-message → jj may open $EDITOR to
+		// combine the source and destination descriptions.
+		return m.selectedFlagValue("-m") == "" && !m.isFlagSelected("--use-destination-message")
 	case "resolve":
 		// Bare resolve runs the merge tool; --list only prints conflicts.
 		return !m.isFlagSelected("--list")

@@ -670,9 +670,9 @@ func loadCategories() []Category {
 						{Name: "FILESETS", Description: "Move only changes to these paths (instead of all paths)", Variadic: true},
 					},
 					Flags: []Flag{
-						{Name: "revision", Description: "Revision to squash into its parent (default: @). Incompatible with the experimental `-o`/`-A`/`-B` options", Value: "-r", RequiresInput: true, ConflictingFlags: []string{"-o", "-A", "-B"}, InputType: "REVSET"},
-						{Name: "from", Description: "Revision(s) to squash from (default: @)", Value: "-f", RequiresInput: true, InputType: "REVSETS"},
-						{Name: "into", Description: "Revision to squash into (default: @)", Value: "-t", Alias: "to", RequiresInput: true, InputType: "REVSET"},
+						{Name: "revision", Description: "Revision to squash into its parent (default: @). Incompatible with the experimental `-o`/`-A`/`-B` options", Value: "-r", RequiresInput: true, ConflictingFlags: []string{"-o", "-A", "-B", "-f", "-t"}, InputType: "REVSET"},
+						{Name: "from", Description: "Revision(s) to squash from (default: @)", Value: "-f", RequiresInput: true, ConflictingFlags: []string{"-r"}, InputType: "REVSETS"},
+						{Name: "into", Description: "Revision to squash into (default: @)", Value: "-t", Alias: "to", RequiresInput: true, ConflictingFlags: []string{"-r"}, InputType: "REVSET"},
 						{Name: "onto", Description: "(Experimental) The revision(s) to use as parent for the new commit (can be repeated to create a merge commit)", Value: "-o", Alias: "destination", RequiresInput: true, ConflictingFlags: []string{"-r", "-A", "-B"}, InputType: "REVSETS"},
 						{Name: "insert-after", Description: "(Experimental) The revision(s) to insert the new commit after (can be repeated to create a merge commit)", Value: "-A", Alias: "after", RequiresInput: true, ConflictingFlags: []string{"-r", "-o"}, InputType: "REVSETS"},
 						{Name: "insert-before", Description: "(Experimental) The revision(s) to insert the new commit before (can be repeated to create a merge commit)", Value: "-B", Alias: "before", RequiresInput: true, ConflictingFlags: []string{"-r", "-o"}, InputType: "REVSETS"},

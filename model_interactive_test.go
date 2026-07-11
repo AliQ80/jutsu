@@ -96,6 +96,17 @@ func TestIsInteractiveInvocation(t *testing.T) {
 			setArg(m, "FILESETS", "main.go")
 			selectFlag(t, m, "-m", "msg")
 		}, false},
+		{"bare squash may prompt for combined description", func(t *testing.T, m *mainModel) {
+			focusCommand(t, m, "squash", "")
+		}, true},
+		{"squash with -m is direct", func(t *testing.T, m *mainModel) {
+			focusCommand(t, m, "squash", "")
+			selectFlag(t, m, "-m", "msg")
+		}, false},
+		{"squash with --use-destination-message is direct", func(t *testing.T, m *mainModel) {
+			focusCommand(t, m, "squash", "")
+			selectFlag(t, m, "--use-destination-message", "")
+		}, false},
 		{"config edit opens editor", func(t *testing.T, m *mainModel) {
 			focusCommand(t, m, "config", "edit")
 		}, true},
