@@ -1747,7 +1747,7 @@ func buildDocsBlock(name, usagePath, alias, desc string, args []Arg, flags []Fla
 	// jj always shows [OPTIONS] (global options apply to every command), and
 	// required-flag/group syntax (e.g. "<--onto|--insert-after|--insert-before>")
 	// is sourced verbatim from `jj util markdown-help` by gen-descriptions,
-	// since Jitsu's own Mandatory flag doesn't reliably mean "jj requires this".
+	// since Jutsu's own Mandatory flag doesn't reliably mean "jj requires this".
 	usage := "jj " + usagePath + " [OPTIONS]"
 	if requiredUsage != "" {
 		usage += " " + requiredUsage

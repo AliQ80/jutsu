@@ -180,7 +180,7 @@ func collectEdits(fset *token.FileSet, file *ast.File, docs map[string]doc) []ed
 		tokens := tokenizeUsage(remainder)
 		// markdown-help inconsistently includes a leading "[OPTIONS]" token
 		// (present for e.g. rebase/log, absent for revert/status/config set),
-		// unlike `jj <cmd> --help` which always shows it. Jitsu already adds
+		// unlike `jj <cmd> --help` which always shows it. Jutsu already adds
 		// its own "[OPTIONS]" unconditionally, so drop this one to avoid a
 		// duplicate.
 		if len(tokens) > 0 && tokens[0] == "[OPTIONS]" {

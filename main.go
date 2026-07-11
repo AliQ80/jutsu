@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	jitsuVersion    = "0.1.0"
+	jutsuVersion    = "0.1.0"
 	compatJJVersion = "0.43.0"
 )
 

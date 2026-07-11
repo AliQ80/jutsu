@@ -1,8 +1,8 @@
-# Jitsu — JJ TUI Command Composer
+# Jutsu — JJ TUI Command Composer
 
 A sleek, modern Terminal User Interface for composing and executing Jujutsu (`jj`) commands. Built with the Charmbracelet ecosystem, featuring a superfile-inspired design with Catppuccin Mocha theming.
 
-![Jitsu TUI](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go&logoColor=white)
+![Jutsu TUI](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)
 
 ## Features
@@ -28,23 +28,23 @@ A sleek, modern Terminal User Interface for composing and executing Jujutsu (`jj
 ```bash
 # Clone the repository
 git clone <your-repo-url>
-cd jitsu
+cd jutsu
 
 # Install dependencies
 go mod tidy
 
 # Build the binary
-go build -o jitsu .
+go build -o jutsu .
 
 # Run the TUI
-./jitsu
+./jutsu
 ```
 
 ### Quick Start
 
 ```bash
 # After building, simply run:
-./jitsu
+./jutsu
 
 # Or install to your Go bin directory:
 go install .
@@ -148,7 +148,7 @@ If not installed, follow the [official installation guide](https://jj-vcs.github
 
 ### Terminal compatibility issues
 
-Jitsu requires:
+Jutsu requires:
 - 256 color support
 - Unicode/UTF-8 encoding
 - Terminal width of at least 80 columns
@@ -175,7 +175,7 @@ go get -u
 
 ## Architecture
 
-Jitsu is built with:
+Jutsu is built with:
 - **Bubble Tea v2** — TUI framework (Model/Update/View pattern)
 - **Lip Gloss v2** — Styling and layout
 - **Bubbles v2** — Viewport component for output scrolling
@@ -183,7 +183,7 @@ Jitsu is built with:
 ### File Structure
 
 ```
-jitsu/
+jutsu/
 ├── main.go              # Entry point, tea.Program setup
 ├── model.go             # Core model, Init(), Update() with key routing
 ├── view.go              # View() — layout composition with lipgloss
