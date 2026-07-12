@@ -698,30 +698,6 @@ func loadCategories() []Category {
 					},
 				},
 				{
-					Name:        "diffedit",
-					Description: "Touch up the content changes in a revision with a diff editor\n\nWith the `-r` option, starts a [diff editor] on the changes in the revision.\n\nWith the `--from` and/or `--to` options, starts a [diff editor] comparing the \"from\" revision to the \"to\" revision.\n\n[diff editor]: https://docs.jj-vcs.dev/latest/config/#editing-diffs\n\nEdit the right side of the diff until it looks the way you want. Once you close the editor, the revision specified with `-r` or `--to` will be updated. Unless `--restore-descendants` is used, descendants will be rebased on top as usual, which may result in conflicts.\n\nSee `jj restore` if you want to move entire files from one revision to another. For moving changes between revisions, see `jj squash -i`.",
-					Interactive: true,
-					Args: []Arg{
-						{Name: "FILESETS", Description: "Edit only these paths (unmatched paths will remain unchanged)", Variadic: true},
-					},
-					Flags: []Flag{
-						{Name: "revision", Description: "The revision to touch up\n\nDefaults to @ if neither --to nor --from are specified.", Value: "-r", RequiresInput: true, ConflictingFlags: []string{"-f", "-t"}, InputType: "REVSET"},
-						{Name: "from", Description: "Show changes from this revision\n\nDefaults to @ if --to is specified.", Value: "-f", RequiresInput: true, ConflictingFlags: []string{"-r"}, InputType: "REVSET"},
-						{Name: "to", Description: "Edit changes in this revision\n\nDefaults to @ if --from is specified.", Value: "-t", RequiresInput: true, ConflictingFlags: []string{"-r"}, InputType: "REVSET"},
-						{Name: "restore-descendants", Description: "Preserve the content (not the diff) when rebasing descendants\n\nWhen rebasing a descendant on top of the rewritten revision, its diff compared to its parent(s) is normally preserved, i.e. the same way that descendants are always rebased. This flag makes it so the content/state is preserved instead of preserving the diff.", Value: "--restore-descendants"},
-						{Name: "tool", Description: "Specify diff editor to be used", Value: "--tool", RequiresInput: true, InputType: "TOOL", Interactive: true},
-					},
-				},
-				{
-					Name:        "arrange",
-					Description: "Interactively arrange the commit graph",
-					Interactive: true,
-					Args: []Arg{
-						{Name: "REVSETS", Description: "The revisions to arrange [aliases: -r]\n\nIf no revisions are specified, this defaults to the `revsets.arrange` setting.", Variadic: true},
-					},
-					Flags: []Flag{},
-				},
-				{
 					Name:        "rebase",
 					Description: "Move revisions to different parent(s)\n\nThis command moves revisions to different parent(s) while preserving the changes (diff) in the revisions.\n\nThere are three different ways of specifying which revisions to rebase:\n\n* `--source/-s` to rebase a revision and its descendants * `--branch/-b` to rebase a whole branch, relative to the destination * `--revisions/-r` to rebase the specified revisions without their descendants\n\nIf no option is specified, it defaults to `-b @`.\n\nThere are three different ways of specifying where the revisions should be rebased to:\n\n* `--onto/-o` to rebase the revisions onto the specified targets * `--insert-after/-A` to rebase the revisions onto the specified targets and to rebase the targets' descendants onto the rebased revisions * `--insert-before/-B` to rebase the revisions onto the specified targets' parents and to rebase the targets and their descendants onto the rebased revisions\n\nSee the sections below for details about the different ways of specifying which revisions to rebase where.\n\nIf a working-copy revision gets abandoned, it will be given a new, empty revision. This is true in general; it is not specific to this command.\n\n### Specifying which revisions to rebase\n\nWith `--source/-s`, the command rebases the specified revision and its descendants to the destination. For example, `jj rebase -s M -o O` would transform your history like this (letters followed by an apostrophe are post-rebase versions):\n\n  O           N'\n  |           |\n  | N         M'\n  | |         |\n  | M         O\n  | |    =>   |\n  | | L       | L\n  | |/        | |\n  | K         | K\n  |/          |/\n  J           J\n\nEach revision passed to `-s` will become a direct child of the destination, so if you instead run `jj rebase -s M -s N -o O` (or `jj rebase -s 'M|N' -o O`) in the example above, then N' would instead be a direct child of O.\n\nWith `--branch/-b`, the command rebases the whole \"branch\" containing the specified revision. A \"branch\" is the set of revisions that includes:\n\n* the specified revision and ancestors that are not also ancestors of the destination * all descendants of those revisions\n\nIn other words, `jj rebase -b X -o Y` rebases revisions in the revset `(Y..X)::` (which is equivalent to `jj rebase -s 'roots(Y..X)' -o Y` for a single root). For example, either `jj rebase -b L -o O` or `jj rebase -b M -o O` would transform your history like this (because `L` and `M` are on the same \"branch\", relative to the destination):\n\n  O           N'\n  |           |\n  | N         M'\n  | |         |\n  | M         | L'\n  | |    =>   |/\n  | | L       K'\n  | |/        |\n  | K         O\n  |/          |\n  J           J\n\nWith `--revisions/-r`, the command rebases only the specified revisions to the destination. Any \"hole\" left behind will be filled by rebasing descendants onto the specified revisions' parent(s). For example, `jj rebase -r K -o M` would transform your history like this:\n\n  M          K'\n  |          |\n  | L        M\n  | |   =>   |\n  | K        | L'\n  |/         |/\n  J          J\n\nMultiple revisions can be specified, and any dependencies (graph edges) within the set will be preserved. For example, `jj rebase -r 'K|N' -o O` would transform your history like this:\n\n  O           N'\n  |           |\n  | N         K'\n  | |         |\n  | M         O\n  | |    =>   |\n  | | L       | M'\n  | |/        |/\n  | K         | L'\n  |/          |/\n  J           J\n\n`jj rebase -s X` is similar to `jj rebase -r X::` and will behave the same if X is a single revision. However, if X is a set of multiple revisions, or if you passed multiple `-s` arguments, then `jj rebase -s` will make each of the specified revisions an immediate child of the destination, while `jj rebase -r` will preserve dependencies within the set.\n\nNote that you can create a merge revision by repeating the `-o` argument. For example, if you realize that revision L actually depends on revision M in order to work (in addition to its current parent K), you can run `jj rebase -s L -o K -o M`:\n\n  M          L'\n  |          |\\\n  | L        M |\n  | |   =>   | |\n  | K        | K\n  |/         |/\n  J          J\n\n### Specifying where to rebase the revisions\n\nWith `--onto/-o`, the command rebases the selected revisions onto the targets. Existing descendants of the targets will not be affected. See the section above for examples.\n\nWith `--insert-after/-A`, the selected revisions will be inserted after the targets. This is similar to `-o`, but if the targets have any existing descendants, then those will be rebased onto the rebased selected revisions.\n\nFor example, `jj rebase -r K -A L` will rewrite history like this:\n\n  N           N'\n  |           |\n  | M         | M'\n  |/          |/\n  L      =>   K'\n  |           |\n  | K         L\n  |/          |\n  J           J\n\nThe `-A` (and `-B`) argument can also be used for reordering revisions. For example, `jj rebase -r M -A J` will rewrite history like this:\n\n  M          L'\n  |          |\n  L          K'\n  |     =>   |\n  K          M'\n  |          |\n  J          J\n\nWith `--insert-before/-B`, the selected revisions will be inserted before the targets. This is achieved by rebasing the selected revisions onto the target revisions' parents, and then rebasing the target revisions and their descendants onto the rebased revisions.\n\nFor example, `jj rebase -r K -B L` will rewrite history like this:\n\n  N           N'\n  |           |\n  | M         | M'\n  |/          |/\n  L     =>    L'\n  |           |\n  | K         K'\n  |/          |\n  J           J\n\nThe `-A` and `-B` arguments can also be combined, which can be useful around merges. For example, you can use `jj rebase -r K -A J -B M` to create a new merge (but `jj rebase -r M -o L -o K` might be simpler in this particular case):\n\n  M           M'\n  |           |\\\n  L           L |\n  |     =>    | |\n  | K         | K'\n  |/          |/\n  J           J\n\nTo insert a commit inside an existing merge with `jj rebase -r O -A K -B M`:\n\n  O           N'\n  |           |\\\n  N           | M'\n  |\\          | |\\\n  | M         | O'|\n  | |    =>   |/ /\n  | L         | L\n  | |         | |\n  K |         K |\n  |/          |/\n  J           J",
 					Flags: []Flag{
@@ -739,14 +715,18 @@ func loadCategories() []Category {
 					RequiredUsage:     "<--onto <REVSETS>|--insert-after <REVSETS>|--insert-before <REVSETS>>",
 				},
 				{
-					Name:        "absorb",
-					Description: "Move changes from a revision into the stack of mutable revisions\n\nThis command splits changes in the source revision and moves each change to the closest mutable ancestor where the corresponding lines were modified last. If the destination revision cannot be determined unambiguously, the change will be left in the source revision.\n\nThe source revision will be abandoned if all changes are absorbed into the destination revisions, and if the source revision has no description.\n\nThe modification made by `jj absorb` can be reviewed by `jj op show -p`.",
+					Name:        "diffedit",
+					Description: "Touch up the content changes in a revision with a diff editor\n\nWith the `-r` option, starts a [diff editor] on the changes in the revision.\n\nWith the `--from` and/or `--to` options, starts a [diff editor] comparing the \"from\" revision to the \"to\" revision.\n\n[diff editor]: https://docs.jj-vcs.dev/latest/config/#editing-diffs\n\nEdit the right side of the diff until it looks the way you want. Once you close the editor, the revision specified with `-r` or `--to` will be updated. Unless `--restore-descendants` is used, descendants will be rebased on top as usual, which may result in conflicts.\n\nSee `jj restore` if you want to move entire files from one revision to another. For moving changes between revisions, see `jj squash -i`.",
+					Interactive: true,
 					Args: []Arg{
-						{Name: "FILESETS", Description: "Move only changes to these paths (instead of all paths)", Variadic: true},
+						{Name: "FILESETS", Description: "Edit only these paths (unmatched paths will remain unchanged)", Variadic: true},
 					},
 					Flags: []Flag{
-						{Name: "from", Description: "Source revision to absorb from\n\nDefault value: `@`", Value: "-f", RequiresInput: true, InputType: "REVSET"},
-						{Name: "into", Description: "Destination revisions to absorb into\n\nOnly ancestors of the source revision will be considered.\n\nDefault value: `mutable()`", Value: "-t", Alias: "to", RequiresInput: true, InputType: "REVSETS"},
+						{Name: "revision", Description: "The revision to touch up\n\nDefaults to @ if neither --to nor --from are specified.", Value: "-r", RequiresInput: true, ConflictingFlags: []string{"-f", "-t"}, InputType: "REVSET"},
+						{Name: "from", Description: "Show changes from this revision\n\nDefaults to @ if --to is specified.", Value: "-f", RequiresInput: true, ConflictingFlags: []string{"-r"}, InputType: "REVSET"},
+						{Name: "to", Description: "Edit changes in this revision\n\nDefaults to @ if --from is specified.", Value: "-t", RequiresInput: true, ConflictingFlags: []string{"-r"}, InputType: "REVSET"},
+						{Name: "restore-descendants", Description: "Preserve the content (not the diff) when rebasing descendants\n\nWhen rebasing a descendant on top of the rewritten revision, its diff compared to its parent(s) is normally preserved, i.e. the same way that descendants are always rebased. This flag makes it so the content/state is preserved instead of preserving the diff.", Value: "--restore-descendants"},
+						{Name: "tool", Description: "Specify diff editor to be used", Value: "--tool", RequiresInput: true, InputType: "TOOL", Interactive: true},
 					},
 				},
 				{
@@ -759,6 +739,38 @@ func loadCategories() []Category {
 						{Name: "retain-bookmarks", Description: "Do not delete bookmarks pointing to the revisions to abandon\n\nBookmarks will be moved to the parent revisions instead.", Value: "--retain-bookmarks"},
 						{Name: "restore-descendants", Description: "Do not modify the content of the children of the abandoned commits", Value: "--restore-descendants"},
 					},
+				},
+				{
+					Name:        "revert",
+					Description: "Apply the reverse of the given revision(s)\n\nThe reverse of each of the given revisions is applied sequentially in reverse topological order at the given location.\n\nThe description of the new revisions can be customized with the `templates.revert_description` config variable.",
+					Flags: []Flag{
+						{Name: "revision", Description: "The revision(s) to apply the reverse of", Value: "-r", RequiresInput: true, Mandatory: true, InputType: "REVSETS"},
+						{Name: "onto", Description: "The revision(s) to apply the reverse changes on top of", Value: "-o", Alias: "destination", RequiresInput: true, ConflictingFlags: []string{"-A", "-B"}, InputType: "REVSETS"},
+						{Name: "insert-after", Description: "The revision(s) to insert the reverse changes after (can be repeated to create a merge commit)", Value: "-A", Alias: "after", RequiresInput: true, ConflictingFlags: []string{"-o"}, InputType: "REVSETS"},
+						{Name: "insert-before", Description: "The revision(s) to insert the reverse changes before (can be repeated to create a merge commit)", Value: "-B", Alias: "before", RequiresInput: true, ConflictingFlags: []string{"-o"}, InputType: "REVSETS"},
+					},
+					RequiredFlagGroup: []string{"-o", "-A", "-B"},
+					RequiredUsage:     "--revision <REVSETS> <--onto <REVSETS>|--insert-after <REVSETS>|--insert-before <REVSETS>>",
+				},
+				{
+					Name:        "absorb",
+					Description: "Move changes from a revision into the stack of mutable revisions\n\nThis command splits changes in the source revision and moves each change to the closest mutable ancestor where the corresponding lines were modified last. If the destination revision cannot be determined unambiguously, the change will be left in the source revision.\n\nThe source revision will be abandoned if all changes are absorbed into the destination revisions, and if the source revision has no description.\n\nThe modification made by `jj absorb` can be reviewed by `jj op show -p`.",
+					Args: []Arg{
+						{Name: "FILESETS", Description: "Move only changes to these paths (instead of all paths)", Variadic: true},
+					},
+					Flags: []Flag{
+						{Name: "from", Description: "Source revision to absorb from\n\nDefault value: `@`", Value: "-f", RequiresInput: true, InputType: "REVSET"},
+						{Name: "into", Description: "Destination revisions to absorb into\n\nOnly ancestors of the source revision will be considered.\n\nDefault value: `mutable()`", Value: "-t", Alias: "to", RequiresInput: true, InputType: "REVSETS"},
+					},
+				},
+				{
+					Name:        "arrange",
+					Description: "Interactively arrange the commit graph",
+					Interactive: true,
+					Args: []Arg{
+						{Name: "REVSETS", Description: "The revisions to arrange [aliases: -r]\n\nIf no revisions are specified, this defaults to the `revsets.arrange` setting.", Variadic: true},
+					},
+					Flags: []Flag{},
 				},
 				{
 					Name:        "duplicate",
@@ -787,18 +799,6 @@ func loadCategories() []Category {
 						{Name: "revision", Description: "Simplify specified revision(s) (can be repeated)\n\nIf both `--source` and `--revisions` are not provided, this defaults to the `revsets.simplify-parents` setting, or `reachable(@, mutable())` if it is not set.", Value: "-r", RequiresInput: true, InputType: "REVSETS"},
 						{Name: "source", Description: "Simplify specified revision(s) together with their trees of descendants (can be repeated)", Value: "--source", RequiresInput: true, InputType: "REVSETS"},
 					},
-				},
-				{
-					Name:        "revert",
-					Description: "Apply the reverse of the given revision(s)\n\nThe reverse of each of the given revisions is applied sequentially in reverse topological order at the given location.\n\nThe description of the new revisions can be customized with the `templates.revert_description` config variable.",
-					Flags: []Flag{
-						{Name: "revision", Description: "The revision(s) to apply the reverse of", Value: "-r", RequiresInput: true, Mandatory: true, InputType: "REVSETS"},
-						{Name: "onto", Description: "The revision(s) to apply the reverse changes on top of", Value: "-o", Alias: "destination", RequiresInput: true, ConflictingFlags: []string{"-A", "-B"}, InputType: "REVSETS"},
-						{Name: "insert-after", Description: "The revision(s) to insert the reverse changes after (can be repeated to create a merge commit)", Value: "-A", Alias: "after", RequiresInput: true, ConflictingFlags: []string{"-o"}, InputType: "REVSETS"},
-						{Name: "insert-before", Description: "The revision(s) to insert the reverse changes before (can be repeated to create a merge commit)", Value: "-B", Alias: "before", RequiresInput: true, ConflictingFlags: []string{"-o"}, InputType: "REVSETS"},
-					},
-					RequiredFlagGroup: []string{"-o", "-A", "-B"},
-					RequiredUsage:     "--revision <REVSETS> <--onto <REVSETS>|--insert-after <REVSETS>|--insert-before <REVSETS>>",
 				},
 				{
 					Name:        "metaedit",
