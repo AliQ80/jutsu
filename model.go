@@ -30,6 +30,7 @@ type mainModel struct {
 	subScroll     int
 	flagScroll    int
 	paneH         int // composer pane height; content = paneH - 4
+	maxInputsHt   int // fixed reservation for the inputs box; see maxInputsHeight()
 
 	output          viewport.Model
 	outputLines     []string
@@ -104,13 +105,14 @@ func newModel() mainModel {
 	}
 
 	m := mainModel{
-		categories: cats,
-		focusPane:  focusCategories,
-		output:     vp,
-		docs:       dv,
-		inputs:     make(map[string]textinput.Model),
-		argInputs:  make(map[string]textinput.Model),
-		cwd:        cwd,
+		categories:  cats,
+		focusPane:   focusCategories,
+		output:      vp,
+		docs:        dv,
+		inputs:      make(map[string]textinput.Model),
+		argInputs:   make(map[string]textinput.Model),
+		cwd:         cwd,
+		maxInputsHt: maxInputsHeight(cats),
 	}
 
 	// Pre-initialize textinputs for mandatory flags so the input pane renders
@@ -482,6 +484,7 @@ func (m mainModel) handleComposerKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		m.clampFocusPane()
 		m.cmdText, m.cmdTextLong = m.buildCommandStrings()
 		m.layoutViewports()
+		m.reclampAllScrolls()
 		m.refreshDocs()
 		return m, nil
 
@@ -490,6 +493,7 @@ func (m mainModel) handleComposerKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		m.clampFocusPane()
 		m.cmdText, m.cmdTextLong = m.buildCommandStrings()
 		m.layoutViewports()
+		m.reclampAllScrolls()
 		m.refreshDocs()
 		return m, nil
 
@@ -1167,9 +1171,9 @@ func (m *mainModel) layoutViewports() {
 	leftWidth, rightWidth := m.getLayoutWidths()
 
 	combined := m.getActiveCombined()
-	inputsHeight := 0
+	actualInputsHeight := 0
 	if len(combined) > 0 {
-		inputsHeight = len(combined) + 2
+		actualInputsHeight = len(combined) + 2
 	}
 
 	outputHeight := m.height - 6 // matches View(): 5 cmdBar + 1 helpBar
@@ -1182,17 +1186,19 @@ func (m *mainModel) layoutViewports() {
 	m.output.SetWidth(paneContentWidth)
 	m.output.SetHeight(paneContentHeight)
 
-	// Composer/description bar share leftBudget, not outputHeight (matches View()).
-	leftBudget := outputHeight - inputsHeight
-	if leftBudget < 6 {
-		leftBudget = 6
+	// composerH is a pure function of outputHeight/maxInputsHt (matches
+	// View()) — it never looks at combined, so it never resizes during
+	// navigation or flag toggling. descBarH absorbs all the slack instead
+	// of leaving a gap.
+	composerBudget := outputHeight - m.maxInputsHt
+	if composerBudget < 6 {
+		composerBudget = 6
 	}
-	m.paneH = leftBudget / 2
+	m.paneH = composerBudget / 2
 
 	// Docs viewport: fits inside the description bar's content box (title
 	// box + border consume 3 rows, handled by docsContentDims).
-	composerH := leftBudget / 2
-	descBarH := leftBudget - composerH
+	descBarH := outputHeight - m.paneH - actualInputsHeight
 	docsW, docsH := docsContentDims(leftWidth, descBarH)
 	m.docs.SetWidth(docsW)
 	m.docs.SetHeight(docsH)
@@ -1494,6 +1500,42 @@ func initMandatoryFlagInputs(flags []Flag, inputs map[string]textinput.Model) {
 			}
 		}
 	}
+}
+
+// maxInputsHeight scans every command/subcommand once to find the most args +
+// mandatory-input flags any single one has pre-selected at startup, so the
+// composer layout can reserve a floor height that absorbs pure-navigation
+// jitter without resizing. Deliberately toggling extra optional inputs with
+// space can still grow the inputs box past this floor — same as before this
+// function existed.
+func maxInputsHeight(cats []Category) int {
+	maxN := 0
+	consider := func(args []Arg, flags []Flag) {
+		n := len(args)
+		for _, f := range flags {
+			if f.Mandatory && f.RequiresInput {
+				n++
+			}
+		}
+		if n > maxN {
+			maxN = n
+		}
+	}
+	for _, cat := range cats {
+		for _, cmd := range cat.Commands {
+			if len(cmd.SubCmds) > 0 {
+				for _, sub := range cmd.SubCmds {
+					consider(sub.Args, sub.Flags)
+				}
+			} else {
+				consider(cmd.Args, cmd.Flags)
+			}
+		}
+	}
+	if maxN == 0 {
+		return 0
+	}
+	return maxN + 2 // border/padding, matches the existing len(combined)+2
 }
 
 func (m *mainModel) getActiveInputs() []*Flag {

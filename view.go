@@ -60,9 +60,9 @@ func (m mainModel) View() tea.View {
 	leftWidth, rightWidth := m.getLayoutWidths()
 
 	combined := m.getActiveCombined()
-	inputsHeight := 0
+	actualInputsHeight := 0
 	if len(combined) > 0 {
-		inputsHeight = len(combined) + 2
+		actualInputsHeight = len(combined) + 2
 	}
 
 	outputHeight := m.height - 6 // 5 cmdBar + 1 helpBar
@@ -70,13 +70,15 @@ func (m mainModel) View() tea.View {
 		outputHeight = 6
 	}
 
-	leftBudget := outputHeight - inputsHeight
-	if leftBudget < 6 {
-		leftBudget = 6
+	// composerH is a pure function of outputHeight/maxInputsHt — it never
+	// looks at combined, so it never resizes during navigation or flag
+	// toggling. descBarH absorbs all the slack instead of leaving a gap.
+	composerBudget := outputHeight - m.maxInputsHt
+	if composerBudget < 6 {
+		composerBudget = 6
 	}
-
-	composerH := leftBudget / 2
-	descBarH := leftBudget - composerH
+	composerH := composerBudget / 2
+	descBarH := outputHeight - composerH - actualInputsHeight
 
 	composerSection := m.renderLeftPane(composerH)
 	leftColumn := composerSection
@@ -84,8 +86,8 @@ func (m mainModel) View() tea.View {
 		descBar := m.renderDescriptionBar(leftWidth, descBarH)
 		leftColumn = lipgloss.JoinVertical(lipgloss.Left, leftColumn, descBar)
 	}
-	if inputsHeight > 0 {
-		inputsPane := m.renderInputPanes(leftWidth, inputsHeight, combined)
+	if actualInputsHeight > 0 {
+		inputsPane := m.renderInputPanes(leftWidth, actualInputsHeight, combined)
 		leftColumn = lipgloss.JoinVertical(lipgloss.Left, leftColumn, inputsPane)
 	}
 
