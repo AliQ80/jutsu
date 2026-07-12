@@ -13,6 +13,7 @@ import (
 	"syscall"
 
 	"github.com/creack/pty"
+	"github.com/muesli/cancelreader"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/term"
@@ -123,22 +124,37 @@ func (c *ptyExecCommand) Run() error {
 		_, _ = io.Copy(w, ptmx)
 	}()
 
-	// terminal → pty (keystrokes to the subprocess). This goroutine is
-	// intentionally not joined: it blocks in Read() on the real stdin,
-	// which we can't close out from under Bubble Tea. Once the subprocess
-	// exits and ptmx is closed below, this goroutine's next Write to the
-	// closed pty master errors and it exits on its own next keystroke —
-	// a narrow, bounded leak, not an indefinite one. In the brief window
-	// before that happens, a keystroke could race with Bubble Tea's
-	// restored input reader; accepted as out of scope given how narrow
-	// the window is.
+	// terminal → pty (keystrokes to the subprocess), read through a
+	// cancelreader — the same mechanism Bubble Tea's own input loop uses
+	// (see uv.NewCancelReader in charm.land/bubbletea/v2's tty.go) — instead
+	// of raw c.stdin. Plain os.File.SetReadDeadline doesn't reliably
+	// interrupt an in-flight blocking Read on a tty, so without this the
+	// goroutine could only be stopped by an actual keystroke arriving,
+	// which raced Bubble Tea's restored input reader for it: a keystroke
+	// landing here got forwarded to the already-closed pty master and
+	// silently dropped. cr.Cancel() below interrupts the Read on demand
+	// (epoll + self-pipe on Linux), closing that race instead of just
+	// narrowing it.
+	var stdinReader io.Reader = c.stdin
+	cr, crErr := cancelreader.NewReader(c.stdin)
+	if crErr == nil {
+		stdinReader = cr
+	}
+	wg.Add(1)
 	go func() {
-		_, _ = io.Copy(ptmx, c.stdin)
+		defer wg.Done()
+		_, _ = io.Copy(ptmx, stdinReader)
 	}()
 
 	err = cmd.Wait()
 	_ = ptmx.Close()
+	if cr != nil {
+		cr.Cancel() // unblocks the forwarding goroutine's pending Read immediately
+	}
 	wg.Wait()
+	if cr != nil {
+		_ = cr.Close()
+	}
 
 	return err
 }
