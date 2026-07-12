@@ -320,6 +320,7 @@ func loadCategories() []Category {
 					Flags: []Flag{
 						{Name: "list", Description: "Instead of resolving conflicts, list all the conflicts", Value: "--list"},
 						{Name: "revision", Description: "Default value: `@`", Value: "-r", RequiresInput: true, InputType: "REVSET"},
+						{Name: "tool", Description: "Specify 3-way merge tool to be used\n\nThe built-in merge tools `:ours` and `:theirs` can be used to choose side #1 and side #2 of the conflict respectively.", Value: "--tool", RequiresInput: true, InputType: "TOOL", Interactive: true},
 					},
 				},
 				{
@@ -680,6 +681,7 @@ func loadCategories() []Category {
 						{Name: "use-destination-message", Description: "Use the description of the destination revision and discard the description(s) of the source revision(s)", Value: "--use-destination-message", ConflictingFlags: []string{"-m"}},
 						{Name: "keep-emptied", Description: "The source revision will not be abandoned", Value: "-k"},
 						{Name: "interactive", Description: "Interactively choose which parts to squash", Value: "-i", Interactive: true},
+						{Name: "tool", Description: "Specify diff editor to be used (implies --interactive)", Value: "--tool", RequiresInput: true, InputType: "TOOL", Interactive: true},
 					},
 				},
 				{
@@ -692,6 +694,7 @@ func loadCategories() []Category {
 						{Name: "revision", Description: "The revision to split\n\nDefault value: `@`", Value: "-r", RequiresInput: true, InputType: "REVSET"},
 						{Name: "message", Description: "The change description to use for the selected changes (don't open editor)\n\nSets the description for the revision containing the selected changes. The other revision will keep its original description, if any.", Value: "-m", RequiresInput: true, NeedsQuotes: true, InputType: "MESSAGE"},
 						{Name: "interactive", Description: "Interactively choose which parts to split\n\nThis is the default if no filesets are provided.", Value: "-i", Interactive: true},
+						{Name: "tool", Description: "Specify diff editor to be used (implies --interactive)", Value: "--tool", RequiresInput: true, InputType: "TOOL", Interactive: true},
 					},
 				},
 				{
@@ -706,6 +709,7 @@ func loadCategories() []Category {
 						{Name: "from", Description: "Show changes from this revision\n\nDefaults to @ if --to is specified.", Value: "-f", RequiresInput: true, ConflictingFlags: []string{"-r"}, InputType: "REVSET"},
 						{Name: "to", Description: "Edit changes in this revision\n\nDefaults to @ if --from is specified.", Value: "-t", RequiresInput: true, ConflictingFlags: []string{"-r"}, InputType: "REVSET"},
 						{Name: "restore-descendants", Description: "Preserve the content (not the diff) when rebasing descendants\n\nWhen rebasing a descendant on top of the rewritten revision, its diff compared to its parent(s) is normally preserved, i.e. the same way that descendants are always rebased. This flag makes it so the content/state is preserved instead of preserving the diff.", Value: "--restore-descendants"},
+						{Name: "tool", Description: "Specify diff editor to be used", Value: "--tool", RequiresInput: true, InputType: "TOOL", Interactive: true},
 					},
 				},
 				{

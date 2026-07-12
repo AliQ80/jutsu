@@ -96,6 +96,12 @@ func TestIsInteractiveInvocation(t *testing.T) {
 			setArg(m, "FILESETS", "main.go")
 			selectFlag(t, m, "-m", "msg")
 		}, false},
+		{"split --tool forces interactive even with -m", func(t *testing.T, m *mainModel) {
+			focusCommand(t, m, "split", "")
+			setArg(m, "FILESETS", "main.go")
+			selectFlag(t, m, "-m", "msg")
+			selectFlag(t, m, "--tool", "meld")
+		}, true},
 		{"bare squash may prompt for combined description", func(t *testing.T, m *mainModel) {
 			focusCommand(t, m, "squash", "")
 		}, true},
@@ -111,6 +117,12 @@ func TestIsInteractiveInvocation(t *testing.T) {
 			focusCommand(t, m, "squash", "")
 			selectFlag(t, m, "-k", "")
 		}, false},
+		{"squash --tool forces interactive even with -k and -m", func(t *testing.T, m *mainModel) {
+			focusCommand(t, m, "squash", "")
+			selectFlag(t, m, "-k", "")
+			selectFlag(t, m, "-m", "msg")
+			selectFlag(t, m, "--tool", "meld")
+		}, true},
 		{"config edit opens editor", func(t *testing.T, m *mainModel) {
 			focusCommand(t, m, "config", "edit")
 		}, true},
