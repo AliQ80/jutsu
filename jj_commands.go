@@ -552,6 +552,11 @@ func loadCategories() []Category {
 							Flags:       []Flag{},
 						},
 						{
+							Summary: "List Git remotes", Name: "remote list",
+							Description: "List Git remotes",
+							Flags:       []Flag{},
+						},
+						{
 							Summary: "Add a Git remote", Name: "remote add",
 							Description: "Add a Git remote",
 							Args: []Arg{
@@ -559,11 +564,6 @@ func loadCategories() []Category {
 								{Name: "URL", Description: "The remote's URL or path\n\nLocal path will be resolved to absolute form.", Required: true},
 							},
 							Flags: []Flag{},
-						},
-						{
-							Summary: "List Git remotes", Name: "remote list",
-							Description: "List Git remotes",
-							Flags:       []Flag{},
 						},
 						{
 							Summary: "Remove a Git remote and forget its bookmarks", Name: "remote remove",
