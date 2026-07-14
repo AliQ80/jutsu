@@ -231,6 +231,9 @@ const (
 var (
 	boldStyle = lipgloss.NewStyle().Bold(true)
 
+	// flagNameStyle matches how `jj --help` colors flag names (bold green).
+	flagNameStyle = lipgloss.NewStyle().Foreground(colorGreen).Bold(true)
+
 	versionGreenStyle = lipgloss.NewStyle().
 				Foreground(colorGreen)
 

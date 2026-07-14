@@ -1767,7 +1767,7 @@ func (m mainModel) docsContent() string {
 		flags := m.currentFlags()
 		if m.flagIdx < len(flags) {
 			f := flags[m.flagIdx]
-			header := headerStyle.Render(flagDocsLabel(f))
+			header := flagNameStyle.Render(flagDocsLabel(f))
 			if f.Description == "" {
 				return header
 			}
@@ -1893,20 +1893,44 @@ func buildDocsBlock(name, usagePath, alias, desc string, args []Arg, flags []Fla
 			}
 			b.WriteString("\n  " + boldStyle.Render(argLabel))
 			if a.Description != "" {
-				b.WriteString("\n  " + a.Description)
+				b.WriteString("\n" + indentBlock(a.Description))
 			}
 		}
 	}
 	if len(flags) > 0 {
 		b.WriteString("\n\n" + headerStyle.Render("Options"))
-		for _, f := range flags {
-			b.WriteString("\n  " + boldStyle.Render(flagDocsLabel(f)))
+		for i, f := range flags {
+			if i > 0 {
+				b.WriteString("\n")
+			}
+			b.WriteString("\n  " + flagNameStyle.Render(flagDocsLabel(f)))
 			if f.Description != "" {
-				b.WriteString("\n  " + f.Description)
+				b.WriteString("\n" + indentBlock(f.Description))
 			}
 		}
 	}
 	return b.String()
+}
+
+// indentMarker flags a prose line for wordWrap to wrap-and-indent under its
+// heading. A literal leading space is already claimed by wordWrap's
+// preformatted-diagram passthrough below, so a non-printable marker is used
+// instead of indenting here directly.
+const indentMarker = "\x01"
+
+// indentBlock marks every prose line of a multi-paragraph description so
+// each paragraph — not just the first — ends up indented under its flag or
+// argument name once wordWrap runs. Blank separator lines and
+// already-indented preformatted (diagram) lines pass through untouched.
+func indentBlock(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		if line == "" || strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") {
+			continue
+		}
+		lines[i] = indentMarker + line
+	}
+	return strings.Join(lines, "\n")
 }
 
 // wordWrap wraps s so no visible line exceeds width characters. It preserves
@@ -1940,17 +1964,29 @@ func wordWrap(s string, width int) string {
 			out.WriteString(line)
 			continue
 		}
-		// Word-wrap at width, collapsing whitespace to single spaces.
+		// Word-wrap at width, collapsing whitespace to single spaces. A
+		// marked line (indentBlock) wraps at width-2 and indents every
+		// resulting line, so continuation paragraphs line up under the
+		// same heading as the first one instead of drifting to column 0.
+		indent := ""
+		avail := width
+		if rest, ok := strings.CutPrefix(line, indentMarker); ok {
+			line = rest
+			indent = "  "
+			if avail = width - 2; avail < 1 {
+				avail = 1
+			}
+		}
 		words := strings.Fields(line)
 		col := 0
 		for wi, w := range words {
 			wlen := len([]rune(w))
 			if wi == 0 {
-				out.WriteString(w)
+				out.WriteString(indent + w)
 				col = wlen
-			} else if col+1+wlen > width {
+			} else if col+1+wlen > avail {
 				out.WriteByte('\n')
-				out.WriteString(w)
+				out.WriteString(indent + w)
 				col = wlen
 			} else {
 				out.WriteByte(' ')

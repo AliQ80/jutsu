@@ -58,4 +58,20 @@ func TestWordWrap(t *testing.T) {
 			t.Errorf("got %q, want %q (unchanged)", got, in)
 		}
 	})
+
+	t.Run("indent-marked lines wrap narrower and every line is indented", func(t *testing.T) {
+		in := indentMarker + "the quick brown fox jumps"
+		want := "  the quick\n  brown fox\n  jumps"
+		if got := wordWrap(in, 12); got != want {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("indentBlock marks prose lines but leaves blank and preformatted lines untouched", func(t *testing.T) {
+		in := "para one\n\n  B   C\n   \\ /\n    @\n\npara two"
+		want := indentMarker + "para one\n\n  B   C\n   \\ /\n    @\n\n" + indentMarker + "para two"
+		if got := indentBlock(in); got != want {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
 }
