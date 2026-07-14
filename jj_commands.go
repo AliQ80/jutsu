@@ -5,6 +5,7 @@ type Flag struct {
 	Description      string
 	Value            string
 	Alias            string // word alias from jj help, e.g. "after" for --insert-after — hand-authored, drift-checked by gen-descriptions
+	NoBarAlias       bool   // when true, the command bar always shows --Name even if Alias is shorter (Alias still appears in docs via flagDocsLabel)
 	InputType        string // e.g. "REVSET", "PATH", "TEMPLATE" — populated by gen-descriptions
 	Selected         bool
 	RequiresInput    bool
@@ -440,7 +441,7 @@ func loadCategories() []Category {
 								{Name: "NAMES", Description: "The bookmarks to update", Variadic: true, Required: true},
 							},
 							Flags: []Flag{
-								{Name: "revision", Description: "The bookmark's target revision\n\nDefault value: `@`", Value: "-r", Alias: "to", RequiresInput: true, InputType: "REVSET"},
+								{Name: "revision", Description: "The bookmark's target revision\n\nDefault value: `@`", Value: "-r", Alias: "to", NoBarAlias: true, RequiresInput: true, InputType: "REVSET"},
 								{Name: "allow-backwards", Description: "Allow moving the bookmark backwards or sideways", Value: "--allow-backwards"},
 							},
 						},
@@ -452,7 +453,7 @@ func loadCategories() []Category {
 								{Name: "NAMES", Description: "The bookmarks to create", Variadic: true, Required: true},
 							},
 							Flags: []Flag{
-								{Name: "revision", Description: "The bookmark's target revision\n\nDefault value: `@`", Value: "-r", Alias: "to", RequiresInput: true, InputType: "REVSET"},
+								{Name: "revision", Description: "The bookmark's target revision\n\nDefault value: `@`", Value: "-r", Alias: "to", NoBarAlias: true, RequiresInput: true, InputType: "REVSET"},
 							},
 						},
 						{

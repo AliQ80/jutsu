@@ -1793,10 +1793,11 @@ func flagLongForm(f Flag) string {
 // flagBarForm returns the spelling shown in the command bar and copied to the
 // clipboard: the shortest full-word form. The alias wins only when it beats
 // the long name ("--after" over "--insert-after") — some aliases are longer
-// ("--destination" for "--onto") and lose.
+// ("--destination" for "--onto") and lose. NoBarAlias opts a flag out of this
+// entirely, so its alias still appears in flagDocsLabel but never in the bar.
 func flagBarForm(f Flag) string {
 	long := flagLongForm(f)
-	if f.Alias != "" && len(f.Alias)+2 < len(long) {
+	if !f.NoBarAlias && f.Alias != "" && len(f.Alias)+2 < len(long) {
 		return "--" + f.Alias
 	}
 	return long
