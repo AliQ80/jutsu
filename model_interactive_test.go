@@ -135,9 +135,9 @@ func TestIsInteractiveInvocation(t *testing.T) {
 		{"sparse edit opens editor", func(t *testing.T, m *mainModel) {
 			focusCommand(t, m, "sparse", "edit")
 		}, true},
-		{"bare metaedit opens editor", func(t *testing.T, m *mainModel) {
+		{"bare metaedit is a no-op, direct", func(t *testing.T, m *mainModel) {
 			focusCommand(t, m, "metaedit", "")
-		}, true},
+		}, false},
 		{"metaedit with a metadata flag is direct", func(t *testing.T, m *mainModel) {
 			focusCommand(t, m, "metaedit", "")
 			selectFlag(t, m, "--update-author", "")

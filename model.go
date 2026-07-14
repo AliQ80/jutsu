@@ -1425,14 +1425,6 @@ func (m mainModel) isInteractiveInvocation() bool {
 		// still open $EDITOR asking for a description.
 		return strings.TrimSpace(m.argInputs["FILESETS"].Value()) == "" ||
 			m.selectedFlagValue("-m") == ""
-	case "metaedit":
-		// Any metadata flag applies directly; bare metaedit opens an editor.
-		for _, f := range m.currentFlags() {
-			if f.Selected {
-				return false
-			}
-		}
-		return true
 	}
 	return false
 }
