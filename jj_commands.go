@@ -523,6 +523,10 @@ func loadCategories() []Category {
 								{Name: "remote", Description: "The remote to fetch from (only named remotes are supported, can be repeated)\n\nBy default, the specified pattern matches remote names with glob syntax, e.g. `--remote '*'`. You can also use other [string pattern syntax].\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "--remote", RequiresInput: true, ConflictingFlags: []string{"--all-remotes"}, InputType: "REMOTE"},
 								{Name: "all-remotes", Description: "Fetch from all remotes", Value: "--all-remotes", ConflictingFlags: []string{"--remote"}},
 								{Name: "branch", Description: "Name of the branch to fetch (can be repeated)\n\nBy default, the specified pattern matches branch names with glob syntax, but only `*` is expanded. Other wildcard characters such as `?` are *not* supported. Patterns can be repeated or combined with [logical operators] to specify multiple branches, but only union and negative intersection are supported.\n\nExamples: `push-*`, `(push-* | foo/*) ~ foo/unwanted`\n\n[logical operators]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "--branch", RequiresInput: true, InputType: "BRANCH"},
+								// Hidden/undocumented option, not listed in `jj git fetch --help`.
+								// Confirmed to work manually (exact tag name only — repeat/pattern behavior unverified).
+								// See https://github.com/jj-vcs/jj/discussions/9455#discussioncomment-16858209
+								{Name: "tag", Description: "Name of the tag to fetch", Value: "--tag", RequiresInput: true, InputType: "TAG"},
 								{Name: "tracked", Description: "Fetch only tracked bookmarks\n\nThis fetches only bookmarks that are already tracked from the specified remote(s).", Value: "--tracked"},
 							},
 						},
@@ -532,6 +536,10 @@ func loadCategories() []Category {
 							Flags: []Flag{
 								{Name: "remote", Description: "The remote to push to (only named remotes are supported)\n\nThis defaults to the `git.push` setting. If that is not configured, and if there are multiple remotes, the remote named \"origin\" will be used.", Value: "--remote", RequiresInput: true, InputType: "REMOTE"},
 								{Name: "bookmark", Description: "Push only this bookmark, or bookmarks matching a pattern (can be repeated)\n\nIf a bookmark isn't tracking anything yet, the remote bookmark will be tracked automatically.\n\nBy default, the specified pattern matches bookmark names with glob syntax. You can also use other [string pattern syntax].\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "--bookmark", RequiresInput: true, InputType: "BOOKMARK"},
+								// Hidden/undocumented option, not listed in `jj git push --help`.
+								// Confirmed to work manually (exact tag name only — repeat/pattern behavior unverified).
+								// See https://github.com/jj-vcs/jj/discussions/9455#discussioncomment-16858209
+								{Name: "tag", Description: "Name of the tag to push", Value: "--tag", RequiresInput: true, InputType: "TAG"},
 								{Name: "all", Description: "Push all bookmarks (including new bookmarks)", Value: "--all"},
 								{Name: "tracked", Description: "Push all tracked bookmarks\n\nThis usually means that the bookmark was already pushed to or fetched from the [relevant remote].\n\n[relevant remote]: https://docs.jj-vcs.dev/latest/bookmarks#remotes-and-tracked-bookmarks", Value: "--tracked"},
 								{Name: "deleted", Description: "Push all deleted bookmarks\n\nOnly tracked bookmarks can be successfully deleted on the remote. A warning will be printed if any untracked bookmarks on the remote correspond to missing local bookmarks.", Value: "--deleted"},
