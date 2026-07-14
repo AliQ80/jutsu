@@ -407,6 +407,8 @@ func loadCategories() []Category {
 								{Name: "tracked", Description: "Show tracked remote bookmarks only\n\nThis omits local Git-tracking bookmarks by default.", Value: "-t"},
 								{Name: "conflicted", Description: "Show conflicted bookmarks only", Value: "-c"},
 								{Name: "revision", Description: "Show bookmarks whose local targets are in the given revisions\n\nNote that `-r deleted_bookmark` will not work since `deleted_bookmark` wouldn't have a local target.", Value: "-r", RequiresInput: true, InputType: "REVSETS"},
+								{Name: "template", Description: "Render each bookmark using the given template\n\nAll 0-argument methods of the [`CommitRef` type] are available as keywords in the template expression. See [`jj help -k templates`] for more information.\n\nThe default template can be set by the `templates.bookmark_list` setting.\n\n[`CommitRef` type]: https://docs.jj-vcs.dev/latest/templates/#commitref-type\n\n[`jj help -k templates`]: https://docs.jj-vcs.dev/latest/templates/", Value: "-T", RequiresInput: true, InputType: "TEMPLATE"},
+								{Name: "sort", Description: "Sort bookmarks based on the given key (or multiple keys)\n\nSuffix the key with `-` to sort in descending order of the value (e.g. `--sort name-`). Note that when using multiple keys, the first key is the most significant.\n\nThis defaults to the `ui.bookmark-list-sort-keys` setting.\n\nPossible values: `name`, `name-`, `author-name`, `author-name-`, `author-email`, `author-email-`, `author-date`, `author-date-`, `committer-name`, `committer-name-`, `committer-email`, `committer-email-`, `committer-date`, `committer-date-`", Value: "--sort", RequiresInput: true, InputType: "SORT_KEY"},
 							},
 						},
 						{
@@ -597,6 +599,10 @@ func loadCategories() []Category {
 							},
 							Flags: []Flag{
 								{Name: "all-remotes", Description: "Show all tracked and untracked remote tags including the ones whose targets are synchronized with the local tags", Value: "-a"},
+								{Name: "conflicted", Description: "Show conflicted tags only", Value: "-c"},
+								{Name: "revision", Description: "Show tags whose local targets are in the given revisions\n\nNote that `-r deleted_tag` will not work since `deleted_tag` wouldn't have a local target.", Value: "-r", RequiresInput: true, InputType: "REVSETS"},
+								{Name: "template", Description: "Render each tag using the given template\n\nAll 0-argument methods of the [`CommitRef` type] are available as keywords in the template expression. See [`jj help -k templates`] for more information.\n\nThe default template can be set by the `templates.tag_list` setting.\n\n[`CommitRef` type]: https://docs.jj-vcs.dev/latest/templates/#commitref-type\n\n[`jj help -k templates`]: https://docs.jj-vcs.dev/latest/templates/", Value: "-T", RequiresInput: true, InputType: "TEMPLATE"},
+								{Name: "sort", Description: "Sort tags based on the given key (or multiple keys)\n\nSuffix the key with `-` to sort in descending order of the value (e.g. `--sort name-`). Note that when using multiple keys, the first key is the most significant.\n\nThis defaults to the `ui.tag-list-sort-keys` setting.\n\nPossible values: `name`, `name-`, `author-name`, `author-name-`, `author-email`, `author-email-`, `author-date`, `author-date-`, `committer-name`, `committer-name-`, `committer-email`, `committer-email-`, `committer-date`, `committer-date-`", Value: "--sort", RequiresInput: true, InputType: "SORT_KEY"},
 							},
 						},
 						{
