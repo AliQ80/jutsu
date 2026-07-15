@@ -1,4 +1,4 @@
-module jutsu
+module github.com/AliQ80/jutsu
 
 go 1.25.0
 

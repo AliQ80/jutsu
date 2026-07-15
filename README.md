@@ -3,7 +3,7 @@
 A sleek, modern Terminal User Interface for composing and executing Jujutsu (`jj`) commands. Built with the Charmbracelet ecosystem, featuring a superfile-inspired design with Catppuccin Mocha theming.
 
 ![Jutsu TUI](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go&logoColor=white)
-![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)
+![License](https://img.shields.io/badge/license-GPLv3-blue?style=flat-square)
 
 ## Features
 
@@ -240,7 +240,7 @@ Contributions welcome! Please:
 
 ## License
 
-MIT License — see LICENSE file for details
+GPLv3 License — see LICENSE file for details
 
 ## Acknowledgments
 
