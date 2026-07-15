@@ -191,7 +191,6 @@ jutsu/
 ├── jj_commands.go       # Command database (categories, commands, flags)
 ├── commands_exec.go     # Async command execution via tea.Cmd
 ├── README.md            # This file
-├── AGENTS.md            # Developer handoff documentation
 ├── go.mod
 └── go.sum
 ```
