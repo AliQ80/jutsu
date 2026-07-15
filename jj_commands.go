@@ -275,7 +275,6 @@ func loadCategories() []Category {
 					},
 					Flags: []Flag{
 						{Name: "message", Description: "The change description to use (don't open editor)\n\nIf multiple revisions are specified, the same description will be used for all of them.", Value: "-m", RequiresInput: true, NeedsQuotes: true, InputType: "MESSAGE"},
-						{Name: "revision", Description: "Describe this revision instead of @", Value: "-r", RequiresInput: true},
 					},
 				},
 				{
@@ -293,7 +292,6 @@ func loadCategories() []Category {
 						{Name: "OFFSET", Description: "How many revisions to move forward. Advances to the next child by default\n\nDefault value: `1`"},
 					},
 					Flags: []Flag{
-						{Name: "OFFSET", Description: "How many revisions to move forward [default: 1]", Value: "", RequiresInput: true},
 						{Name: "edit", Description: "Instead of creating a new working-copy commit on top of the target commit (like `jj new`), edit the target commit directly (like `jj edit`)\n\nTakes precedence over config in `ui.movement.edit`; i.e. will negate `ui.movement.edit = false`", Value: "--edit", ConflictingFlags: []string{"--no-edit"}},
 						{Name: "no-edit", Description: "The inverse of `--edit`\n\nTakes precedence over config in `ui.movement.edit`; i.e. will negate `ui.movement.edit = true`", Value: "--no-edit", ConflictingFlags: []string{"--edit"}},
 						{Name: "conflict", Description: "Jump to the next conflicted descendant", Value: "--conflict"},
@@ -306,7 +304,6 @@ func loadCategories() []Category {
 						{Name: "OFFSET", Description: "How many revisions to move backward. Moves to the parent by default\n\nDefault value: `1`"},
 					},
 					Flags: []Flag{
-						{Name: "OFFSET", Description: "How many revisions to go back [default: 1]", Value: "", RequiresInput: true},
 						{Name: "edit", Description: "Edit the parent directly, instead of moving the working-copy commit\n\nTakes precedence over config in `ui.movement.edit`; i.e. will negate `ui.movement.edit = false`", Value: "--edit", ConflictingFlags: []string{"--no-edit"}},
 						{Name: "no-edit", Description: "The inverse of `--edit`\n\nTakes precedence over config in `ui.movement.edit`; i.e. will negate `ui.movement.edit = true`", Value: "--no-edit", ConflictingFlags: []string{"--edit"}},
 						{Name: "conflict", Description: "Jump to the previous conflicted ancestor", Value: "--conflict"},
