@@ -33,6 +33,7 @@ changelog:
     exclude:
       - "^test:"
       - "^chore:"
+      - "^docs:"
 
 release:
   github:
