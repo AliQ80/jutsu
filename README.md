@@ -23,11 +23,27 @@ A sleek, modern Terminal User Interface for composing and executing Jujutsu (`jj
 
 ## Installation
 
+### Quick Install (Linux/macOS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AliQ80/jutsu/main/install.sh | sh
+```
+
+Downloads the latest release for your OS/arch, verifies its checksum, and
+installs it to `~/.local/bin` (override with `INSTALL_DIR=...`). Windows
+users: grab the `.zip` from the [Releases page](https://github.com/AliQ80/jutsu/releases).
+
+### Go Install
+
+```bash
+go install github.com/AliQ80/jutsu@latest
+```
+
 ### Build from Source
 
 ```bash
 # Clone the repository
-git clone <your-repo-url>
+git clone https://github.com/AliQ80/jutsu.git
 cd jutsu
 
 # Install dependencies
@@ -38,16 +54,6 @@ go build -o jutsu .
 
 # Run the TUI
 ./jutsu
-```
-
-### Quick Start
-
-```bash
-# After building, simply run:
-./jutsu
-
-# Or install to your Go bin directory:
-go install .
 ```
 
 ## Usage
