@@ -1,3 +1,5 @@
+//go:generate go run ./tools/gen-descriptions
+
 package main
 
 type Flag struct {
