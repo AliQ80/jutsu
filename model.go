@@ -1607,7 +1607,11 @@ func (m mainModel) getActiveCombined() []InputItem {
 			ti.CharLimit = 256
 			m.argInputs[a.Name] = ti
 		}
-		item := InputItem{Name: a.Name, Label: a.Name, IsArg: true}
+		label := a.Name
+		if i := strings.IndexByte(label, '['); i != -1 {
+			label = label[:i]
+		}
+		item := InputItem{Name: a.Name, Label: label, IsArg: true}
 		if a.Required {
 			requiredArgs = append(requiredArgs, item)
 		} else {

@@ -475,7 +475,7 @@ func loadCategories() []Category {
 							Alias:       "t",
 							Description: "Start tracking given remote bookmarks\n\nA tracked remote bookmark will be imported as a local bookmark of the same name. Changes to it will propagate to the existing local bookmark on future pulls.",
 							Args: []Arg{
-								{Name: "BOOKMARK", Description: "Bookmark names to track\n\nBy default, the specified pattern matches bookmark names with glob syntax. You can also use other [string pattern syntax].\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Variadic: true, Required: true},
+								{Name: "BOOKMARK[@REMOTE]", Description: "Bookmark name patterns or remote bookmark symbols to track\n\n`BOOKMARK` matches bookmark names using glob syntax by default. You can also use other [string pattern syntax].\n\n`BOOKMARK@REMOTE` resolves to a remote bookmark exactly.\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Variadic: true, Required: true},
 							},
 							Flags: []Flag{
 								{Name: "remote", Description: "Remote names to track\n\nBy default, the specified pattern matches remote names with glob syntax. You can also use other [string pattern syntax].\n\nIf no remote names are given, all remote bookmarks matching the bookmark names will be tracked.\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "--remote", RequiresInput: true, InputType: "REMOTE"},
@@ -485,7 +485,7 @@ func loadCategories() []Category {
 							Summary: "Stop tracking given remote bookmarks", Name: "untrack",
 							Description: "Stop tracking given remote bookmarks\n\nAn untracked remote bookmark is just a pointer to the last-fetched remote bookmark. It won't be imported as a local bookmark on future pulls.\n\nIf you want to forget a local bookmark while also untracking the corresponding remote bookmarks, use `jj bookmark forget` instead.",
 							Args: []Arg{
-								{Name: "BOOKMARK", Description: "Bookmark names to untrack\n\nBy default, the specified pattern matches bookmark names with glob syntax. You can also use other [string pattern syntax].\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Variadic: true, Required: true},
+								{Name: "BOOKMARK[@REMOTE]", Description: "Bookmark name patterns or remote bookmark symbols to untrack\n\n`BOOKMARK` matches bookmark names using glob syntax by default. You can also use other [string pattern syntax].\n\n`BOOKMARK@REMOTE` resolves to a remote bookmark exactly.\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Variadic: true, Required: true},
 							},
 							Flags: []Flag{
 								{Name: "remote", Description: "Remote names to untrack\n\nBy default, the specified pattern matches remote names with glob syntax. You can also use other [string pattern syntax].\n\nIf no remote names are given, all remote bookmarks matching the bookmark names will be untracked.\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "--remote", RequiresInput: true, InputType: "REMOTE"},
