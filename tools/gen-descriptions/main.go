@@ -462,7 +462,7 @@ func splitItems(lines []string) [][]string {
 	return items
 }
 
-var argNameRe = regexp.MustCompile("^\\* `<([A-Za-z0-9_]+)>`(?:.*? — (.*))?$")
+var argNameRe = regexp.MustCompile("^\\* `<([^>]+)>`(?:.*? — (.*))?$")
 
 func parseArgItems(lines []string, out map[string]string) {
 	for _, item := range splitItems(lines) {
