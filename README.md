@@ -20,12 +20,10 @@ them, so you get faster with it, but never dependent on it.
 
 ## ✨ Features
 
-- 🧩 **Multi-pane command composer** with categories, commands, subcommands, and flags
 - ⚡ **Live command preview** as you pick categories, subcommands, and flags
 - 🔄 **Background execution** with live streaming output
 - 📖 **Read jj's own docs** for any command or flag while navigating the composer
 - ⌨️ **Vim-style navigation** (hjkl) plus arrow keys
-- 🎨 **Catppuccin Mocha theme** with active/inactive panel highlighting
 - 📐 **Responsive layout** that adapts to terminal size
 - 📚 **Comprehensive jj command database** covering all major operations
 
