@@ -37,7 +37,8 @@ move focus elsewhere.
 | `j`/`k` or `↓`/`↑` | Move up/down within the current pane |
 | `h`/`l` or `←`/`→` | Move focus between Categories → Commands → Sub-cmds → Flags |
 | `Space` | Toggle the focused flag (Flags pane only) |
-| `Enter` | Jump into Inputs, if the current selection needs values |
+| `i` | Jump into Inputs, if the current selection needs values |
+| `g` | Open the global options modal (jj flags that precede the command, e.g. `--repository`) |
 | `Tab` | Move to the Command Bar |
 | `r` | Recall the last executed command's full selection state |
 | `q` / `Ctrl+C` | Quit |
@@ -52,7 +53,7 @@ Three visual markers, easy to mix up:
 
 ## Filling in values
 
-When a command needs an argument or a flag's value, `Enter` switches focus
+When a command needs an argument or a flag's value, `i` switches focus
 to the Inputs pane:
 
 - Typing goes straight into the focused field
@@ -63,6 +64,37 @@ to the Inputs pane:
 
 Leaving a required field empty flashes the inputs box border red for 400ms
 if you try to move on.
+
+## Global options
+
+jj's *global options* — flags like `--repository`, `--at-operation`, or
+`--config` that apply to every jj command and must precede the subcommand
+(`jj --repository ../other log`) — live in a modal, separate from a command's
+own flags. Press `g` from any pane to open it; `Esc`, `g`, or `q` closes it.
+
+The modal has two columns that behave like the composer's panes: a checklist
+of options on the left, the highlighted option's full docs on the right.
+
+- `←`/`→` (or `h`/`l`) moves focus between the two columns — the focused one
+  gets the peach border
+- `↑`/`↓` (or `j`/`k`) navigates the checklist, or scrolls the docs when the
+  docs column is focused
+- `Space` toggles the highlighted option
+
+Options that take a value (e.g. `--repository`) aren't typed in the modal —
+they're filled in the regular Inputs bar afterward, alongside any command
+inputs, so every value stays visible at once. If you close the modal with a
+selected option still missing its value, focus lands back on the composer so
+`i` reaches the Inputs bar in one keypress.
+
+Selected global options appear two places: as teal `◆` rows pinned at the top
+of the Flags pane (a persistent reminder they're active, even while you scroll
+a long flag list), and spliced into the command bar *before* the subcommand.
+
+Global options reset on the same triggers as command flags — moving to a
+different command clears them, as does running a command — so select them
+after you've landed on the command you want them for. `r` (recall) restores
+them along with the rest of the last command's selection.
 
 ## Running a command
 

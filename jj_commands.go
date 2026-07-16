@@ -1123,7 +1123,6 @@ func loadCategories() []Category {
 						{Summary: "", Name: "revsets", Value: "-k revsets", Description: "Print this message or the help of the given subcommand(s)"},
 						{Summary: "", Name: "templates", Value: "-k templates", Description: "Print this message or the help of the given subcommand(s)"},
 						{Summary: "", Name: "tutorial", Value: "-k tutorial", Description: "Print this message or the help of the given subcommand(s)"},
-						{Summary: "", Name: "global-options", Value: "--help | awk '$0~/Global Options/,0'", Description: "List flags accepted by every jj command (--repository, --color, --config, --at-operation, --ignore-working-copy, etc.) — these are global options, not specific to any single subcommand."},
 					},
 					Flags: []Flag{},
 				},
@@ -1292,5 +1291,28 @@ func loadCategories() []Category {
 				},
 			},
 		},
+	}
+}
+
+// loadGlobalFlags returns jj's global options — flags accepted by every jj
+// command, which must precede the subcommand on the command line. Shown in
+// the global-options modal (press "g"), independent of the categories tree.
+func loadGlobalFlags() []Flag {
+	// Order is jutsu-relevant usefulness, not jj's --help order: repo/state
+	// targeting first, then overrides, config, debug, and finally the output
+	// group. jj's --color is deliberately omitted: jutsu injects its own
+	// --color=always for captured output (commands_exec.go), so a user
+	// --color would duplicate the flag and jj rejects that.
+	return []Flag{
+		{Name: "repository", Description: "Path to repository to operate on\n\nBy default, Jujutsu searches for the closest .jj/ directory in an ancestor of the current working directory.", Value: "-R", RequiresInput: true, InputType: "REPOSITORY"},
+		{Name: "at-operation", Description: "Operation to load the repo at\n\nOperation to load the repo at. By default, Jujutsu loads the repo at the most recent operation, or at the merge of the divergent operations if any.\n\nYou can use `--at-op=<operation ID>` to see what the repo looked like at an earlier operation. For example `jj --at-op=<operation ID> st` will show you what `jj st` would have shown you when the given operation had just finished. `--at-op=@` is pretty much the same as the default except that divergent operations will never be merged.\n\nUse `jj op log` to find the operation ID you want. Any unambiguous prefix of the operation ID is enough.\n\nWhen loading the repo at an earlier operation, the working copy will be ignored, as if `--ignore-working-copy` had been specified.", Value: "--at-operation", Alias: "at-op", RequiresInput: true, InputType: "AT_OPERATION"},
+		{Name: "ignore-working-copy", Description: "Don't snapshot the working copy, and don't update it\n\nBy default, Jujutsu snapshots the working copy at the beginning of every command. The working copy is also updated at the end of the command, if the command modified the working-copy commit (`@`). If you want to avoid snapshotting the working copy and instead see a possibly stale working-copy commit, you can use `--ignore-working-copy`. This may be useful e.g. in a command prompt, especially if you have another process that commits the working copy.\n\nLoading the repository at a specific operation with `--at-operation` implies `--ignore-working-copy`.", Value: "--ignore-working-copy"},
+		{Name: "ignore-immutable", Description: "Allow rewriting immutable commits\n\nBy default, Jujutsu prevents rewriting commits in the configured set of immutable commits. This option disables that check and lets you rewrite any commit but the root commit.\n\nThis option only affects the check. It does not affect the `immutable_heads()` revset or the `immutable` template keyword.", Value: "--ignore-immutable"},
+		{Name: "no-integrate-operation", Description: "Run the command as usual but don't integrate any operations\n\nWhen this option is given, the operations will still be created as usual but they will not be integrated to the operation log. The working copy will also not be updated.\n\nThe command will print the resulting operation ID. You can pass that to e.g. `jj --at-op` to inspect the resulting repo state, or you can pass it to `jj op restore` to restore the repo to that state. You can also pass the ID to `jj op integrate` to integrate the operation.\n\nNote that this does *not* prevent side effects outside the repo. For example, `jj git push --no-integrate-operation` will still perform the push.", Value: "--no-integrate-operation"},
+		{Name: "config", Description: "Additional configuration options (can be repeated)\n\nThe name should be specified as TOML dotted keys. The value should be specified as a TOML expression. If string value isn't enclosed by any TOML constructs (such as array notation), quotes can be omitted.", Value: "--config", RequiresInput: true, InputType: "NAME=VALUE"},
+		{Name: "config-file", Description: "Additional configuration files (can be repeated)", Value: "--config-file", RequiresInput: true, InputType: "PATH"},
+		{Name: "debug", Description: "Enable debug logging", Value: "--debug"},
+		{Name: "quiet", Description: "Silence non-primary command output\n\nFor example, `jj file list` will still list files, but it won't tell you if the working copy was snapshotted or if descendants were rebased.\n\nWarnings and errors will still be printed.", Value: "--quiet"},
+		{Name: "no-pager", Description: "Disable the pager", Value: "--no-pager"},
 	}
 }

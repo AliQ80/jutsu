@@ -146,6 +146,11 @@ var (
 	flagUnselectedStyle = lipgloss.NewStyle().
 				Foreground(colorOverlay)
 
+	// Selected global options shown as display-only ◆ rows atop the FLAGS
+	// pane: teal, distinct from sapphire (mandatory) and peach (cursor).
+	flagGlobalStyle = lipgloss.NewStyle().
+			Foreground(colorTeal)
+
 	activeSelectionStyle = lipgloss.NewStyle().
 				Foreground(colorSapphire).
 				Bold(true)

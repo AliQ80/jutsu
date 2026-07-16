@@ -30,6 +30,14 @@ func (m mainModel) View() tea.View {
 		return tea.NewView("Loading...")
 	}
 
+	if m.globalFlagsModalOpen {
+		content := lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, m.renderGlobalFlagsModal())
+		v := tea.NewView(content)
+		v.AltScreen = true
+		v.MouseMode = tea.MouseModeCellMotion
+		return v
+	}
+
 	if m.outputEnlargedActive() {
 		height := m.height - 6 // 5 cmdBar + 1 helpBar
 		rightPane := m.renderRightPane(m.width, height)
@@ -139,6 +147,12 @@ func (m mainModel) renderPane(paneIdx int, title string, width, height int) stri
 	var items []string
 	var selectedIdx int
 
+	// Rows the pinned global-flag header occupies in the FLAGS pane (0 elsewhere).
+	stickyN := 0
+	if paneIdx == focusFlags {
+		stickyN = m.stickyGlobalCount()
+	}
+
 	switch paneIdx {
 	case focusCategories:
 		for _, cat := range m.categories {
@@ -159,7 +173,30 @@ func (m mainModel) renderPane(paneIdx int, title string, width, height int) stri
 		}
 		selectedIdx = m.subIdx
 	case focusFlags:
+		// Selected global options render as pinned display-only rows above
+		// the command's own flags; the cursor never lands on them. When more
+		// are selected than stickyN allows, the last pinned row summarizes
+		// the remainder so none silently vanish.
+		var globalNames []string
+		for _, gf := range m.globalFlags {
+			if gf.Selected {
+				globalNames = append(globalNames, gf.Name)
+			}
+		}
+		if stickyN >= len(globalNames) {
+			for _, n := range globalNames {
+				items = append(items, "◆ "+n)
+			}
+		} else if stickyN > 0 {
+			for _, n := range globalNames[:stickyN-1] {
+				items = append(items, "◆ "+n)
+			}
+			items = append(items, fmt.Sprintf("◆ +%d more", len(globalNames)-(stickyN-1)))
+		}
 		flags := m.currentFlags()
+		// No cursor row unless the command has flags of its own — otherwise
+		// the default selectedIdx (0) collides with the first pinned row.
+		selectedIdx = -1
 		if len(flags) > 0 {
 			group := m.currentRequiredFlagGroup()
 			groupUnsatisfied := m.requiredFlagGroupUnsatisfied()
@@ -178,7 +215,7 @@ func (m mainModel) renderPane(paneIdx int, title string, width, height int) stri
 				}
 				items = append(items, label)
 			}
-			selectedIdx = m.flagIdx
+			selectedIdx = stickyN + m.flagIdx
 		}
 	}
 
@@ -208,12 +245,18 @@ func (m mainModel) renderPane(paneIdx int, title string, width, height int) stri
 			content.WriteString("\n")
 		}
 		itemIdx := i + scrollOffset
+		// FLAGS pane: the first stickyN screen rows are the pinned global
+		// header — always shown, never scrolled — so they map to items[0:stickyN]
+		// regardless of flagScroll. Rows below scroll the command flags as usual.
+		if i < stickyN {
+			itemIdx = i
+		}
 		if itemIdx < len(items) {
 			if itemIdx == selectedIdx {
 				if paneIdx == focusFlags {
 					flags := m.currentFlags()
-					if itemIdx < len(flags) {
-						f := flags[itemIdx]
+					if fi := itemIdx - stickyN; fi >= 0 && fi < len(flags) {
+						f := flags[fi]
 						switch {
 						case f.Mandatory:
 							content.WriteString(flagMandatoryStyle.Render(truncateItem(items[itemIdx], width)))
@@ -246,16 +289,19 @@ func (m mainModel) renderPane(paneIdx int, title string, width, height int) stri
 					}
 				}
 			} else {
-				if paneIdx == focusFlags && itemIdx < len(m.currentFlags()) {
+				if paneIdx == focusFlags && itemIdx < stickyN {
+					// Pinned display-only global row.
+					content.WriteString(flagGlobalStyle.Render(truncateItem(items[itemIdx], width)))
+				} else if fi := itemIdx - stickyN; paneIdx == focusFlags && fi < len(m.currentFlags()) {
 					flags := m.currentFlags()
-					if flags[itemIdx].Mandatory {
+					if flags[fi].Mandatory {
 						content.WriteString(flagMandatoryStyle.Render(truncateItem(items[itemIdx], width)))
-					} else if flags[itemIdx].Selected {
+					} else if flags[fi].Selected {
 						// ponytail: was flagSelectedStyle (colorText) — now activeSelectionStyle (sapphire+bold) for visual consistency with unfocused-pane selections.
 						content.WriteString(activeSelectionStyle.Render(truncateItem(items[itemIdx], width)))
-					} else if isConflicted(flags[itemIdx], flags) {
+					} else if isConflicted(flags[fi], flags) {
 						content.WriteString(flagConflictedStyle.Render(truncateItem(items[itemIdx], width)))
-					} else if isRequiredGroupFlag(m, flags[itemIdx]) {
+					} else if isRequiredGroupFlag(m, flags[fi]) {
 						content.WriteString(flagRequiredStyle.Render(truncateItem(items[itemIdx], width)))
 					} else {
 						content.WriteString(flagUnselectedStyle.Render(truncateItem(items[itemIdx], width)))
@@ -344,7 +390,7 @@ func (m mainModel) renderRightPane(width, height int) string {
 	if m.running {
 		total, visible = 0, 0 // metrics are stale mid-exec; show a blank column instead
 	}
-	scrollbar := renderScrollbar(contentHeight, total, visible, m.output.YOffset())
+	scrollbar := renderScrollbar(contentHeight, total, visible, m.output.YOffset(), scrollbarThumbStyle)
 	content = lipgloss.JoinHorizontal(lipgloss.Top, content, blankColumn(contentHeight), scrollbar)
 
 	title := "OUTPUT"
@@ -377,7 +423,7 @@ func (m mainModel) renderDescriptionBar(width, height int) string {
 	docsW, docsH := docsContentDims(width, height)
 	m.docs.SetWidth(docsW)
 	m.docs.SetHeight(docsH)
-	scrollbar := renderScrollbar(docsH, m.docs.TotalLineCount(), m.docs.VisibleLineCount(), m.docs.YOffset())
+	scrollbar := renderScrollbar(docsH, m.docs.TotalLineCount(), m.docs.VisibleLineCount(), m.docs.YOffset(), scrollbarThumbStyle)
 	docsContent := lipgloss.JoinHorizontal(lipgloss.Top, m.docs.View(), blankColumn(docsH), scrollbar)
 	contentBox := cStyle.Width(width).Height(height - 3).Render(docsContent)
 
@@ -472,6 +518,7 @@ func (m mainModel) renderHelpBar(width int) string {
 			{"c", "copy"},
 			{"esc", "back"},
 			{"tab", "finalize"},
+			{"g", "global"},
 			{"q", "quit"},
 		}
 	case focusDocs:
@@ -481,12 +528,14 @@ func (m mainModel) renderHelpBar(width int) string {
 			{"c", "copy"},
 			{"tab", "finalize"},
 			{"esc", "back"},
+			{"g", "global"},
 		}
 	case focusCmdBar:
 		entries = []entry{
 			{"enter", "execute"},
 			{"c", "copy"},
 			{"esc", "back"},
+			{"g", "global"},
 			{"q", "quit"},
 		}
 	case focusInputs:
@@ -502,6 +551,7 @@ func (m mainModel) renderHelpBar(width int) string {
 			{"←→", "pane"},
 			{"d/D", "docs"},
 			{"o/O", "output"},
+			{"g", "global"},
 			{"tab", "finalize"},
 			{"q", "quit"},
 		}
@@ -511,11 +561,9 @@ func (m mainModel) renderHelpBar(width int) string {
 		if m.focusPane == focusFlags {
 			contextual = append(contextual, entry{"spc", "toggle"})
 		}
-		for _, f := range m.currentFlags() {
-			if f.Selected && f.RequiresInput {
-				contextual = append(contextual, entry{"enter", "inputs"})
-				break
-			}
+		// getActiveInputs covers both command-flag and global-flag inputs.
+		if len(m.getActiveInputs()) > 0 {
+			contextual = append(contextual, entry{"i", "inputs"})
 		}
 	}
 
@@ -560,10 +608,11 @@ func blankColumn(height int) string {
 }
 
 // renderScrollbar draws a height-tall, 1-column vertical scroll indicator: a
-// bright thumb over a dim track, sized to visible/total and positioned to
-// yOffset/(total-visible). Returns a blank column when everything already
+// thumb (in the given style — scrollbarThumbStyle normally, an accent color
+// to signal focus) over a dim track, sized to visible/total and positioned
+// to yOffset/(total-visible). Returns a blank column when everything already
 // fits (total <= visible), so it disappears rather than clutter the pane.
-func renderScrollbar(height, total, visible, yOffset int) string {
+func renderScrollbar(height, total, visible, yOffset int, thumb lipgloss.Style) string {
 	if height < 1 {
 		return ""
 	}
@@ -580,7 +629,7 @@ func renderScrollbar(height, total, visible, yOffset int) string {
 	lines := make([]string, height)
 	for i := range lines {
 		if i >= thumbStart && i < thumbStart+thumbSize {
-			lines[i] = scrollbarThumbStyle.Render("█")
+			lines[i] = thumb.Render("█")
 		} else {
 			lines[i] = scrollbarTrackStyle.Render("│")
 		}
@@ -633,11 +682,112 @@ func (m mainModel) renderInputPanes(width, height int, combined []InputItem) str
 		borderColor = colorPeach
 		borderStyle = cmdBarBorderThick
 	}
-	if m.validationFlash && (m.hasEmptyRequiredFlagInput() || m.hasEmptyRequiredArg()) {
+	if m.validationFlash && (m.hasEmptyRequiredFlagInput() || m.hasEmptyRequiredGlobalInput() || m.hasEmptyRequiredArg()) {
 		borderColor = colorRed
 		borderStyle = cmdBarBorderThick
 	}
 	style := lipgloss.NewStyle().BorderStyle(borderStyle).BorderForeground(borderColor).PaddingLeft(1).PaddingRight(1).Width(width).Height(height)
 
 	return style.Render(b.String())
+}
+
+// Fixed dimensions for the global-options modal: a checklist column sized to
+// its longest entry ("[x] --no-integrate-operation" = 28) beside a docs
+// viewport. Long descriptions scroll inside the viewport, so the modal's
+// footprint never changes with the highlighted flag.
+const (
+	globalListW = 30
+	globalDocsW = 56
+	globalDocsH = 18
+)
+
+// renderGlobalFlagsModal renders the "g"-triggered popup listing jj's global
+// options (m.globalFlags): checklist on the left, the highlighted flag's
+// full docs in a scrollable viewport on the right. Values for flags that
+// need one are edited in the regular input bar after closing, not here.
+func (m mainModel) renderGlobalFlagsModal() string {
+	var list strings.Builder
+	for i, f := range m.globalFlags {
+		if i > 0 {
+			list.WriteString("\n")
+		}
+		check := "[ ]"
+		if f.Selected {
+			check = "[x]"
+		} else if isConflicted(f, m.globalFlags) {
+			check = "[-]"
+		}
+		label := fmt.Sprintf("%s %s", check, flagBarForm(f))
+		switch {
+		case i == m.globalFlagIdx:
+			list.WriteString(selectedItemStyle.Render(label))
+		case f.Selected:
+			list.WriteString(activeSelectionStyle.Render(label))
+		case isConflicted(f, m.globalFlags):
+			list.WriteString(flagConflictedStyle.Render(label))
+		default:
+			list.WriteString(flagUnselectedStyle.Render(label))
+		}
+	}
+
+	// Shrink the docs window on very short terminals (modal chrome around
+	// the columns is 6 rows); width — and thus the wrapped content — never
+	// changes, and the checklist's 11 rows are the floor.
+	docsH := globalDocsH
+	if avail := m.height - 6; avail < docsH {
+		docsH = max(len(m.globalFlags), avail)
+	}
+	docs := m.globalDocs
+	docs.SetHeight(docsH)
+	// A peach scrollbar thumb signals the docs column has ↑↓ focus.
+	thumb := scrollbarThumbStyle
+	if m.globalModalDocsFocus {
+		thumb = lipgloss.NewStyle().Foreground(colorPeach)
+	}
+	scrollbar := renderScrollbar(docsH, docs.TotalLineCount(), docs.VisibleLineCount(), docs.YOffset(), thumb)
+	docsContent := lipgloss.JoinHorizontal(lipgloss.Top, docs.View(), blankColumn(docsH), scrollbar)
+
+	// Each column is a title-boxed pane in the main composer's focus
+	// language: the column ↑↓ currently drives gets the thick peach border.
+	listT, listC := activeTitleBorderStyle, activeContentBorderStyle
+	docsT, docsC := inactiveTitleBorderStyle, inactiveContentBorderStyle
+	if m.globalModalDocsFocus {
+		listT, listC = inactiveTitleBorderStyle, inactiveContentBorderStyle
+		docsT, docsC = activeTitleBorderStyle, activeContentBorderStyle
+	}
+
+	// Pad the checklist to the docs height so both panes line up.
+	listLines := strings.Split(list.String(), "\n")
+	for len(listLines) < docsH {
+		listLines = append(listLines, "")
+	}
+
+	const listPaneW = globalListW + 4 // content + border(2)/padding(2), like the composer panes
+	const docsPaneW = globalDocsW + scrollbarW + scrollbarGapW + 4
+
+	listPane := lipgloss.JoinVertical(lipgloss.Left,
+		listT.Width(listPaneW).Align(lipgloss.Center).Render(headerStyle.Render("GLOBAL OPTIONS")),
+		listC.Width(listPaneW).Height(docsH+1).Render(strings.Join(listLines, "\n")),
+	)
+	docsPane := lipgloss.JoinVertical(lipgloss.Left,
+		docsT.Width(docsPaneW).Align(lipgloss.Center).Render(headerStyle.Render("DOCS")),
+		docsC.Width(docsPaneW).Height(docsH+1).Render(docsContent),
+	)
+
+	hint := func(key, desc string) string {
+		return helpKeyStyle.Render(key) + " " + helpDescStyle.Render(desc)
+	}
+	var footer string
+	if m.globalModalDocsFocus {
+		footer = hint("↑↓", "scroll") + "  " + hint("←", "options") + "  " + hint("esc", "close") + "  " + hint("q", "quit")
+	} else {
+		footer = hint("↑↓", "navigate") + "  " + hint("→", "docs") + "  " + hint("spc", "toggle") + "  " + hint("esc", "close") + "  " + hint("q", "quit")
+	}
+	footer = lipgloss.PlaceHorizontal(listPaneW+docsPaneW, lipgloss.Center, footer)
+
+	return lipgloss.JoinVertical(lipgloss.Left,
+		lipgloss.JoinHorizontal(lipgloss.Top, listPane, docsPane),
+		"",
+		footer,
+	)
 }

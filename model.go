@@ -32,6 +32,12 @@ type mainModel struct {
 	paneH         int // composer pane height; content = paneH - 4
 	maxInputsHt   int // fixed reservation for the inputs box; see maxInputsHeight()
 
+	globalFlags          []Flag // jj's global options — selected independent of catIdx/cmdIdx/subIdx
+	globalFlagIdx        int
+	globalFlagsModalOpen bool
+	globalModalDocsFocus bool           // true → ↑↓ scroll the docs column instead of the checklist
+	globalDocs           viewport.Model // docs column inside the global-options modal
+
 	output          viewport.Model
 	outputLines     []string
 	xOffset         int
@@ -99,6 +105,12 @@ func newModel() mainModel {
 	dv.SetWidth(80)
 	dv.SetHeight(10)
 
+	// The global-options modal is fixed-size, so its docs viewport is sized
+	// once here; wordWrap in refreshGlobalDocs relies on this width.
+	gv := viewport.New()
+	gv.SetWidth(globalDocsW)
+	gv.SetHeight(globalDocsH)
+
 	cwd := "?"
 	if wd, err := os.Getwd(); err == nil {
 		cwd = filepath.Base(wd)
@@ -109,10 +121,12 @@ func newModel() mainModel {
 		focusPane:   focusCategories,
 		output:      vp,
 		docs:        dv,
+		globalDocs:  gv,
 		inputs:      make(map[string]textinput.Model),
 		argInputs:   make(map[string]textinput.Model),
 		cwd:         cwd,
 		maxInputsHt: maxInputsHeight(cats),
+		globalFlags: loadGlobalFlags(),
 	}
 
 	// Pre-initialize textinputs for mandatory flags so the input pane renders
@@ -125,6 +139,7 @@ func newModel() mainModel {
 			}
 		}
 	}
+	initMandatoryFlagInputs(m.globalFlags, m.inputs)
 
 	m.cmdText, m.cmdTextLong = m.buildCommandStrings()
 	m.refreshDocs()
@@ -210,6 +225,9 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.MouseWheelMsg:
+		if m.globalFlagsModalOpen {
+			return m, nil
+		}
 		if m.outputEnlargedActive() {
 			height := m.height - 6 // 5 cmdBar + 1 helpBar
 			if msg.Y < height {
@@ -259,6 +277,9 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.MouseClickMsg:
+		if m.globalFlagsModalOpen {
+			return m, nil
+		}
 		if msg.Button != tea.MouseLeft {
 			return m, nil
 		}
@@ -342,12 +363,22 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyPressMsg:
+		if m.globalFlagsModalOpen {
+			return m.handleGlobalFlagsModalKeys(msg)
+		}
 		switch msg.String() {
 		case "ctrl+c":
 			return m, tea.Quit
 		case "q":
 			if m.focusPane != focusInputs {
 				return m, tea.Quit
+			}
+		case "g":
+			if m.focusPane != focusInputs {
+				m.globalFlagsModalOpen = true
+				m.globalModalDocsFocus = false // always open on the checklist
+				m.refreshGlobalDocs()
+				return m, nil
 			}
 		case "o":
 			if m.focusPane == focusOutput {
@@ -497,33 +528,21 @@ func (m mainModel) handleComposerKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		m.refreshDocs()
 		return m, nil
 
-	case "enter":
-		// From commands or subcommands pane: open input pane if there are required args or flag inputs.
-		if m.focusPane == focusCommands || m.focusPane == focusSubcmds {
-			combined := m.getActiveCombined()
-			if len(combined) > 0 {
-				m.lastFocusPane = m.focusPane
-				m.focusPane = focusInputs
-				m.focusedInputIdx = 0
-				item := combined[0]
-				ti := m.getInput(item)
-				cmd := ti.Focus()
-				m.setInput(item, ti)
-				return m, cmd
-			}
-		}
-		if m.focusPane == focusFlags {
-			combined := m.getActiveCombined()
-			if len(combined) > 0 {
-				m.lastFocusPane = m.focusPane
-				m.focusPane = focusInputs
-				m.focusedInputIdx = 0
-				item := combined[0]
-				ti := m.getInput(item)
-				cmd := ti.Focus()
-				m.setInput(item, ti)
-				return m, cmd
-			}
+	case "i":
+		// Open the input pane if there are args or flag inputs to fill —
+		// from any composer pane, since the global-options modal can land
+		// focus on Categories with a pending global input.
+		// ("i", not enter — enter means exactly one thing app-wide: execute.)
+		combined := m.getActiveCombined()
+		if len(combined) > 0 {
+			m.lastFocusPane = m.focusPane
+			m.focusPane = focusInputs
+			m.focusedInputIdx = 0
+			item := combined[0]
+			ti := m.getInput(item)
+			cmd := ti.Focus()
+			m.setInput(item, ti)
+			return m, cmd
 		}
 		return m, nil
 
@@ -613,6 +632,65 @@ func (m mainModel) handleOutputKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleGlobalFlagsModalKeys drives the global-options modal (opened with
+// "g" from any composer/output/docs/cmdbar pane). Same spatial model as the
+// main composer: ←→/h/l pick a column (checklist or docs), ↑↓/j/k move
+// within it — navigating flags on the left, scrolling docs on the right.
+// Space toggles the highlighted flag; esc (or g again) closes. Flags that
+// take a value are edited in the regular input bar after closing — the
+// modal itself has no editing mode.
+func (m mainModel) handleGlobalFlagsModalKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c", "q":
+		return m, tea.Quit
+	case "esc", "g":
+		m.globalFlagsModalOpen = false
+		m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+		// Selections may have added/removed input-bar fields — resize now.
+		m.layoutViewports()
+		m.reclampAllScrolls()
+		// A selected flag still needs its value typed: return to the last
+		// composer pane (instead of the command bar / output / docs pane the
+		// modal was opened from) so the input bar is one "i" away.
+		if m.hasEmptyRequiredGlobalInput() && m.focusPane > focusFlags {
+			m.focusPane = m.lastFocusPane
+		}
+		return m, nil
+	case "right", "l":
+		m.globalModalDocsFocus = true
+	case "left", "h":
+		m.globalModalDocsFocus = false
+	case "down", "j":
+		if m.globalModalDocsFocus {
+			m.globalDocs.SetYOffset(m.globalDocs.YOffset() + 1)
+		} else {
+			m.globalFlagIdx = (m.globalFlagIdx + 1) % len(m.globalFlags)
+			m.refreshGlobalDocs()
+		}
+	case "up", "k":
+		if m.globalModalDocsFocus {
+			if m.globalDocs.YOffset() > 0 {
+				m.globalDocs.SetYOffset(m.globalDocs.YOffset() - 1)
+			}
+		} else {
+			m.globalFlagIdx = (m.globalFlagIdx - 1 + len(m.globalFlags)) % len(m.globalFlags)
+			m.refreshGlobalDocs()
+		}
+	case "space":
+		if !m.globalModalDocsFocus {
+			toggleFlagAt(m.globalFlags, m.globalFlagIdx, m.inputs)
+			m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+		}
+	case "pgdown":
+		m.globalDocs.SetYOffset(m.globalDocs.YOffset() + 1)
+	case "pgup":
+		if m.globalDocs.YOffset() > 0 {
+			m.globalDocs.SetYOffset(m.globalDocs.YOffset() - 1)
+		}
+	}
+	return m, nil
+}
+
 func (m *mainModel) applyXOffset() {
 	shifted := make([]string, len(m.outputLines))
 	for i, line := range m.outputLines {
@@ -672,19 +750,24 @@ func (m *mainModel) reclampAllScrolls() {
 	m.cmdScroll = clampScroll(m.cmdScroll, m.cmdIdx, ch)
 	m.subScroll = clampScroll(m.subScroll, m.subIdx, ch)
 
+	// Selected global flags are pinned rows above the scrolling command
+	// flags, so flagScroll and flagIdx both index the command flags only;
+	// the scroll window is shrunk by however many rows the pins occupy.
+	flags := m.currentFlags()
+	flagCh := ch - m.stickyGlobalCount()
+
 	// Clamp to flagIdx+1 so the item below the cursor stays visible
 	// (cursor sits one row above the bottom edge when a next item exists).
-	flags := m.currentFlags()
 	peekIdx := m.flagIdx
-	if peekIdx < len(flags)-1 {
+	if m.flagIdx < len(flags)-1 {
 		peekIdx++
 	}
-	m.flagScroll = clampScroll(m.flagScroll, peekIdx, ch)
+	m.flagScroll = clampScroll(m.flagScroll, peekIdx, flagCh)
 
 	// Cap scroll so the list stays flush to the bottom — prevents empty
 	// lines when the pane grows after untoggling a RequiresInput flag.
-	if ch > 0 {
-		if maxScroll := max(0, len(flags)-ch); m.flagScroll > maxScroll {
+	if flagCh > 0 {
+		if maxScroll := max(0, len(flags)-flagCh); m.flagScroll > maxScroll {
 			m.flagScroll = maxScroll
 		}
 	}
@@ -716,7 +799,8 @@ func (m *mainModel) navigateDown() {
 	case focusFlags:
 		flags := m.currentFlags()
 		m.flagIdx = (m.flagIdx + 1) % len(flags)
-		m.flagScroll = clampScroll(m.flagScroll, m.flagIdx, ch)
+		// flagScroll indexes command flags only; pinned globals shrink the window.
+		m.flagScroll = clampScroll(m.flagScroll, m.flagIdx, ch-m.stickyGlobalCount())
 	}
 }
 
@@ -746,11 +830,32 @@ func (m *mainModel) navigateUp() {
 	case focusFlags:
 		flags := m.currentFlags()
 		m.flagIdx = (m.flagIdx - 1 + len(flags)) % len(flags)
-		m.flagScroll = clampScroll(m.flagScroll, m.flagIdx, ch)
+		// flagScroll indexes command flags only; pinned globals shrink the window.
+		m.flagScroll = clampScroll(m.flagScroll, m.flagIdx, ch-m.stickyGlobalCount())
+	}
+}
+
+// resetFlags deselects every non-mandatory flag in flags and blanks the input
+// of any RequiresInput flag. Shared by resetCurrentFlags for command/
+// subcommand flags and for m.globalFlags, so global options reset on exactly
+// the same triggers as command flags (navigation away, post-execution).
+func resetFlags(flags []Flag, inputs map[string]textinput.Model) {
+	for i := range flags {
+		if !flags[i].Mandatory {
+			flags[i].Selected = false
+		}
+		if flags[i].RequiresInput {
+			if ti, ok := inputs[flags[i].Name]; ok {
+				ti.SetValue("")
+				inputs[flags[i].Name] = ti
+			}
+		}
 	}
 }
 
 func (m *mainModel) resetCurrentFlags() {
+	resetFlags(m.globalFlags, m.inputs)
+
 	if len(m.categories) == 0 || m.catIdx >= len(m.categories) {
 		return
 	}
@@ -759,23 +864,9 @@ func (m *mainModel) resetCurrentFlags() {
 	}
 	cmd := &m.categories[m.catIdx].Commands[m.cmdIdx]
 
-	reset := func(flags []Flag) {
-		for i := range flags {
-			if !flags[i].Mandatory {
-				flags[i].Selected = false
-			}
-			if flags[i].RequiresInput {
-				if ti, ok := m.inputs[flags[i].Name]; ok {
-					ti.SetValue("")
-					m.inputs[flags[i].Name] = ti
-				}
-			}
-		}
-	}
-
 	if len(cmd.SubCmds) > 0 {
 		if m.subIdx < len(cmd.SubCmds) {
-			reset(cmd.SubCmds[m.subIdx].Flags)
+			resetFlags(cmd.SubCmds[m.subIdx].Flags, m.inputs)
 			for _, a := range cmd.SubCmds[m.subIdx].Args {
 				if ti, ok := m.argInputs[a.Name]; ok {
 					ti.SetValue("")
@@ -784,7 +875,7 @@ func (m *mainModel) resetCurrentFlags() {
 			}
 		}
 	} else {
-		reset(cmd.Flags)
+		resetFlags(cmd.Flags, m.inputs)
 		for _, a := range cmd.Args {
 			if ti, ok := m.argInputs[a.Name]; ok {
 				ti.SetValue("")
@@ -806,6 +897,16 @@ func (m mainModel) captureSnapshot() *commandSnapshot {
 		argValues:     make(map[string]string),
 	}
 	for _, f := range m.currentFlags() {
+		if f.Selected {
+			snap.selectedFlags[f.Name] = true
+		}
+		if f.RequiresInput {
+			if ti, ok := m.inputs[f.Name]; ok {
+				snap.inputValues[f.Name] = ti.Value()
+			}
+		}
+	}
+	for _, f := range m.globalFlags {
 		if f.Selected {
 			snap.selectedFlags[f.Name] = true
 		}
@@ -853,6 +954,11 @@ func (m *mainModel) restoreLastCmd() {
 			(*flags)[i].Selected = snap.selectedFlags[(*flags)[i].Name]
 		}
 	}
+	for i := range m.globalFlags {
+		if !m.globalFlags[i].Mandatory {
+			m.globalFlags[i].Selected = snap.selectedFlags[m.globalFlags[i].Name]
+		}
+	}
 
 	for name, val := range snap.inputValues {
 		if ti, ok := m.inputs[name]; ok {
@@ -896,65 +1002,42 @@ func (m *mainModel) toggleFlag() {
 		if m.subIdx >= len(cmd.SubCmds) {
 			return
 		}
-		subCmd := &cmd.SubCmds[m.subIdx]
-		if len(subCmd.Flags) == 0 || m.flagIdx >= len(subCmd.Flags) {
-			return
-		}
-		if subCmd.Flags[m.flagIdx].Mandatory {
-			return
-		}
-		subCmd.Flags[m.flagIdx].Selected = !subCmd.Flags[m.flagIdx].Selected
-		if subCmd.Flags[m.flagIdx].Selected {
-			if subCmd.Flags[m.flagIdx].RequiresInput {
-				key := subCmd.Flags[m.flagIdx].Name
-				if _, exists := m.inputs[key]; !exists {
-					ti := textinput.New()
-					ti.Prompt = " "
-					ti.Placeholder = "Enter " + key + "..."
-					ti.CharLimit = 256
-					m.inputs[key] = ti
-				}
-			}
-			for i := range subCmd.Flags {
-				if i != m.flagIdx && flagsConflict(subCmd.Flags[m.flagIdx], subCmd.Flags[i]) {
-					subCmd.Flags[i].Selected = false
-					if subCmd.Flags[i].RequiresInput {
-						if ti, ok := m.inputs[subCmd.Flags[i].Name]; ok {
-							ti.SetValue("")
-							m.inputs[subCmd.Flags[i].Name] = ti
-						}
-					}
-				}
-			}
-		}
+		toggleFlagAt(cmd.SubCmds[m.subIdx].Flags, m.flagIdx, m.inputs)
 	} else {
-		if len(cmd.Flags) == 0 || m.flagIdx >= len(cmd.Flags) {
-			return
+		toggleFlagAt(cmd.Flags, m.flagIdx, m.inputs)
+	}
+}
+
+// toggleFlagAt toggles flags[idx].Selected (no-op if idx is out of range or
+// the flag is Mandatory), lazily creates a textinput.Model in inputs when a
+// RequiresInput flag becomes selected, and clears any other flag in the same
+// slice that now conflicts with it. Shared by toggleFlag (command/subcommand
+// flags) and the global-options modal (m.globalFlags).
+func toggleFlagAt(flags []Flag, idx int, inputs map[string]textinput.Model) {
+	if len(flags) == 0 || idx >= len(flags) || flags[idx].Mandatory {
+		return
+	}
+	flags[idx].Selected = !flags[idx].Selected
+	if !flags[idx].Selected {
+		return
+	}
+	if flags[idx].RequiresInput {
+		key := flags[idx].Name
+		if _, exists := inputs[key]; !exists {
+			ti := textinput.New()
+			ti.Prompt = " "
+			ti.Placeholder = "Enter " + key + "..."
+			ti.CharLimit = 256
+			inputs[key] = ti
 		}
-		if cmd.Flags[m.flagIdx].Mandatory {
-			return
-		}
-		cmd.Flags[m.flagIdx].Selected = !cmd.Flags[m.flagIdx].Selected
-		if cmd.Flags[m.flagIdx].Selected {
-			if cmd.Flags[m.flagIdx].RequiresInput {
-				key := cmd.Flags[m.flagIdx].Name
-				if _, exists := m.inputs[key]; !exists {
-					ti := textinput.New()
-					ti.Prompt = " "
-					ti.Placeholder = "Enter " + key + "..."
-					ti.CharLimit = 256
-					m.inputs[key] = ti
-				}
-			}
-			for i := range cmd.Flags {
-				if i != m.flagIdx && flagsConflict(cmd.Flags[m.flagIdx], cmd.Flags[i]) {
-					cmd.Flags[i].Selected = false
-					if cmd.Flags[i].RequiresInput {
-						if ti, ok := m.inputs[cmd.Flags[i].Name]; ok {
-							ti.SetValue("")
-							m.inputs[cmd.Flags[i].Name] = ti
-						}
-					}
+	}
+	for i := range flags {
+		if i != idx && flagsConflict(flags[idx], flags[i]) {
+			flags[i].Selected = false
+			if flags[i].RequiresInput {
+				if ti, ok := inputs[flags[i].Name]; ok {
+					ti.SetValue("")
+					inputs[flags[i].Name] = ti
 				}
 			}
 		}
@@ -1037,9 +1120,13 @@ func (m *mainModel) currentRequiredFlagGroup() []string {
 // buildCommandStrings returns (short, long) where short uses command/subcommand
 // aliases when available, and long always uses the full name.
 func (m mainModel) buildCommandStrings() (short, long string) {
+	globalShort, globalLong := m.selectedGlobalFlagParts()
+
 	cmds := m.currentCommands()
 	if len(cmds) == 0 || m.cmdIdx >= len(cmds) {
-		return "jj", "jj"
+		shortParts := append([]string{"jj"}, globalShort...)
+		longParts := append([]string{"jj"}, globalLong...)
+		return strings.Join(shortParts, " "), strings.Join(longParts, " ")
 	}
 
 	cmd := cmds[m.cmdIdx]
@@ -1048,8 +1135,10 @@ func (m mainModel) buildCommandStrings() (short, long string) {
 	if cmd.Alias != "" && len(cmd.Alias) < len(cmd.Name) {
 		shortName = cmd.Alias
 	}
-	shortParts := []string{"jj", shortName}
-	longParts := []string{"jj", cmd.Name}
+	shortParts := append([]string{"jj"}, globalShort...)
+	shortParts = append(shortParts, shortName)
+	longParts := append([]string{"jj"}, globalLong...)
+	longParts = append(longParts, cmd.Name)
 
 	if len(cmd.SubCmds) > 0 && m.subIdx < len(cmd.SubCmds) {
 		sub := cmd.SubCmds[m.subIdx]
@@ -1095,6 +1184,33 @@ func (m mainModel) buildCommandStrings() (short, long string) {
 	}
 
 	return strings.Join(shortParts, " "), strings.Join(longParts, " ")
+}
+
+// selectedGlobalFlagParts renders the currently-selected global flags (and
+// their input values) in exec and bar form. buildCommandStrings splices these
+// in right after "jj", before the subcommand, since jj requires global
+// options to precede it.
+func (m mainModel) selectedGlobalFlagParts() (short, long []string) {
+	for _, f := range m.globalFlags {
+		if !f.Selected {
+			continue
+		}
+		if f.Value != "" {
+			short = append(short, flagExecForm(f))
+			long = append(long, flagBarForm(f))
+		}
+		if f.RequiresInput {
+			val := m.inputs[f.Name].Value()
+			if val != "" {
+				if f.NeedsQuotes {
+					val = "\"" + val + "\""
+				}
+				short = append(short, val)
+				long = append(long, val)
+			}
+		}
+	}
+	return
 }
 
 // outputEnlargedActive reports whether the output pane should render in its
@@ -1329,6 +1445,44 @@ func (m mainModel) hasEmptyRequiredFlagInput() bool {
 	return false
 }
 
+// selectedGlobalCount returns how many global flags are currently selected —
+// the number of display-only rows prefixed to the FLAGS pane.
+func (m mainModel) selectedGlobalCount() int {
+	n := 0
+	for _, f := range m.globalFlags {
+		if f.Selected {
+			n++
+		}
+	}
+	return n
+}
+
+// stickyGlobalCount returns how many rows the pinned global-flag header
+// actually occupies in the FLAGS pane: the selected count, capped so at least
+// one command-flag row always survives (the last pinned row then becomes a
+// "◆ +N more" summary — see renderPane). ch mirrors renderPane's own
+// contentHeight (m.paneH - 4, both fed by composerBudget/2). Single source of
+// truth shared by the view and the scroll math.
+func (m mainModel) stickyGlobalCount() int {
+	ch := m.paneH - 4
+	if ch < 1 {
+		ch = 1
+	}
+	return min(m.selectedGlobalCount(), max(0, ch-1))
+}
+
+// hasEmptyRequiredGlobalInput reports whether any selected global flag that
+// RequiresInput has an empty value — part of hasIncompleteInputs, blocking
+// finalize-to-command-bar the same way empty command-flag inputs do.
+func (m mainModel) hasEmptyRequiredGlobalInput() bool {
+	for _, f := range m.globalFlags {
+		if f.Selected && f.RequiresInput && m.inputs[f.Name].Value() == "" {
+			return true
+		}
+	}
+	return false
+}
+
 func (m mainModel) hasEmptyRequiredArg() bool {
 	for _, a := range m.getRequiredArgs() {
 		if m.argInputs[a.Name].Value() == "" {
@@ -1354,7 +1508,7 @@ func (m mainModel) requiredFlagGroupUnsatisfied() bool {
 }
 
 func (m mainModel) hasIncompleteInputs() bool {
-	return m.hasEmptyRequiredFlagInput() || m.hasEmptyRequiredArg() || m.requiredFlagGroupUnsatisfied()
+	return m.hasEmptyRequiredFlagInput() || m.hasEmptyRequiredGlobalInput() || m.hasEmptyRequiredArg() || m.requiredFlagGroupUnsatisfied()
 }
 
 // selectedFlagValue returns the trimmed input value of the flag with the given
@@ -1532,28 +1686,32 @@ func maxInputsHeight(cats []Category) int {
 
 func (m *mainModel) getActiveInputs() []*Flag {
 	var active []*Flag
-	if len(m.categories) == 0 || m.catIdx >= len(m.categories) {
-		return active
-	}
-	cat := &m.categories[m.catIdx]
-	if len(cat.Commands) == 0 || m.cmdIdx >= len(cat.Commands) {
-		return active
-	}
-	cmd := &cat.Commands[m.cmdIdx]
-
-	if len(cmd.SubCmds) > 0 {
-		if m.subIdx < len(cmd.SubCmds) {
-			for i := range cmd.SubCmds[m.subIdx].Flags {
-				if cmd.SubCmds[m.subIdx].Flags[i].Selected && cmd.SubCmds[m.subIdx].Flags[i].RequiresInput {
-					active = append(active, &cmd.SubCmds[m.subIdx].Flags[i])
+	if len(m.categories) > 0 && m.catIdx < len(m.categories) {
+		cat := &m.categories[m.catIdx]
+		if len(cat.Commands) > 0 && m.cmdIdx < len(cat.Commands) {
+			cmd := &cat.Commands[m.cmdIdx]
+			if len(cmd.SubCmds) > 0 {
+				if m.subIdx < len(cmd.SubCmds) {
+					for i := range cmd.SubCmds[m.subIdx].Flags {
+						if cmd.SubCmds[m.subIdx].Flags[i].Selected && cmd.SubCmds[m.subIdx].Flags[i].RequiresInput {
+							active = append(active, &cmd.SubCmds[m.subIdx].Flags[i])
+						}
+					}
+				}
+			} else {
+				for i := range cmd.Flags {
+					if cmd.Flags[i].Selected && cmd.Flags[i].RequiresInput {
+						active = append(active, &cmd.Flags[i])
+					}
 				}
 			}
 		}
-	} else {
-		for i := range cmd.Flags {
-			if cmd.Flags[i].Selected && cmd.Flags[i].RequiresInput {
-				active = append(active, &cmd.Flags[i])
-			}
+	}
+	// Selected global flags that take a value are edited in the same input
+	// bar as command inputs — the global-options modal has no editing mode.
+	for i := range m.globalFlags {
+		if m.globalFlags[i].Selected && m.globalFlags[i].RequiresInput {
+			active = append(active, &m.globalFlags[i])
 		}
 	}
 	return active
@@ -1743,6 +1901,19 @@ func (m mainModel) handleDocsKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // refreshDocs rebuilds the docs viewport content from the currently focused item.
 func (m *mainModel) refreshDocs() {
 	m.setDocsContent(m.docsContent())
+}
+
+// refreshGlobalDocs rebuilds the modal's docs column for the highlighted
+// global flag — same header + full-description layout the main docs pane
+// uses for flags in docsContent().
+func (m *mainModel) refreshGlobalDocs() {
+	f := m.globalFlags[m.globalFlagIdx]
+	content := flagNameStyle.Render(flagDocsLabel(f))
+	if f.Description != "" {
+		content += "\n\n" + f.Description
+	}
+	m.globalDocs.SetContent(wordWrap(content, m.globalDocs.Width()))
+	m.globalDocs.GotoTop()
 }
 
 // setDocsContent wraps and applies pre-computed docs text at the viewport's
