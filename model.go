@@ -1154,6 +1154,17 @@ func (m mainModel) buildCommandStrings() (short, long string) {
 		longParts = append(longParts, longPart)
 	}
 
+	// Positional args come before flags, matching how jj commands are
+	// naturally written (e.g. `jj tag set v0.2.0 --to @-`, not the reverse).
+	// Optional args are simply omitted when empty, letting jj apply its own
+	// default (e.g. @).
+	for _, a := range m.currentArgs() {
+		if val := m.argInputs[a.Name].Value(); val != "" {
+			shortParts = append(shortParts, val)
+			longParts = append(longParts, val)
+		}
+	}
+
 	flags := m.currentFlags()
 	for _, f := range flags {
 		if f.Selected {
@@ -1171,15 +1182,6 @@ func (m mainModel) buildCommandStrings() (short, long string) {
 					longParts = append(longParts, val)
 				}
 			}
-		}
-	}
-
-	// Append positional arg values after flags. Optional args are simply
-	// omitted when empty, letting jj apply its own default (e.g. @).
-	for _, a := range m.currentArgs() {
-		if val := m.argInputs[a.Name].Value(); val != "" {
-			shortParts = append(shortParts, val)
-			longParts = append(longParts, val)
 		}
 	}
 
