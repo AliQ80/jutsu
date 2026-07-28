@@ -26,10 +26,19 @@ import (
 // description" summary after squash's $EDITOR closes). Unlike
 // executeCommand, no --color=always is injected: the subprocess owns a
 // real TTY and detects colour support itself.
-func executeInteractive(cmdStr string) tea.Cmd {
+// executeInteractive hands cmdStr to the terminal on a pty. plainHandoff marks
+// a plain, line-based command (jj git push after a credential prompt) rather
+// than an alt-screen editor/merge tool: for those we clear the screen before
+// the prompt and, since there's no alt-screen exit marker to scan for, show the
+// whole captured transcript (jj's push result) instead of the canned message.
+func executeInteractive(cmdStr string, plainHandoff bool) tea.Cmd {
 	c := newPtyExecCommand(cmdStr)
+	c.plainHandoff = plainHandoff
 	return tea.Exec(c, func(err error) tea.Msg {
-		output, _ := c.capturedTrailingOutput()
+		output, ok := c.capturedTrailingOutput()
+		if !ok && c.plainHandoff {
+			output = c.fullCapturedOutput()
+		}
 		return execInteractiveResultMsg{cmdStr: cmdStr, output: output, err: err}
 	})
 }
@@ -62,7 +71,8 @@ type ptyExecCommand struct {
 	stdout io.Writer
 	stderr io.Writer
 
-	captured bytes.Buffer // pty-master → stdout tee, capped at maxCapturedOutput
+	plainHandoff bool         // plain line-based command (vs alt-screen editor): clear before + full-transcript capture after
+	captured     bytes.Buffer // pty-master → stdout tee, capped at maxCapturedOutput
 }
 
 func newPtyExecCommand(cmdStr string) *ptyExecCommand {
@@ -82,6 +92,13 @@ func (c *ptyExecCommand) Run() error {
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
 		return err
+	}
+
+	// Bubble Tea has already left the alt-screen by the time Run is called, so
+	// the real terminal still shows whatever was under the TUI. Wipe it (and
+	// scrollback) for a clean slate before a credential prompt appears.
+	if c.plainHandoff && c.stdout != nil {
+		_, _ = io.WriteString(c.stdout, "\x1b[2J\x1b[3J\x1b[H")
 	}
 
 	// Bubble Tea already restored the real terminal to its pre-raw-mode
@@ -167,6 +184,13 @@ func (c *ptyExecCommand) capturedTrailingOutput() (string, bool) {
 	return capturedTrailingOutput(c.captured.Bytes())
 }
 
+// fullCapturedOutput returns the entire captured transcript, cleaned. Used for
+// plain line-based handoffs (jj git push after a credential prompt) that have
+// no alt-screen marker: the whole transcript IS the result we want to show.
+func (c *ptyExecCommand) fullCapturedOutput() string {
+	return cleanCapturedText(c.captured.Bytes())
+}
+
 // capturedTrailingOutput scans raw (possibly ANSI-laden) pty output captured
 // from an interactive subprocess and returns the plain-text tail written
 // after the last alt-screen-exit marker, ANSI-stripped and trimmed. Returns
@@ -177,16 +201,30 @@ func capturedTrailingOutput(raw []byte) (string, bool) {
 	if idx < 0 {
 		return "", false
 	}
-	tail := raw[idx+len(altScreenExitSeq):]
-	// Ptys run in cooked mode by default, so the child's "\n" writes arrive
-	// here as "\r\n" (ONLCR). Normalize before splitting into lines
-	// downstream, or every recovered line would carry a trailing '\r'.
-	text := strings.ReplaceAll(stripANSI(string(tail)), "\r\n", "\n")
-	text = strings.TrimSpace(strings.ReplaceAll(text, "\r", "\n"))
+	text := cleanCapturedText(raw[idx+len(altScreenExitSeq):])
 	if text == "" {
 		return "", false
 	}
 	return text, true
+}
+
+// cleanCapturedText ANSI-strips raw pty bytes, normalizes newlines, and trims.
+// Ptys run in cooked mode by default, so the child's "\n" arrives as "\r\n"
+// (ONLCR); normalize both "\r\n" and bare "\r" or recovered lines carry stray
+// carriage returns.
+func cleanCapturedText(raw []byte) string {
+	text := strings.ReplaceAll(stripANSI(string(raw)), "\r\n", "\n")
+	return strings.TrimSpace(strings.ReplaceAll(text, "\r", "\n"))
+}
+
+// detachFromTTY starts the command in its own session with no controlling
+// terminal, so nothing it spawns (ssh, a git credential helper, libssh2) can
+// open /dev/tty to prompt. A prompt-needing op then fails fast instead of
+// deadlocking the non-interactive path against Bubble Tea for the terminal.
+// The interactive retry (executeInteractive) deliberately does NOT call this —
+// it wants a real controlling terminal so those prompts can be answered.
+func detachFromTTY(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 }
 
 // boundedWriter appends to buf, keeping only the last max bytes.

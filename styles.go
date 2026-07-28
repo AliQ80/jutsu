@@ -211,6 +211,22 @@ var (
 			Foreground(colorRed).
 			Bold(true)
 
+	// Remote-prompt modal styles (SSH host-key approval / credential handoff).
+	modalBoxStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(colorPeach).
+			Background(colorBase).
+			Padding(1, 3)
+
+	// fingerprintStyle highlights the SHA256 fingerprint the user is verifying.
+	fingerprintStyle = lipgloss.NewStyle().
+				Foreground(colorSapphire)
+
+	// hostAccentStyle emphasizes the remote host name in the modal body.
+	hostAccentStyle = lipgloss.NewStyle().
+			Foreground(colorPeach).
+			Bold(true)
+
 	runningStyle = lipgloss.NewStyle().
 			Foreground(colorMauve).
 			Italic(true)

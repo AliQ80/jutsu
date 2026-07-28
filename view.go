@@ -38,6 +38,20 @@ func (m mainModel) View() tea.View {
 		return v
 	}
 
+	if m.hostKeyModalOpen {
+		content := lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, m.renderHostKeyModal())
+		v := tea.NewView(content)
+		v.AltScreen = true
+		return v
+	}
+
+	if m.authModalOpen {
+		content := lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, m.renderAuthModal())
+		v := tea.NewView(content)
+		v.AltScreen = true
+		return v
+	}
+
 	if m.outputEnlargedActive() {
 		height := m.height - 6 // 5 cmdBar + 1 helpBar
 		rightPane := m.renderRightPane(m.width, height)
@@ -700,6 +714,43 @@ const (
 	globalDocsW = 56
 	globalDocsH = 18
 )
+
+// renderHostKeyModal renders the SSH host-key approval popup: the unknown host,
+// the fingerprint(s) to verify, and the trust/cancel choices.
+func (m mainModel) renderHostKeyModal() string {
+	p := m.hostKeyPrompt
+	lines := []string{
+		headerStyle.Render("🔒  Unknown SSH host"),
+		"",
+		"Jutsu doesn't recognize " + hostAccentStyle.Render(p.host) + " yet.",
+		"Verify this fingerprint, then trust it to continue:",
+		"",
+	}
+	for _, fp := range strings.Split(strings.TrimRight(p.fingerprint, "\n"), "\n") {
+		lines = append(lines, fingerprintStyle.Render("  "+fp))
+	}
+	hint := helpKeyStyle.Render("y") + " " + helpDescStyle.Render("trust") +
+		"    " + helpKeyStyle.Render("n") + " " + helpDescStyle.Render("cancel")
+	lines = append(lines, "", hint)
+	return modalBoxStyle.Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
+}
+
+// renderAuthModal renders the "remote needs input" popup used for credential
+// prompts (or when the host key couldn't be scanned): a guided handoff to the
+// real terminal, or cancel.
+func (m mainModel) renderAuthModal() string {
+	hint := helpKeyStyle.Render("enter") + " " + helpDescStyle.Render("continue in terminal") +
+		"    " + helpKeyStyle.Render("esc") + " " + helpDescStyle.Render("cancel")
+	lines := []string{
+		headerStyle.Render("🔑  Remote needs input"),
+		"",
+		"This remote needs a sign-in or key passphrase that",
+		"Jutsu can't collect here. Continue in the terminal?",
+		"",
+		hint,
+	}
+	return modalBoxStyle.Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
+}
 
 // renderGlobalFlagsModal renders the "g"-triggered popup listing jj's global
 // options (m.globalFlags): checklist on the left, the highlighted flag's

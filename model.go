@@ -48,10 +48,20 @@ type mainModel struct {
 	argInputs       map[string]textinput.Model // keyed by Arg Name
 	focusedInputIdx int
 
-	cmdText         string
-	cmdTextLong     string
-	running         bool
-	lastCmd         *commandSnapshot // nil until first command executes
+	cmdText     string
+	cmdTextLong string
+	running     bool
+	lastCmd     *commandSnapshot // nil until first command executes
+
+	// Remote-prompt modals (see execResultMsg classification). A failed
+	// push/fetch/clone that needed a prompt surfaces one of these instead of
+	// a raw error.
+	hostKeyModalOpen bool              // SSH host-key approval popup
+	hostKeyPrompt    hostKeyFetchedMsg // host / fingerprint / keyscan lines / pushCmd
+	hostKeyTried     bool              // loop guard: only offer the host-key modal once per run
+	authModalOpen    bool              // "continue in terminal" popup for credential prompts
+	authModalCmd     string            // the command that popup would retry via the pty handoff
+
 	validationFlash bool
 	copyFlash       bool
 	jjVersion       string
@@ -160,8 +170,27 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case execResultMsg:
 		m.running = false
-		lines := commandEchoLines(msg.cmdStr)
 
+		// A failed remote op may have hit a prompt the detached (no-tty) run
+		// couldn't answer. Classify and surface the right modal instead of a
+		// raw error line. See the classifiers in commands_exec.go.
+		if msg.err != nil && isRemoteGitCommand(msg.cmdStr) {
+			switch {
+			case isUnknownHostKey(msg.output) && !m.hostKeyTried:
+				// First connect to an unknown host: scan its key off the
+				// Update loop, then show the fingerprint-approval modal.
+				m.hostKeyTried = true
+				m.running = true
+				return m, fetchHostKey(msg.cmdStr)
+			case isAuthFailure(msg.output):
+				// Credentials needed: offer the guided terminal handoff.
+				m.authModalOpen = true
+				m.authModalCmd = msg.cmdStr
+				return m, nil
+			}
+		}
+
+		lines := commandEchoLines(msg.cmdStr)
 		if msg.err != nil {
 			// Always show errors
 			errorMsg := msg.err.Error()
@@ -182,6 +211,34 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.output.GotoTop()
 		m.resetCurrentFlags()
 		return m, nil
+
+	case hostKeyFetchedMsg:
+		m.running = false
+		if msg.err != nil {
+			// Couldn't scan/resolve the host key — fall back to the guided
+			// terminal handoff so real ssh can prompt.
+			m.authModalOpen = true
+			m.authModalCmd = msg.pushCmd
+			return m, nil
+		}
+		m.hostKeyPrompt = msg
+		m.hostKeyModalOpen = true
+		return m, nil
+
+	case knownHostAddedMsg:
+		if msg.err != nil {
+			m.running = false
+			lines := commandEchoLines(msg.pushCmd)
+			lines = append(lines, errorStyle.Render("✗ could not update known_hosts: "+msg.err.Error()))
+			m.outputLines = lines
+			m.xOffset = 0
+			m.applyXOffset()
+			m.output.GotoTop()
+			return m, nil
+		}
+		// Host now trusted — silently retry the original push.
+		m.running = true
+		return m, executeCommand(msg.pushCmd)
 
 	case execInteractiveResultMsg:
 		// The subprocess ran on a pty; msg.output holds the plain-text tail
@@ -225,7 +282,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.MouseWheelMsg:
-		if m.globalFlagsModalOpen {
+		if m.globalFlagsModalOpen || m.hostKeyModalOpen || m.authModalOpen {
 			return m, nil
 		}
 		if m.outputEnlargedActive() {
@@ -277,7 +334,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.MouseClickMsg:
-		if m.globalFlagsModalOpen {
+		if m.globalFlagsModalOpen || m.hostKeyModalOpen || m.authModalOpen {
 			return m, nil
 		}
 		if msg.Button != tea.MouseLeft {
@@ -365,6 +422,12 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		if m.globalFlagsModalOpen {
 			return m.handleGlobalFlagsModalKeys(msg)
+		}
+		if m.hostKeyModalOpen {
+			return m.handleHostKeyModalKeys(msg)
+		}
+		if m.authModalOpen {
+			return m.handleAuthModalKeys(msg)
 		}
 		switch msg.String() {
 		case "ctrl+c":
@@ -574,9 +637,10 @@ func (m mainModel) handleCmdBarKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			m.lastCmd = m.captureSnapshot()
 			m.running = true
+			m.hostKeyTried = false // a fresh run may legitimately hit the host-key modal again
 			m.focusPane = m.lastFocusPane
 			if m.isInteractiveInvocation() {
-				return m, executeInteractive(m.cmdText)
+				return m, executeInteractive(m.cmdText, false)
 			}
 			return m, executeCommand(m.cmdText)
 		}
@@ -629,6 +693,49 @@ func (m mainModel) handleOutputKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.outputEnlarged = false
 	}
 	m.layoutViewports()
+	return m, nil
+}
+
+// handleHostKeyModalKeys drives the SSH host-key approval popup. `y`/enter
+// trusts the shown fingerprint (append to known_hosts, then silently retry the
+// push); `n`/esc/q cancels, leaving the original failure in the output pane.
+func (m mainModel) handleHostKeyModalKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "y", "enter":
+		p := m.hostKeyPrompt
+		m.hostKeyModalOpen = false
+		m.running = true
+		return m, addKnownHost(p.keyscanLines, p.pushCmd)
+	case "n", "esc", "q", "ctrl+c":
+		m.hostKeyModalOpen = false
+		// Surface the original failure so the user sees why nothing happened.
+		lines := commandEchoLines(m.hostKeyPrompt.pushCmd)
+		lines = append(lines, "Host key not trusted — push canceled.")
+		m.outputLines = lines
+		m.output.GotoTop()
+		return m, nil
+	}
+	return m, nil
+}
+
+// handleAuthModalKeys drives the "remote needs input" popup shown for
+// credential prompts (or when the host key couldn't be scanned). Enter hands
+// the command to the real terminal via the pty handoff; esc/n/q cancels.
+func (m mainModel) handleAuthModalKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
+		cmd := m.authModalCmd
+		m.authModalOpen = false
+		m.running = true
+		return m, executeInteractive(cmd, true) // plain handoff: clear screen first, show full transcript after
+	case "n", "esc", "q", "ctrl+c":
+		m.authModalOpen = false
+		lines := commandEchoLines(m.authModalCmd)
+		lines = append(lines, "Canceled.")
+		m.outputLines = lines
+		m.output.GotoTop()
+		return m, nil
+	}
 	return m, nil
 }
 

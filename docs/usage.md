@@ -110,6 +110,18 @@ next depends on the command:
   terminal over to that program. The screen will visibly change — this is
   expected, not a freeze — and control returns to Jutsu automatically once
   the program exits.
+- **Remote operations that occasionally need a prompt** (`jj git push`,
+  `git fetch`, `git clone`) run in the background like any other command.
+  Normal pushes just show their result. But if one needs input Jutsu can't
+  provide silently, it never hangs — it surfaces a popup instead:
+  - **Unknown SSH host** (first push to a new server): a popup shows the
+    server's fingerprint. Press `y` to trust it — Jutsu writes
+    `~/.ssh/known_hosts` and retries the push automatically, all without
+    leaving the TUI. (A *changed* host key is treated as a warning and is
+    never one-tap trusted.)
+  - **Credentials** (an HTTPS remote with no saved login): a popup offers to
+    continue in the terminal — press `enter` to hand over, type your
+    credentials, and control returns to Jutsu. `esc` cancels.
 
 ## Docs, Output, and enlarging
 
