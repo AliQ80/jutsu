@@ -739,13 +739,19 @@ func (m mainModel) renderHostKeyModal() string {
 // prompts (or when the host key couldn't be scanned): a guided handoff to the
 // real terminal, or cancel.
 func (m mainModel) renderAuthModal() string {
-	hint := helpKeyStyle.Render("enter") + " " + helpDescStyle.Render("continue in terminal") +
+	// The hint says only "continue" — where it continues is already in the
+	// question above it.
+	question := "Jutsu can't collect here. Continue in the terminal?"
+	if inHerdr() {
+		question = "Jutsu can't collect here. Continue in a split pane?"
+	}
+	hint := helpKeyStyle.Render("enter") + " " + helpDescStyle.Render("continue") +
 		"    " + helpKeyStyle.Render("esc") + " " + helpDescStyle.Render("cancel")
 	lines := []string{
 		headerStyle.Render("🔑  Remote needs input"),
 		"",
 		"This remote needs a sign-in or key passphrase that",
-		"Jutsu can't collect here. Continue in the terminal?",
+		question,
 		"",
 		hint,
 	}

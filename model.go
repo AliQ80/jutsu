@@ -240,6 +240,11 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.running = true
 		return m, executeCommand(msg.pushCmd)
 
+	case execFallbackMsg:
+		// herdr couldn't give us a terminal — suspend the TUI and use the
+		// ordinary pty handoff instead of failing the command outright.
+		return m, executeInteractive(msg.cmdStr, msg.plain)
+
 	case execInteractiveResultMsg:
 		// The subprocess ran on a pty; msg.output holds the plain-text tail
 		// recovered after its alternate screen closed, if any was found.
@@ -640,7 +645,7 @@ func (m mainModel) handleCmdBarKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.hostKeyTried = false // a fresh run may legitimately hit the host-key modal again
 			m.focusPane = m.lastFocusPane
 			if m.isInteractiveInvocation() {
-				return m, executeInteractive(m.cmdText, false)
+				return m, executeHandoff(m.cmdText, false)
 			}
 			return m, executeCommand(m.cmdText)
 		}
@@ -727,7 +732,7 @@ func (m mainModel) handleAuthModalKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 		cmd := m.authModalCmd
 		m.authModalOpen = false
 		m.running = true
-		return m, executeInteractive(cmd, true) // plain handoff: clear screen first, show full transcript after
+		return m, executeHandoff(cmd, true) // plain handoff: a herdr split pane, else clear the screen and take over the terminal
 	case "n", "esc", "q", "ctrl+c":
 		m.authModalOpen = false
 		lines := commandEchoLines(m.authModalCmd)
