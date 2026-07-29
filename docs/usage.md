@@ -106,10 +106,17 @@ next depends on the command:
   without ever leaving the TUI.
 - **Commands that open an editor or a merge/diff tool** (e.g. `describe`/
   `commit` without `-m`, `squash` without `-m`, `resolve` without `--list`,
-  or anything with an explicit interactive flag like `-i`) hand the real
-  terminal over to that program. The screen will visibly change — this is
-  expected, not a freeze — and control returns to Jutsu automatically once
-  the program exits.
+  or anything with an explicit interactive flag like `-i`) need a real
+  terminal, and where that terminal comes from depends on where Jutsu is
+  running:
+  - **Inside a multiplexer** (herdr or tmux), Jutsu asks it for a second
+    terminal and keeps running in yours: the editor opens in a **new tab**
+    (herdr) or **window** (tmux), and closes itself when you're done. Focus
+    returns to Jutsu, with anything the command printed afterwards in the
+    Output pane.
+  - **Anywhere else**, Jutsu hands your terminal over to the program. The
+    screen will visibly change — this is expected, not a freeze — and
+    control returns to Jutsu automatically once the program exits.
 - **Remote operations that occasionally need a prompt** (`jj git push`,
   `git fetch`, `git clone`) run in the background like any other command.
   Normal pushes just show their result. But if one needs input Jutsu can't
@@ -119,9 +126,17 @@ next depends on the command:
     `~/.ssh/known_hosts` and retries the push automatically, all without
     leaving the TUI. (A *changed* host key is treated as a warning and is
     never one-tap trusted.)
-  - **Credentials** (an HTTPS remote with no saved login): a popup offers to
-    continue in the terminal — press `enter` to hand over, type your
-    credentials, and control returns to Jutsu. `esc` cancels.
+  - **Credentials** (an HTTPS remote with no saved login, or a key with a
+    passphrase): a popup offers to continue — press `enter`, type your
+    credentials, and control returns to Jutsu. `esc` cancels. Inside herdr
+    or tmux the prompt appears in a **split pane** below Jutsu, which
+    closes itself once you're through; elsewhere Jutsu hands over your
+    terminal as above.
+
+Handoffs inside a multiplexer run in whatever shell you normally use, so
+your `$EDITOR`, `$PATH` and SSH agent are exactly what they'd be in any
+other terminal. If one ever misbehaves, `env -u TMUX -u HERDR_ENV jutsu`
+forces the hand-over-your-terminal behaviour instead.
 
 ## Docs, Output, and enlarging
 

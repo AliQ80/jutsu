@@ -742,7 +742,7 @@ func (m mainModel) renderAuthModal() string {
 	// The hint says only "continue" — where it continues is already in the
 	// question above it.
 	question := "Jutsu can't collect here. Continue in the terminal?"
-	if inHerdr() {
+	if currentMux() != nil {
 		question = "Jutsu can't collect here. Continue in a split pane?"
 	}
 	hint := helpKeyStyle.Render("enter") + " " + helpDescStyle.Render("continue") +
