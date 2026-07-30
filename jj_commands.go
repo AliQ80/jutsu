@@ -526,21 +526,6 @@ func loadCategories() []Category {
 						{Name: "force-rewrite", Description: "Rewrite the commit, even if no other metadata changed\n\nThis updates the committer timestamp to the current time, as well as the committer name and email.\n\nEven if this option is not passed, the committer name, email, and timestamp will be updated if other metadata is updated. This option just forces every commit to be rewritten whether or not there are other changes.\n\nYou can use it in combination with the `JJ_USER` and `JJ_EMAIL` environment variables to set a different committer:\n\n$ JJ_USER='Foo Bar' JJ_EMAIL=foo@bar.com jj metaedit --force-rewrite", Value: "--force-rewrite"},
 					},
 				},
-				{
-					Name:        "run",
-					Description: "Run a command across a set of revisions.\n\nChecks out each revision in an isolated working copy, runs the command, then amends the revision with the resulting working copy. By default, descendants are rebased on top of the amended revisions, propagating the diff. Use `--restore-descendants` to keep descendants' content unchanged instead.\n\nThe command is executed with the following environment variables set:\n\n- JJ_CHANGE_ID - JJ_COMMIT_ID - JJ_WORKSPACE_ROOT\n\n# Example\n\n  # Run pre-commit on your local work\n  $ jj run -j 4 -- pre-commit run .github/pre-commit.yaml",
-					Args: []Arg{
-						{Name: "COMMAND", Description: "Command to run across all selected revisions", Required: true},
-						{Name: "ARGS", Description: "Arguments to pass to the command\n\nHint: Use a `--` separator to allow passing arguments starting with `-`. For example `jj run --revisions=... -- cargo build --release`.", Variadic: true},
-					},
-					Flags: []Flag{
-						{Name: "revision", Description: "The revisions to change", Value: "-r", RequiresInput: true, InputType: "REVSETS"},
-						{Name: "jobs", Description: "How many processes should run in parallel\n\nOverrides the `run.jobs` config setting. Defaults to 1 if neither is set.", Value: "-j", RequiresInput: true, InputType: "JOBS"},
-						{Name: "root", Description: "Run the command from the working-copy root in each commit instead of from the subdirectory `jj run` was invoked from", Value: "--root"},
-						{Name: "clean", Description: "Delete each working copy before running the command\n\nBy default `jj run` reuses working copies between invocations so build artifacts are preserved. With `--clean`, every commit starts from a freshly checked-out tree.", Value: "--clean"},
-						{Name: "restore-descendants", Description: "Preserve the content (not the diff) when rebasing descendants", Value: "--restore-descendants"},
-					},
-				},
 			},
 		},
 		{
@@ -956,7 +941,7 @@ func loadCategories() []Category {
 			},
 		},
 		{
-			Name: "Advanced",
+			Name: "Tools",
 			Commands: []Command{
 				{
 					Name:        "sign",
@@ -971,6 +956,21 @@ func loadCategories() []Category {
 					Description: "Drop a cryptographic signature\n\nSee also [commit signing] docs.\n\n[commit signing]: https://docs.jj-vcs.dev/latest/config/#commit-signing",
 					Flags: []Flag{
 						{Name: "revision", Description: "What revision(s) to unsign", Value: "-r", RequiresInput: true, InputType: "REVSETS"},
+					},
+				},
+				{
+					Name:        "run",
+					Description: "Run a command across a set of revisions.\n\nChecks out each revision in an isolated working copy, runs the command, then amends the revision with the resulting working copy. By default, descendants are rebased on top of the amended revisions, propagating the diff. Use `--restore-descendants` to keep descendants' content unchanged instead.\n\nThe command is executed with the following environment variables set:\n\n- JJ_CHANGE_ID - JJ_COMMIT_ID - JJ_WORKSPACE_ROOT\n\n# Example\n\n  # Run pre-commit on your local work\n  $ jj run -j 4 -- pre-commit run .github/pre-commit.yaml",
+					Args: []Arg{
+						{Name: "COMMAND", Description: "Command to run across all selected revisions", Required: true},
+						{Name: "ARGS", Description: "Arguments to pass to the command\n\nHint: Use a `--` separator to allow passing arguments starting with `-`. For example `jj run --revisions=... -- cargo build --release`.", Variadic: true},
+					},
+					Flags: []Flag{
+						{Name: "revision", Description: "The revisions to change", Value: "-r", RequiresInput: true, InputType: "REVSETS"},
+						{Name: "jobs", Description: "How many processes should run in parallel\n\nOverrides the `run.jobs` config setting. Defaults to 1 if neither is set.", Value: "-j", RequiresInput: true, InputType: "JOBS"},
+						{Name: "root", Description: "Run the command from the working-copy root in each commit instead of from the subdirectory `jj run` was invoked from", Value: "--root"},
+						{Name: "clean", Description: "Delete each working copy before running the command\n\nBy default `jj run` reuses working copies between invocations so build artifacts are preserved. With `--clean`, every commit starts from a freshly checked-out tree.", Value: "--clean"},
+						{Name: "restore-descendants", Description: "Preserve the content (not the diff) when rebasing descendants", Value: "--restore-descendants"},
 					},
 				},
 				{
