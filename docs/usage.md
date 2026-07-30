@@ -22,13 +22,18 @@ move focus elsewhere.
 
 ## Command Categories
 
-- **View** — read-only inspection (log, diff, status, browsing files, repo root); nothing here changes history
+Roughly ordered by blast radius — read-only first, then commands that touch
+content, then history, then the remote — with the rarely-reached categories at
+the tail.
+
+- **View** — read-only inspection (log, diff, status, browsing files, repo root, bisect); nothing here changes history
 - **Change** — edits to the working-copy commit itself
 - **Rewrite** — restructuring existing commits (splitting, squashing, rebasing, abandoning)
 - **Sync** — ongoing exchange with remotes and other refs (git fetch/push, bookmarks, tags)
 - **Journal** — the operation log; reverting or replaying prior operations
-- **Advanced** — config, workspaces, repo maintenance, and shell completion
-- **Setup** — creating a new repo (`git init`/`git clone`)
+- **Navigate** — moving `@` without changing anything (`edit`, `next`, `prev`)
+- **Tools** — signing, sparse checkouts, batch `run`, Gerrit, shell completion, help
+- **Setup** — creating a new repo (`git init`/`git clone`), workspaces, and config
 
 ## Navigating the composer
 
