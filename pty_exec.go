@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"strings"
 	"sync"
 	"syscall"
 
@@ -206,15 +205,6 @@ func capturedTrailingOutput(raw []byte) (string, bool) {
 		return "", false
 	}
 	return text, true
-}
-
-// cleanCapturedText ANSI-strips raw pty bytes, normalizes newlines, and trims.
-// Ptys run in cooked mode by default, so the child's "\n" arrives as "\r\n"
-// (ONLCR); normalize both "\r\n" and bare "\r" or recovered lines carry stray
-// carriage returns.
-func cleanCapturedText(raw []byte) string {
-	text := strings.ReplaceAll(stripANSI(string(raw)), "\r\n", "\n")
-	return strings.TrimSpace(strings.ReplaceAll(text, "\r", "\n"))
 }
 
 // detachFromTTY starts the command in its own session with no controlling

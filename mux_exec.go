@@ -195,3 +195,16 @@ func trimPaneTranscript(raw, scriptPath, sentinel string) string {
 	}
 	return strings.TrimSpace(raw)
 }
+
+// cleanCapturedText ANSI-strips captured terminal output, normalizes newlines,
+// and trims. Ptys run in cooked mode by default, so a child's "\n" arrives as
+// "\r\n" (ONLCR); normalize both "\r\n" and bare "\r" or recovered lines carry
+// stray carriage returns.
+//
+// Lives here rather than next to its original caller in pty_exec.go because
+// that file is //go:build !windows, while the mux backends that also call this
+// build everywhere — see the v0.4.0 release break.
+func cleanCapturedText(raw []byte) string {
+	text := strings.ReplaceAll(stripANSI(string(raw)), "\r\n", "\n")
+	return strings.TrimSpace(strings.ReplaceAll(text, "\r", "\n"))
+}
