@@ -982,96 +982,6 @@ func loadCategories() []Category {
 					},
 				},
 				{
-					Name:        "config",
-					Description: "Manage config options\n\nOperates on jj configuration, which comes from the config file and environment variables.\n\nSee [`jj help -k config`] to know more about file locations, supported config options, and other details about `jj config`.\n\n[`jj help -k config`]: https://docs.jj-vcs.dev/latest/config/",
-					SubCmds: []SubCommand{
-						{
-							Summary: "Get the value of a given config option.", Name: "get",
-							Alias:       "g",
-							Description: "Get the value of a given config option.\n\nUnlike `jj config list`, the result of `jj config get` is printed without extra formatting and therefore is usable in scripting. For example:\n\n$ jj config list user.name user.name=\"Martin von Zweigbergk\" $ jj config get user.name Martin von Zweigbergk",
-							Args: []Arg{
-								{Name: "NAME", Description: "", Required: true},
-							},
-							Flags: []Flag{},
-						},
-						{
-							Summary: "List variables set in config files, along with their values", Name: "list",
-							Alias:       "l",
-							Description: "List variables set in config files, along with their values",
-							Args: []Arg{
-								{Name: "NAME", Description: "An optional name of a specific config option to look up"},
-							},
-							Flags: []Flag{
-								{Name: "include-defaults", Description: "Whether to explicitly include built-in default values in the list", Value: "--include-defaults"},
-								{Name: "user", Description: "Target the user-level config", Value: "--user", ConflictingFlags: []string{"--repo", "--workspace"}},
-								{Name: "repo", Description: "Target the repo-level config", Value: "--repo", ConflictingFlags: []string{"--user", "--workspace"}},
-								{Name: "workspace", Description: "Target the workspace-level config", Value: "--workspace", ConflictingFlags: []string{"--user", "--repo"}},
-							},
-						},
-						{
-							Summary: "Print the paths to the config files", Name: "path",
-							Alias:       "p",
-							Description: "Print the paths to the config files\n\nA config file at that path may or may not exist.\n\nIf `--repo` or `--workspace` is specified and the config file does not exist, jj will generate a new config directory for this repo/workspace and print the path to the config file in that directory.\n\nSee `jj config edit` if you'd like to immediately edit a file.",
-							Flags: []Flag{
-								{Name: "user", Description: "Target the user-level config", Value: "--user", ConflictingFlags: []string{"--repo", "--workspace"}},
-								{Name: "repo", Description: "Target the repo-level config", Value: "--repo", ConflictingFlags: []string{"--user", "--workspace"}},
-								{Name: "workspace", Description: "Target the workspace-level config", Value: "--workspace", ConflictingFlags: []string{"--user", "--repo"}},
-							},
-							RequiredFlagGroup: []string{"--user", "--repo", "--workspace"},
-							RequiredUsage:     "<--user|--repo|--workspace>",
-						},
-						{
-							Summary: "Update a config file to set the given option to a given value", Name: "set",
-							Alias:       "s",
-							Description: "Update a config file to set the given option to a given value",
-							Args: []Arg{
-								{Name: "NAME", Description: "", Required: true},
-								{Name: "VALUE", Description: "New value to set\n\nThe value should be specified as a TOML expression. If string value isn't enclosed by any TOML constructs (such as apostrophes or array notation), quotes can be omitted. Note that the value may also need shell quoting. TOML multi-line strings can be useful if the value contains apostrophes. For example, to set `foo.bar` to the string \"{don't}\" use `jj config set --user foo.bar \"'''{don't}'''\"`. This is valid in both Bash and Fish.\n\nAlternative, e.g. to avoid dealing with shell quoting, use `jj config edit` to edit the TOML file directly.", Required: true},
-							},
-							Flags: []Flag{
-								{Name: "user", Description: "Target the user-level config", Value: "--user", ConflictingFlags: []string{"--repo", "--workspace"}},
-								{Name: "repo", Description: "Target the repo-level config", Value: "--repo", ConflictingFlags: []string{"--user", "--workspace"}},
-								{Name: "workspace", Description: "Target the workspace-level config", Value: "--workspace", ConflictingFlags: []string{"--user", "--repo"}},
-							},
-							RequiredFlagGroup: []string{"--user", "--repo", "--workspace"},
-							RequiredUsage:     "<--user|--repo|--workspace>",
-						},
-						{
-							Summary: "Update a config file to unset the given option", Name: "unset",
-							Alias:       "u",
-							Description: "Update a config file to unset the given option",
-							Args: []Arg{
-								{Name: "NAME", Description: "", Required: true},
-							},
-							Flags: []Flag{
-								{Name: "user", Description: "Target the user-level config", Value: "--user", ConflictingFlags: []string{"--repo", "--workspace"}},
-								{Name: "repo", Description: "Target the repo-level config", Value: "--repo", ConflictingFlags: []string{"--user", "--workspace"}},
-								{Name: "workspace", Description: "Target the workspace-level config", Value: "--workspace", ConflictingFlags: []string{"--user", "--repo"}},
-							},
-							RequiredFlagGroup: []string{"--user", "--repo", "--workspace"},
-							RequiredUsage:     "<--user|--repo|--workspace>",
-						},
-						{
-							Summary: "Start an editor on a jj config file", Name: "edit",
-							Alias:       "e",
-							Description: "Start an editor on a jj config file.\n\nCreates the file if it doesn't already exist regardless of what the editor does.",
-							Interactive: true,
-							Flags: []Flag{
-								{Name: "user", Description: "Target the user-level config", Value: "--user", ConflictingFlags: []string{"--repo", "--workspace"}},
-								{Name: "repo", Description: "Target the repo-level config", Value: "--repo", ConflictingFlags: []string{"--user", "--workspace"}},
-								{Name: "workspace", Description: "Target the workspace-level config", Value: "--workspace", ConflictingFlags: []string{"--user", "--repo"}},
-							},
-							RequiredFlagGroup: []string{"--user", "--repo", "--workspace"},
-							RequiredUsage:     "<--user|--repo|--workspace>",
-						},
-						{
-							Summary: "Find and optionally delete repo-level config directories whose repo path no longer exists", Name: "gc",
-							Description: "Find and optionally delete repo-level config directories whose repo path no longer exists",
-							Flags:       []Flag{},
-						},
-					},
-				},
-				{
 					Name:        "help",
 					Description: "Print this message or the help of the given subcommand(s)",
 					Args: []Arg{
@@ -1286,6 +1196,96 @@ func loadCategories() []Category {
 								{Name: "no-colocate", Description: "Disable colocation of the Jujutsu repo with the git repo\n\nPrevent Git tools that are unaware of `jj` and regular Git commands from operating on the repo. The Git repository that stores most of the repo data will be hidden inside a sub-directory of the `.jj` directory.\n\nSee [colocation docs] for some minor advantages of non-colocated workspaces.\n\n[colocation docs]: https://docs.jj-vcs.dev/latest/git-compatibility/#colocated-jujutsugit-repos", Value: "--no-colocate", ConflictingFlags: []string{"--colocate", "--git-repo"}},
 								{Name: "git-repo", Description: "Specifies a path to an **existing** git repository to be used as the backing git repo for the newly created `jj` repo.\n\nIf the specified `--git-repo` path happens to be the same as the `jj` repo path (both .jj and .git directories are in the same working directory), then both `jj` and `git` commands will work on the same repo. This is called a colocated workspace.\n\nThis option is mutually exclusive with `--colocate`, and so if passed, turns colocation off.", Value: "--git-repo", RequiresInput: true, ConflictingFlags: []string{"--colocate", "--no-colocate"}, InputType: "GIT_REPO"},
 							},
+						},
+					},
+				},
+				{
+					Name:        "config",
+					Description: "Manage config options\n\nOperates on jj configuration, which comes from the config file and environment variables.\n\nSee [`jj help -k config`] to know more about file locations, supported config options, and other details about `jj config`.\n\n[`jj help -k config`]: https://docs.jj-vcs.dev/latest/config/",
+					SubCmds: []SubCommand{
+						{
+							Summary: "Get the value of a given config option.", Name: "get",
+							Alias:       "g",
+							Description: "Get the value of a given config option.\n\nUnlike `jj config list`, the result of `jj config get` is printed without extra formatting and therefore is usable in scripting. For example:\n\n$ jj config list user.name user.name=\"Martin von Zweigbergk\" $ jj config get user.name Martin von Zweigbergk",
+							Args: []Arg{
+								{Name: "NAME", Description: "", Required: true},
+							},
+							Flags: []Flag{},
+						},
+						{
+							Summary: "List variables set in config files, along with their values", Name: "list",
+							Alias:       "l",
+							Description: "List variables set in config files, along with their values",
+							Args: []Arg{
+								{Name: "NAME", Description: "An optional name of a specific config option to look up"},
+							},
+							Flags: []Flag{
+								{Name: "include-defaults", Description: "Whether to explicitly include built-in default values in the list", Value: "--include-defaults"},
+								{Name: "user", Description: "Target the user-level config", Value: "--user", ConflictingFlags: []string{"--repo", "--workspace"}},
+								{Name: "repo", Description: "Target the repo-level config", Value: "--repo", ConflictingFlags: []string{"--user", "--workspace"}},
+								{Name: "workspace", Description: "Target the workspace-level config", Value: "--workspace", ConflictingFlags: []string{"--user", "--repo"}},
+							},
+						},
+						{
+							Summary: "Print the paths to the config files", Name: "path",
+							Alias:       "p",
+							Description: "Print the paths to the config files\n\nA config file at that path may or may not exist.\n\nIf `--repo` or `--workspace` is specified and the config file does not exist, jj will generate a new config directory for this repo/workspace and print the path to the config file in that directory.\n\nSee `jj config edit` if you'd like to immediately edit a file.",
+							Flags: []Flag{
+								{Name: "user", Description: "Target the user-level config", Value: "--user", ConflictingFlags: []string{"--repo", "--workspace"}},
+								{Name: "repo", Description: "Target the repo-level config", Value: "--repo", ConflictingFlags: []string{"--user", "--workspace"}},
+								{Name: "workspace", Description: "Target the workspace-level config", Value: "--workspace", ConflictingFlags: []string{"--user", "--repo"}},
+							},
+							RequiredFlagGroup: []string{"--user", "--repo", "--workspace"},
+							RequiredUsage:     "<--user|--repo|--workspace>",
+						},
+						{
+							Summary: "Update a config file to set the given option to a given value", Name: "set",
+							Alias:       "s",
+							Description: "Update a config file to set the given option to a given value",
+							Args: []Arg{
+								{Name: "NAME", Description: "", Required: true},
+								{Name: "VALUE", Description: "New value to set\n\nThe value should be specified as a TOML expression. If string value isn't enclosed by any TOML constructs (such as apostrophes or array notation), quotes can be omitted. Note that the value may also need shell quoting. TOML multi-line strings can be useful if the value contains apostrophes. For example, to set `foo.bar` to the string \"{don't}\" use `jj config set --user foo.bar \"'''{don't}'''\"`. This is valid in both Bash and Fish.\n\nAlternative, e.g. to avoid dealing with shell quoting, use `jj config edit` to edit the TOML file directly.", Required: true},
+							},
+							Flags: []Flag{
+								{Name: "user", Description: "Target the user-level config", Value: "--user", ConflictingFlags: []string{"--repo", "--workspace"}},
+								{Name: "repo", Description: "Target the repo-level config", Value: "--repo", ConflictingFlags: []string{"--user", "--workspace"}},
+								{Name: "workspace", Description: "Target the workspace-level config", Value: "--workspace", ConflictingFlags: []string{"--user", "--repo"}},
+							},
+							RequiredFlagGroup: []string{"--user", "--repo", "--workspace"},
+							RequiredUsage:     "<--user|--repo|--workspace>",
+						},
+						{
+							Summary: "Update a config file to unset the given option", Name: "unset",
+							Alias:       "u",
+							Description: "Update a config file to unset the given option",
+							Args: []Arg{
+								{Name: "NAME", Description: "", Required: true},
+							},
+							Flags: []Flag{
+								{Name: "user", Description: "Target the user-level config", Value: "--user", ConflictingFlags: []string{"--repo", "--workspace"}},
+								{Name: "repo", Description: "Target the repo-level config", Value: "--repo", ConflictingFlags: []string{"--user", "--workspace"}},
+								{Name: "workspace", Description: "Target the workspace-level config", Value: "--workspace", ConflictingFlags: []string{"--user", "--repo"}},
+							},
+							RequiredFlagGroup: []string{"--user", "--repo", "--workspace"},
+							RequiredUsage:     "<--user|--repo|--workspace>",
+						},
+						{
+							Summary: "Start an editor on a jj config file", Name: "edit",
+							Alias:       "e",
+							Description: "Start an editor on a jj config file.\n\nCreates the file if it doesn't already exist regardless of what the editor does.",
+							Interactive: true,
+							Flags: []Flag{
+								{Name: "user", Description: "Target the user-level config", Value: "--user", ConflictingFlags: []string{"--repo", "--workspace"}},
+								{Name: "repo", Description: "Target the repo-level config", Value: "--repo", ConflictingFlags: []string{"--user", "--workspace"}},
+								{Name: "workspace", Description: "Target the workspace-level config", Value: "--workspace", ConflictingFlags: []string{"--user", "--repo"}},
+							},
+							RequiredFlagGroup: []string{"--user", "--repo", "--workspace"},
+							RequiredUsage:     "<--user|--repo|--workspace>",
+						},
+						{
+							Summary: "Find and optionally delete repo-level config directories whose repo path no longer exists", Name: "gc",
+							Description: "Find and optionally delete repo-level config directories whose repo path no longer exists",
+							Flags:       []Flag{},
 						},
 					},
 				},
