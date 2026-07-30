@@ -379,7 +379,7 @@ func (m mainModel) renderRightPane(width, height int) string {
 
 	var outputContent string
 	if m.running {
-		outputContent = runningStyle.Render("Executing command...")
+		outputContent = m.spinner.View() + runningStyle.Render(" Executing command...")
 	} else {
 		outputContent = m.output.View()
 	}

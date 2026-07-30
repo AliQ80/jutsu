@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
@@ -51,6 +52,7 @@ type mainModel struct {
 	cmdText     string
 	cmdTextLong string
 	running     bool
+	spinner     spinner.Model    // animates only while running (see spinner.TickMsg)
 	lastCmd     *commandSnapshot // nil until first command executes
 
 	// Remote-prompt modals (see execResultMsg classification). A failed
@@ -137,6 +139,7 @@ func newModel() mainModel {
 		cwd:         cwd,
 		maxInputsHt: maxInputsHeight(cats),
 		globalFlags: loadGlobalFlags(),
+		spinner:     spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(runningStyle)),
 	}
 
 	// Pre-initialize textinputs for mandatory flags so the input pane renders
@@ -181,7 +184,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Update loop, then show the fingerprint-approval modal.
 				m.hostKeyTried = true
 				m.running = true
-				return m, fetchHostKey(msg.cmdStr)
+				return m, tea.Batch(m.spinner.Tick, fetchHostKey(msg.cmdStr))
 			case isAuthFailure(msg.output):
 				// Credentials needed: offer the guided terminal handoff.
 				m.authModalOpen = true
@@ -238,7 +241,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Host now trusted — silently retry the original push.
 		m.running = true
-		return m, executeCommand(msg.pushCmd)
+		return m, tea.Batch(m.spinner.Tick, executeCommand(msg.pushCmd))
 
 	case execFallbackMsg:
 		// herdr couldn't give us a terminal — suspend the TUI and use the
@@ -423,6 +426,16 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+
+	case spinner.TickMsg:
+		// Ticks stop themselves once the command finishes — an idle Jutsu
+		// shouldn't redraw every frame.
+		if !m.running {
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 
 	case tea.KeyPressMsg:
 		if m.globalFlagsModalOpen {
@@ -647,7 +660,7 @@ func (m mainModel) handleCmdBarKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if m.isInteractiveInvocation() {
 				return m, executeHandoff(m.cmdText, false)
 			}
-			return m, executeCommand(m.cmdText)
+			return m, tea.Batch(m.spinner.Tick, executeCommand(m.cmdText))
 		}
 	case "c":
 		return m, copyToClipboard(m.cmdTextLong)
@@ -710,7 +723,7 @@ func (m mainModel) handleHostKeyModalKeys(msg tea.KeyPressMsg) (tea.Model, tea.C
 		p := m.hostKeyPrompt
 		m.hostKeyModalOpen = false
 		m.running = true
-		return m, addKnownHost(p.keyscanLines, p.pushCmd)
+		return m, tea.Batch(m.spinner.Tick, addKnownHost(p.keyscanLines, p.pushCmd))
 	case "n", "esc", "q", "ctrl+c":
 		m.hostKeyModalOpen = false
 		// Surface the original failure so the user sees why nothing happened.
