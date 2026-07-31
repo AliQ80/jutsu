@@ -318,21 +318,15 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		leftWidth, _ := m.getLayoutWidths()
-		activeInputs := m.getActiveInputs()
-		inputsHeight := 0
-		if len(activeInputs) > 0 {
-			inputsHeight = len(activeInputs) + 2
-		}
-		topHeight := m.height - 6 - inputsHeight
-		composerH := topHeight / 2
+		composerH, inputsTop, bottom := m.paneRows()
 
-		if msg.X >= leftWidth && msg.Y < topHeight {
+		if msg.X >= leftWidth && msg.Y < bottom {
 			if msg.Button == tea.MouseWheelUp && m.output.YOffset() > 0 {
 				m.output.SetYOffset(m.output.YOffset() - 1)
 			} else if msg.Button == tea.MouseWheelDown {
 				m.output.SetYOffset(m.output.YOffset() + 1)
 			}
-		} else if msg.X < leftWidth && msg.Y >= composerH && msg.Y < topHeight {
+		} else if msg.X < leftWidth && msg.Y >= composerH && msg.Y < inputsTop {
 			if msg.Button == tea.MouseWheelUp && m.docs.YOffset() > 0 {
 				m.docs.SetYOffset(m.docs.YOffset() - 1)
 			} else if msg.Button == tea.MouseWheelDown {
@@ -380,26 +374,24 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		leftWidth, _ := m.getLayoutWidths()
-		activeInputs := m.getActiveInputs()
-		inputsHeight := 0
-		if len(activeInputs) > 0 {
-			inputsHeight = len(activeInputs) + 2
-		}
-		topHeight := m.height - 6 - inputsHeight
-		composerH := topHeight / 2
+		composerH, inputsTop, bottom := m.paneRows()
 
 		switch {
-		case msg.X >= leftWidth && msg.Y < topHeight:
+		case msg.X >= leftWidth && msg.Y < bottom:
 			if m.focusPane <= focusFlags {
 				m.lastFocusPane = m.focusPane
 			}
 			m.focusPane = focusOutput
-		case msg.X < leftWidth && msg.Y >= composerH && msg.Y < topHeight:
+		case msg.X < leftWidth && msg.Y >= composerH && msg.Y < inputsTop:
 			if m.focusPane <= focusFlags {
 				m.lastFocusPane = m.focusPane
 			}
 			m.focusPane = focusDocs
-		case msg.Y >= topHeight+inputsHeight && msg.Y < topHeight+inputsHeight+5:
+		case msg.X < leftWidth && msg.Y >= inputsTop && msg.Y < bottom:
+			// The box's top border owns the first row, so the Nth row
+			// of the box is input N-1.
+			return m, m.focusInput(msg.Y - inputsTop - 1)
+		case msg.Y >= bottom && msg.Y < bottom+5:
 			if m.hasIncompleteInputs() {
 				m.validationFlash = true
 				return m, flashTimer()
@@ -511,6 +503,19 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.setDocsContent(content)
 				return m, nil
 			}
+		case "i":
+			// Jump into the inputs box from any pane — including the output,
+			// docs and command bar, and from any composer pane, since the
+			// global-options modal can land focus on Categories with a pending
+			// global input. ("i", not enter — enter means exactly one thing
+			// app-wide: execute.) Blocked inside the inputs box itself, where
+			// "i" is a character to type, and in the enlarged views, which
+			// don't draw the box — same guard as d/o.
+			if m.focusPane != focusInputs && !m.outputEnlarged && !m.docsEnlarged {
+				if cmd := m.focusInput(0); cmd != nil {
+					return m, cmd
+				}
+			}
 		}
 
 		switch m.focusPane {
@@ -607,24 +612,6 @@ func (m mainModel) handleComposerKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		m.layoutViewports()
 		m.reclampAllScrolls()
 		m.refreshDocs()
-		return m, nil
-
-	case "i":
-		// Open the input pane if there are args or flag inputs to fill —
-		// from any composer pane, since the global-options modal can land
-		// focus on Categories with a pending global input.
-		// ("i", not enter — enter means exactly one thing app-wide: execute.)
-		combined := m.getActiveCombined()
-		if len(combined) > 0 {
-			m.lastFocusPane = m.focusPane
-			m.focusPane = focusInputs
-			m.focusedInputIdx = 0
-			item := combined[0]
-			ti := m.getInput(item)
-			cmd := ti.Focus()
-			m.setInput(item, ti)
-			return m, cmd
-		}
 		return m, nil
 
 	case "space":
@@ -1392,6 +1379,35 @@ func docsContentDims(width, barHeight int) (w, h int) {
 	return
 }
 
+// paneRows returns the left column's row boundaries: the composer occupies
+// [0, composerH), the description/docs bar [composerH, inputsTop), the inputs
+// box [inputsTop, bottom), and the command bar starts at bottom. View(),
+// layoutViewports() and mouse hit-testing all read from here so the drawn
+// layout and the clickable layout can't drift apart — they did, and clicks on
+// the inputs box landed on the docs pane.
+//
+// composerH is a pure function of bottom/maxInputsHt — it never looks at the
+// active inputs, so it never resizes during navigation or flag toggling. The
+// docs bar absorbs all the slack instead of leaving a gap.
+func (m mainModel) paneRows() (composerH, inputsTop, bottom int) {
+	bottom = m.height - 6 // 5 cmdBar + 1 helpBar
+	if bottom < 6 {
+		bottom = 6
+	}
+
+	inputsTop = bottom
+	if n := len(m.getActiveCombined()); n > 0 {
+		inputsTop = bottom - (n + 2) // + border
+	}
+
+	composerBudget := bottom - m.maxInputsHt
+	if composerBudget < 6 {
+		composerBudget = 6
+	}
+	composerH = composerBudget / 2
+	return
+}
+
 func (m *mainModel) layoutViewports() {
 	if m.outputEnlargedActive() {
 		height := m.height - 6 // 5 cmdBar + 1 helpBar
@@ -1414,35 +1430,19 @@ func (m *mainModel) layoutViewports() {
 	leftWidth, rightWidth := m.getLayoutWidths()
 
 	combined := m.getActiveCombined()
-	actualInputsHeight := 0
-	if len(combined) > 0 {
-		actualInputsHeight = len(combined) + 2
-	}
+	composerH, inputsTop, outputHeight := m.paneRows()
 
-	outputHeight := m.height - 6 // matches View(): 5 cmdBar + 1 helpBar
-	if outputHeight < 6 {
-		outputHeight = 6
-	}
 	paneContentWidth := rightWidth - 4 - scrollbarW - scrollbarGapW
 	paneContentHeight := outputHeight - 4 // title box (3) + content bottom border (1)
 
 	m.output.SetWidth(paneContentWidth)
 	m.output.SetHeight(paneContentHeight)
 
-	// composerH is a pure function of outputHeight/maxInputsHt (matches
-	// View()) — it never looks at combined, so it never resizes during
-	// navigation or flag toggling. descBarH absorbs all the slack instead
-	// of leaving a gap.
-	composerBudget := outputHeight - m.maxInputsHt
-	if composerBudget < 6 {
-		composerBudget = 6
-	}
-	m.paneH = composerBudget / 2
+	m.paneH = composerH
 
 	// Docs viewport: fits inside the description bar's content box (title
 	// box + border consume 3 rows, handled by docsContentDims).
-	descBarH := outputHeight - m.paneH - actualInputsHeight
-	docsW, docsH := docsContentDims(leftWidth, descBarH)
+	docsW, docsH := docsContentDims(leftWidth, inputsTop-composerH)
 	m.docs.SetWidth(docsW)
 	m.docs.SetHeight(docsH)
 
@@ -1916,6 +1916,39 @@ func (m mainModel) getActiveCombined() []InputItem {
 	items = append(items, optionalFlags...)
 	items = append(items, optionalArgs...)
 	return items
+}
+
+// focusInput moves focus into the inputs box at row idx, blurring whichever
+// field was focused before. idx is clamped, so callers can hand it a raw row
+// number. Returns nil (and changes nothing) when there is nothing to fill in.
+func (m *mainModel) focusInput(idx int) tea.Cmd {
+	combined := m.getActiveCombined()
+	if len(combined) == 0 {
+		return nil
+	}
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= len(combined) {
+		idx = len(combined) - 1
+	}
+
+	if m.focusPane == focusInputs {
+		old := combined[min(m.focusedInputIdx, len(combined)-1)]
+		ti := m.getInput(old)
+		ti.Blur()
+		m.setInput(old, ti)
+	} else if m.focusPane <= focusFlags {
+		m.lastFocusPane = m.focusPane
+	}
+
+	m.focusPane = focusInputs
+	m.focusedInputIdx = idx
+	item := combined[idx]
+	ti := m.getInput(item)
+	cmd := ti.Focus()
+	m.setInput(item, ti)
+	return cmd
 }
 
 func (m mainModel) handleInputKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {

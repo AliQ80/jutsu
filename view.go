@@ -82,25 +82,9 @@ func (m mainModel) View() tea.View {
 	leftWidth, rightWidth := m.getLayoutWidths()
 
 	combined := m.getActiveCombined()
-	actualInputsHeight := 0
-	if len(combined) > 0 {
-		actualInputsHeight = len(combined) + 2
-	}
-
-	outputHeight := m.height - 6 // 5 cmdBar + 1 helpBar
-	if outputHeight < 6 {
-		outputHeight = 6
-	}
-
-	// composerH is a pure function of outputHeight/maxInputsHt — it never
-	// looks at combined, so it never resizes during navigation or flag
-	// toggling. descBarH absorbs all the slack instead of leaving a gap.
-	composerBudget := outputHeight - m.maxInputsHt
-	if composerBudget < 6 {
-		composerBudget = 6
-	}
-	composerH := composerBudget / 2
-	descBarH := outputHeight - composerH - actualInputsHeight
+	composerH, inputsTop, outputHeight := m.paneRows()
+	descBarH := inputsTop - composerH
+	actualInputsHeight := outputHeight - inputsTop
 
 	composerSection := m.renderLeftPane(composerH)
 	leftColumn := composerSection
@@ -575,10 +559,15 @@ func (m mainModel) renderHelpBar(width int) string {
 		if m.focusPane == focusFlags {
 			contextual = append(contextual, entry{"spc", "toggle"})
 		}
-		// getActiveInputs covers both command-flag and global-flag inputs.
-		if len(m.getActiveInputs()) > 0 {
-			contextual = append(contextual, entry{"i", "inputs"})
-		}
+	}
+
+	// "i" is a global key (see Update) — advertise it from every pane it works
+	// from. getActiveCombined covers positional args as well as command-flag
+	// and global-flag inputs, so a command whose only input is an arg still
+	// gets the hint.
+	if m.focusPane != focusInputs && !m.outputEnlarged && !m.docsEnlarged &&
+		len(m.getActiveCombined()) > 0 {
+		contextual = append(contextual, entry{"i", "inputs"})
 	}
 
 	render := func(e entry) string {
