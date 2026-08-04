@@ -71,6 +71,157 @@ type mainModel struct {
 
 	width  int
 	height int
+
+	// backdrop is a snapshot of the model taken the instant before a modal
+	// opens (global-options / host-key / auth). View() reflows it at the
+	// current width/height and overlays the modal on top, so the full app
+	// frame stays visible — frozen at its pre-modal state — behind the
+	// popup. nil outside of a modal.
+	backdrop *mainModel
+}
+
+// freezeBackdrop snapshots the current visual state for later use as the
+// modal backdrop. Call this before flipping a *ModalOpen flag, not after —
+// the snapshot must reflect the screen as it looked right before the modal
+// took over.
+//
+// A plain `snap := *m` struct copy is not enough: mainModel's slices/maps
+// (categories, globalFlags, inputs, argInputs, outputLines) are reference
+// types, so a shallow copy shares their backing arrays/maps with the live
+// model. Flag.Selected is mutated in place through those shared backing
+// arrays (see toggleFlagAt, restoreLastCmd), and inputs/argInputs are
+// mutated by reassigning map entries (see setInput) — both of which would
+// silently rewrite the "frozen" backdrop out from under the modal. Each of
+// those fields is deep-copied below so the snapshot is genuinely immutable
+// from the live model's perspective.
+func (m *mainModel) freezeBackdrop() {
+	snap := *m
+	snap.backdrop = nil // a frozen backdrop never carries its own backdrop
+
+	snap.categories = cloneCategories(m.categories)
+	snap.globalFlags = cloneFlags(m.globalFlags)
+	snap.inputs = cloneTextInputs(m.inputs)
+	snap.argInputs = cloneTextInputs(m.argInputs)
+
+	// outputLines is always reassigned wholesale rather than mutated in
+	// place, so sharing its backing array would be safe today — but a
+	// fresh copy costs nothing and removes the assumption entirely.
+	snap.outputLines = append([]string(nil), m.outputLines...)
+
+	m.backdrop = &snap
+}
+
+// cloneFlags deep-copies a []Flag so mutations to Selected (or anything
+// else) on the original slice can never be observed through the copy.
+// ConflictingFlags is left sharing its backing array since it's populated
+// once at load time and never mutated.
+func cloneFlags(fs []Flag) []Flag {
+	if fs == nil {
+		return nil
+	}
+	out := make([]Flag, len(fs))
+	copy(out, fs)
+	return out
+}
+
+// cloneArgs deep-copies a []Arg. Arg has no mutable fields, but a fresh
+// slice keeps the contract simple: nothing in a frozen snapshot shares a
+// backing array with the live model.
+func cloneArgs(as []Arg) []Arg {
+	if as == nil {
+		return nil
+	}
+	out := make([]Arg, len(as))
+	copy(out, as)
+	return out
+}
+
+// cloneSubCommands deep-copies a []SubCommand, including each entry's Args
+// and Flags slices.
+func cloneSubCommands(scs []SubCommand) []SubCommand {
+	if scs == nil {
+		return nil
+	}
+	out := make([]SubCommand, len(scs))
+	for i, sc := range scs {
+		sc.Args = cloneArgs(sc.Args)
+		sc.Flags = cloneFlags(sc.Flags)
+		out[i] = sc
+	}
+	return out
+}
+
+// cloneCommands deep-copies a []Command, including each entry's Args,
+// SubCmds, and Flags slices.
+func cloneCommands(cmds []Command) []Command {
+	if cmds == nil {
+		return nil
+	}
+	out := make([]Command, len(cmds))
+	for i, cmd := range cmds {
+		cmd.Args = cloneArgs(cmd.Args)
+		cmd.SubCmds = cloneSubCommands(cmd.SubCmds)
+		cmd.Flags = cloneFlags(cmd.Flags)
+		out[i] = cmd
+	}
+	return out
+}
+
+// cloneCategories deep-copies the entire category tree. Selected is toggled
+// in place on Flag entries nested arbitrarily deep inside it (Category ->
+// Command -> Flags, or Category -> Command -> SubCommand -> Flags), so
+// every level needs its own fresh slice.
+func cloneCategories(cats []Category) []Category {
+	if cats == nil {
+		return nil
+	}
+	out := make([]Category, len(cats))
+	for i, c := range cats {
+		c.Commands = cloneCommands(c.Commands)
+		out[i] = c
+	}
+	return out
+}
+
+// cloneTextInput returns an independent copy of a textinput.Model. Textinput
+// keeps its text in an unexported []rune buffer that some of its own mutating
+// methods (e.g. insertRunesFromUserInput's `head = append(head, r)`) can grow
+// in place, which — if the buffer's backing array were shared with a frozen
+// backdrop copy — could silently overwrite runes visible through the frozen
+// copy. Rebuilding via the public API avoids sharing that buffer at all.
+func cloneTextInput(t textinput.Model) textinput.Model {
+	clone := textinput.New()
+	clone.Prompt = t.Prompt
+	clone.Placeholder = t.Placeholder
+	clone.EchoMode = t.EchoMode
+	clone.EchoCharacter = t.EchoCharacter
+	clone.CharLimit = t.CharLimit
+	clone.KeyMap = t.KeyMap
+	clone.SetVirtualCursor(t.VirtualCursor())
+	clone.SetStyles(t.Styles())
+	clone.SetWidth(t.Width())
+	clone.SetValue(t.Value())
+	clone.SetCursor(t.Position())
+	if t.Focused() {
+		clone.Focus()
+	} else {
+		clone.Blur()
+	}
+	return clone
+}
+
+// cloneTextInputs deep-copies a map of textinput.Model, both so the map
+// itself is a distinct object (setInput reassigns entries in place on the
+// live map) and so no entry's rune buffer is shared with the live model.
+func cloneTextInputs(in map[string]textinput.Model) map[string]textinput.Model {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]textinput.Model, len(in))
+	for k, v := range in {
+		out[k] = cloneTextInput(v)
+	}
+	return out
 }
 
 // InputItem is a unified entry for the input pane — either a positional arg or a flag input.
@@ -187,6 +338,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Batch(m.spinner.Tick, fetchHostKey(msg.cmdStr))
 			case isAuthFailure(msg.output):
 				// Credentials needed: offer the guided terminal handoff.
+				m.freezeBackdrop()
 				m.authModalOpen = true
 				m.authModalCmd = msg.cmdStr
 				return m, nil
@@ -220,11 +372,13 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			// Couldn't scan/resolve the host key — fall back to the guided
 			// terminal handoff so real ssh can prompt.
+			m.freezeBackdrop()
 			m.authModalOpen = true
 			m.authModalCmd = msg.pushCmd
 			return m, nil
 		}
 		m.hostKeyPrompt = msg
+		m.freezeBackdrop()
 		m.hostKeyModalOpen = true
 		return m, nil
 
@@ -290,7 +444,10 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.MouseWheelMsg:
-		if m.globalFlagsModalOpen || m.hostKeyModalOpen || m.authModalOpen {
+		if m.globalFlagsModalOpen {
+			return m.handleGlobalFlagsModalMouse(msg)
+		}
+		if m.hostKeyModalOpen || m.authModalOpen {
 			return m, nil
 		}
 		if m.outputEnlargedActive() {
@@ -336,7 +493,10 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.MouseClickMsg:
-		if m.globalFlagsModalOpen || m.hostKeyModalOpen || m.authModalOpen {
+		if m.globalFlagsModalOpen {
+			return m.handleGlobalFlagsModalClick(msg)
+		}
+		if m.hostKeyModalOpen || m.authModalOpen {
 			return m, nil
 		}
 		if msg.Button != tea.MouseLeft {
@@ -448,6 +608,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "g":
 			if m.focusPane != focusInputs {
+				m.freezeBackdrop()
 				m.globalFlagsModalOpen = true
 				m.globalModalDocsFocus = false // always open on the checklist
 				m.refreshGlobalDocs()
@@ -709,10 +870,12 @@ func (m mainModel) handleHostKeyModalKeys(msg tea.KeyPressMsg) (tea.Model, tea.C
 	case "y", "enter":
 		p := m.hostKeyPrompt
 		m.hostKeyModalOpen = false
+		m.backdrop = nil
 		m.running = true
 		return m, tea.Batch(m.spinner.Tick, addKnownHost(p.keyscanLines, p.pushCmd))
 	case "n", "esc", "q", "ctrl+c":
 		m.hostKeyModalOpen = false
+		m.backdrop = nil
 		// Surface the original failure so the user sees why nothing happened.
 		lines := commandEchoLines(m.hostKeyPrompt.pushCmd)
 		lines = append(lines, "Host key not trusted — push canceled.")
@@ -731,10 +894,12 @@ func (m mainModel) handleAuthModalKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 	case "enter":
 		cmd := m.authModalCmd
 		m.authModalOpen = false
+		m.backdrop = nil
 		m.running = true
 		return m, executeHandoff(cmd, true) // plain handoff: a herdr split pane, else clear the screen and take over the terminal
 	case "n", "esc", "q", "ctrl+c":
 		m.authModalOpen = false
+		m.backdrop = nil
 		lines := commandEchoLines(m.authModalCmd)
 		lines = append(lines, "Canceled.")
 		m.outputLines = lines
@@ -757,6 +922,7 @@ func (m mainModel) handleGlobalFlagsModalKeys(msg tea.KeyPressMsg) (tea.Model, t
 		return m, tea.Quit
 	case "esc", "g":
 		m.globalFlagsModalOpen = false
+		m.backdrop = nil
 		m.cmdText, m.cmdTextLong = m.buildCommandStrings()
 		// Selections may have added/removed input-bar fields — resize now.
 		m.layoutViewports()
@@ -800,6 +966,70 @@ func (m mainModel) handleGlobalFlagsModalKeys(msg tea.KeyPressMsg) (tea.Model, t
 			m.globalDocs.SetYOffset(m.globalDocs.YOffset() - 1)
 		}
 	}
+	return m, nil
+}
+
+// globalModalPoint converts terminal coordinates into the global-options
+// modal's local coordinates. Events outside the modal are deliberately
+// ignored so they cannot interact with the frozen backdrop.
+func (m mainModel) globalModalPoint(x, y int) (int, int, bool) {
+	modal := m.renderGlobalFlagsModal()
+	modalW, modalH := lipgloss.Width(modal), lipgloss.Height(modal)
+	originX := (m.width - modalW) / 2
+	originY := (m.height - modalH) / 2
+	localX, localY := x-originX, y-originY
+	return localX, localY, localX >= 0 && localX < modalW && localY >= 0 && localY < modalH
+}
+
+func (m mainModel) handleGlobalFlagsModalMouse(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
+	localX, _, inside := m.globalModalPoint(msg.X, msg.Y)
+	if !inside {
+		return m, nil
+	}
+
+	if localX >= globalListW+4 {
+		m.globalModalDocsFocus = true
+		if msg.Button == tea.MouseWheelUp && m.globalDocs.YOffset() > 0 {
+			m.globalDocs.SetYOffset(m.globalDocs.YOffset() - 1)
+		} else if msg.Button == tea.MouseWheelDown {
+			m.globalDocs.SetYOffset(m.globalDocs.YOffset() + 1)
+		}
+		return m, nil
+	}
+
+	m.globalModalDocsFocus = false
+	if len(m.globalFlags) == 0 {
+		return m, nil
+	}
+	switch msg.Button {
+	case tea.MouseWheelUp:
+		m.globalFlagIdx = (m.globalFlagIdx - 1 + len(m.globalFlags)) % len(m.globalFlags)
+		m.refreshGlobalDocs()
+	case tea.MouseWheelDown:
+		m.globalFlagIdx = (m.globalFlagIdx + 1) % len(m.globalFlags)
+		m.refreshGlobalDocs()
+	}
+	return m, nil
+}
+
+func (m mainModel) handleGlobalFlagsModalClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
+	if msg.Button != tea.MouseLeft {
+		return m, nil
+	}
+	localX, _, inside := m.globalModalPoint(msg.X, msg.Y)
+	if !inside {
+		return m, nil
+	}
+
+	listPaneW := globalListW + 4
+	if localX >= listPaneW {
+		m.globalModalDocsFocus = true
+		return m, nil
+	}
+
+	// Any click in the checklist pane, including a flag row or empty space,
+	// only moves focus to that pane. Flag selection remains keyboard-driven.
+	m.globalModalDocsFocus = false
 	return m, nil
 }
 

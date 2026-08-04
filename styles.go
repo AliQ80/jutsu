@@ -218,6 +218,12 @@ var (
 			Background(colorBase).
 			Padding(1, 3)
 
+	modalFrameStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(colorPeach).
+			PaddingLeft(1).
+			PaddingRight(1)
+
 	// fingerprintStyle highlights the SHA256 fingerprint the user is verifying.
 	fingerprintStyle = lipgloss.NewStyle().
 				Foreground(colorSapphire)

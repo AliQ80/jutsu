@@ -3,10 +3,12 @@ package main
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // Fixed pane widths sized to their longest content (content + 4 for border/padding).
@@ -31,7 +33,7 @@ func (m mainModel) View() tea.View {
 	}
 
 	if m.globalFlagsModalOpen {
-		content := lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, m.renderGlobalFlagsModal())
+		content := m.renderOnBackdrop(m.renderGlobalFlagsModal())
 		v := tea.NewView(content)
 		v.AltScreen = true
 		v.MouseMode = tea.MouseModeCellMotion
@@ -39,29 +41,39 @@ func (m mainModel) View() tea.View {
 	}
 
 	if m.hostKeyModalOpen {
-		content := lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, m.renderHostKeyModal())
+		content := m.renderOnBackdrop(m.renderHostKeyModal())
 		v := tea.NewView(content)
 		v.AltScreen = true
 		return v
 	}
 
 	if m.authModalOpen {
-		content := lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, m.renderAuthModal())
+		content := m.renderOnBackdrop(m.renderAuthModal())
 		v := tea.NewView(content)
 		v.AltScreen = true
 		return v
 	}
 
+	content := m.renderContentFrame()
+	v := tea.NewView(content)
+	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
+	return v
+}
+
+// renderContentFrame selects between the output-enlarged, docs-enlarged, and
+// ordinary composer+output layouts based on m's enlarged-pane state. It's the
+// single source of truth for that selection, used both by the live View()
+// and by renderOnBackdrop() when reflowing the frozen pre-modal frame — so a
+// modal opened while a pane is enlarged shows that same enlarged layout
+// behind it instead of silently falling back to the ordinary frame.
+func (m mainModel) renderContentFrame() string {
 	if m.outputEnlargedActive() {
 		height := m.height - 6 // 5 cmdBar + 1 helpBar
 		rightPane := m.renderRightPane(m.width, height)
 		cmdBar := m.renderCommandBar(m.width)
 		helpBar := m.renderHelpBar(m.width)
-		content := lipgloss.JoinVertical(lipgloss.Left, rightPane, cmdBar, helpBar)
-		v := tea.NewView(content)
-		v.AltScreen = true
-		v.MouseMode = tea.MouseModeCellMotion
-		return v
+		return lipgloss.JoinVertical(lipgloss.Left, rightPane, cmdBar, helpBar)
 	}
 
 	if m.docsEnlargedActive() {
@@ -72,13 +84,16 @@ func (m mainModel) View() tea.View {
 		docsPane := m.renderDescriptionBar(m.width, height)
 		cmdBar := m.renderCommandBar(m.width)
 		helpBar := m.renderHelpBar(m.width)
-		content := lipgloss.JoinVertical(lipgloss.Left, docsPane, cmdBar, helpBar)
-		v := tea.NewView(content)
-		v.AltScreen = true
-		v.MouseMode = tea.MouseModeCellMotion
-		return v
+		return lipgloss.JoinVertical(lipgloss.Left, docsPane, cmdBar, helpBar)
 	}
 
+	return m.renderMainFrame()
+}
+
+// renderMainFrame renders the ordinary (non-enlarged, non-modal) composer +
+// output + command bar + help bar frame. It's one of renderContentFrame's
+// layout choices, used for both the live view and the modal backdrop.
+func (m mainModel) renderMainFrame() string {
 	leftWidth, rightWidth := m.getLayoutWidths()
 
 	combined := m.getActiveCombined()
@@ -104,11 +119,173 @@ func (m mainModel) View() tea.View {
 	helpBar := m.renderHelpBar(m.width)
 
 	topSection = strings.TrimRight(topSection, "\n")
-	content := lipgloss.JoinVertical(lipgloss.Left, topSection, cmdBar, helpBar)
-	v := tea.NewView(content)
-	v.AltScreen = true
-	v.MouseMode = tea.MouseModeCellMotion
-	return v
+	return lipgloss.JoinVertical(lipgloss.Left, topSection, cmdBar, helpBar)
+}
+
+// renderOnBackdrop centers modal on top of the frozen pre-modal app frame
+// (m.backdrop), reflowed at the current terminal size. Falling back to a live
+// render if no snapshot was captured keeps this safe to call unconditionally.
+func (m mainModel) renderOnBackdrop(modal string) string {
+	frame := m
+	if m.backdrop != nil {
+		frame = *m.backdrop
+		frame.width, frame.height = m.width, m.height
+		frame.layoutViewports()
+	}
+	bg := dimBackdrop(frame.renderContentFrame())
+
+	modalW, modalH := lipgloss.Width(modal), lipgloss.Height(modal)
+	x := (m.width - modalW) / 2
+	y := (m.height - modalH) / 2
+	return overlay(bg, modal, x, y)
+}
+
+// dimBackdrop preserves the app's existing ANSI styling while muting its
+// truecolor foreground/background values toward the base background. This
+// keeps the backdrop recognizable without allowing its colors to compete with
+// the modal. Non-truecolor sequences are left intact for terminal fallback.
+func dimBackdrop(s string) string {
+	var out strings.Builder
+	foregroundSet := false
+	for i := 0; i < len(s); {
+		if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
+			end := i + 2
+			for end < len(s) && (s[end] < '@' || s[end] > '~') {
+				end++
+			}
+			if end < len(s) {
+				seq := s[i : end+1]
+				if s[end] == 'm' {
+					seq = dimSGR(seq)
+					foregroundSet = updateForegroundState(seq, foregroundSet)
+				}
+				out.WriteString(seq)
+				i = end + 1
+				continue
+			}
+		}
+
+		start := i
+		for i < len(s) && s[i] != '\x1b' {
+			i++
+		}
+		if start == i {
+			out.WriteByte(s[i])
+			i++
+			continue
+		}
+		text := s[start:i]
+		if foregroundSet {
+			out.WriteString(text)
+		} else {
+			out.WriteString("\x1b[38;2;108;112;134m")
+			out.WriteString(text)
+			out.WriteString("\x1b[39m")
+		}
+	}
+	return out.String()
+}
+
+func updateForegroundState(seq string, foregroundSet bool) bool {
+	parts := strings.Split(seq[2:len(seq)-1], ";")
+	for _, part := range parts {
+		if part == "" {
+			foregroundSet = false
+			continue
+		}
+		code, err := strconv.Atoi(part)
+		if err != nil {
+			continue
+		}
+		switch {
+		case code == 0 || code == 39:
+			foregroundSet = false
+		case code == 38 || code >= 30 && code <= 37 || code >= 90 && code <= 97:
+			foregroundSet = true
+		}
+	}
+	return foregroundSet
+}
+
+func dimSGR(seq string) string {
+	parts := strings.Split(seq[2:len(seq)-1], ";")
+	for i := 0; i+4 < len(parts); i++ {
+		if parts[i] != "38" && parts[i] != "48" || parts[i+1] != "2" {
+			continue
+		}
+		r, errR := strconv.Atoi(parts[i+2])
+		g, errG := strconv.Atoi(parts[i+3])
+		b, errB := strconv.Atoi(parts[i+4])
+		if errR != nil || errG != nil || errB != nil {
+			continue
+		}
+		parts[i+2] = strconv.Itoa(dimColorChannel(r))
+		parts[i+3] = strconv.Itoa(dimColorChannel(g))
+		parts[i+4] = strconv.Itoa(dimColorChannel(b))
+		i += 4
+	}
+	return "\x1b[" + strings.Join(parts, ";") + "m"
+}
+
+func dimColorChannel(channel int) int {
+	const dimFactor = 0.45
+	const base = 30
+	return int(float64(base) + float64(channel-base)*dimFactor)
+}
+
+// overlay composites fg on top of bg at the given top-left cell coordinates.
+// It's ANSI-aware: each fg line replaces only the columns of the matching bg
+// line that it covers, leaving the rest of that line's content and styling
+// untouched, so the frozen backdrop shows through around the modal box.
+//
+// x/y may be negative and fg may be larger than bg in either dimension (an
+// oversized modal, or one nudged/measured past the terminal edge) — every
+// case is clipped to bg's actual bounds rather than assumed in-range, so a
+// caller's arithmetic mistake degrades to a clipped modal instead of a
+// panic or corrupted line.
+func overlay(bg, fg string, x, y int) string {
+	bgLines := strings.Split(bg, "\n")
+	fgLines := strings.Split(fg, "\n")
+
+	for i, fgLine := range fgLines {
+		row := y + i
+		if row < 0 || row >= len(bgLines) {
+			continue // this fg row falls above or below the visible bg entirely
+		}
+
+		fgW := lipgloss.Width(fgLine)
+		col := x
+
+		// Clip a line that starts left of column 0 (negative x, or a modal
+		// wider than the terminal centered with a negative offset).
+		if col < 0 {
+			if -col >= fgW {
+				continue // fully off the left edge
+			}
+			fgLine = ansi.Cut(fgLine, -col, fgW)
+			fgW = lipgloss.Width(fgLine)
+			col = 0
+		}
+
+		bgLine := bgLines[row]
+		bgW := lipgloss.Width(bgLine)
+		if col >= bgW {
+			continue // starts at/past the right edge, nothing to composite
+		}
+
+		// Clip the right edge for an oversized modal or one that runs past
+		// bg's width. ansi.Cut is grapheme/wide-character aware, so this
+		// never splits a double-width cell (e.g. wide Unicode) in half.
+		if col+fgW > bgW {
+			fgLine = ansi.Cut(fgLine, 0, bgW-col)
+			fgW = bgW - col
+		}
+
+		left := ansi.Cut(bgLine, 0, col)
+		right := ansi.Cut(bgLine, col+fgW, bgW)
+		bgLines[row] = left + fgLine + right
+	}
+	return strings.Join(bgLines, "\n")
 }
 
 func hasRequiredArgs(args []Arg) bool {
@@ -831,9 +1008,10 @@ func (m mainModel) renderGlobalFlagsModal() string {
 	}
 	footer = lipgloss.PlaceHorizontal(listPaneW+docsPaneW, lipgloss.Center, footer)
 
-	return lipgloss.JoinVertical(lipgloss.Left,
+	content := lipgloss.JoinVertical(lipgloss.Left,
 		lipgloss.JoinHorizontal(lipgloss.Top, listPane, docsPane),
 		"",
 		footer,
 	)
+	return modalFrameStyle.Render(content)
 }
