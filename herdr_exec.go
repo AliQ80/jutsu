@@ -38,8 +38,8 @@ func inHerdr() bool {
 }
 
 var herdrMux = mux{
-	// Nothing to add: `wait output` blocks on the sentinel the shared script
-	// already prints.
+	// Nothing to add: `pane wait-output` blocks on the sentinel the shared
+	// script already prints.
 	notify: func(string) string { return "" },
 	open:   openHerdrTerminal,
 }
@@ -87,7 +87,7 @@ func openHerdrTerminal(script string, plain bool) (*muxTerm, error) {
 
 	return &muxTerm{
 		wait: func() error {
-			_, err := herdrJSON("wait", "output", pane,
+			_, err := herdrJSON("pane", "wait-output", pane,
 				"--match", muxSentinel, "--source", "recent", "--timeout", herdrWaitTimeoutMs)
 			return err
 		},

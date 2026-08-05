@@ -141,14 +141,21 @@ func executeInMux(cmdStr string, plain bool) tea.Cmd {
 		}
 
 		// Blocks for as long as the command runs — an editor session can
-		// legitimately last hours. If it gives up (or the user closed the
-		// terminal themselves) the terminal is left alone rather than killed.
-		if err := term.wait(); err != nil {
-			return execInteractiveResultMsg{cmdStr: cmdStr, err: fmt.Errorf("lost track of the handoff terminal: %w", err)}
-		}
+		// legitimately last hours. A wait error (herdr/tmux lost track of the
+		// pane, or the wait call itself failed) still gets a best-effort
+		// read+dispose below: whatever made it into the transcript is more
+		// useful than nothing, and leaving the terminal orphaned would only
+		// compound the problem. Both happen before the deferred RemoveAll so
+		// the wrapper script is still on disk for anything read/dispose need
+		// from it (e.g. trimPaneTranscript matching the script path).
+		waitErr := term.wait()
 
 		output := term.read()
 		term.dispose()
+
+		if waitErr != nil {
+			return execInteractiveResultMsg{cmdStr: cmdStr, output: output, err: fmt.Errorf("lost track of the handoff terminal: %w", waitErr)}
+		}
 
 		var runErr error
 		if code, err := os.ReadFile(exitFile); err != nil {
