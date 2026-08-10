@@ -222,13 +222,15 @@ func loadCategories() []Category {
 						},
 						{
 							Summary: "Search for content in files", Name: "search",
-							Description: "Search for content in files\n\nLists files containing the specified pattern.\n\nThis is an early version of the command. It only supports glob matching for now, it doesn't search files concurrently, and it doesn't indicate where in the file the match was found.",
+							Description: "Search for content in files\n\nPrints each line that matches the specified pattern, prefixed by the file path. Use `--name-only` to print only the file paths.\n\nThis is an early version of the command. It does not search files concurrently.",
 							Args: []Arg{
 								{Name: "FILESETS", Description: "Only search files matching these prefixes (instead of all files)", Variadic: true},
 							},
 							Flags: []Flag{
 								{Name: "pattern", Description: "The pattern to search for in a single line\n\nIt is a [string pattern syntax] like `kind:pattern`.  The kind defaults to regex when omitted.\n\nIf it is a glob pattern, the whole line must match the pattern, so you may want to pass something like `--pattern 'glob:*foo*'`.\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "--pattern", RequiresInput: true, Mandatory: true, Selected: true, InputType: "PATTERN"},
 								{Name: "revision", Description: "The revision to search files in\n\nDefault value: `@`", Value: "-r", RequiresInput: true, InputType: "REVSET"},
+								{Name: "name-only", Description: "Print only the paths of files that contain a match, not the matched lines", Value: "--name-only"},
+								{Name: "line-number", Description: "Prefix each matched line with its 1-based line number within the file", Value: "-n"},
 							},
 						},
 					},
@@ -464,13 +466,15 @@ func loadCategories() []Category {
 				},
 				{
 					Name:        "absorb",
-					Description: "Move changes from a revision into the stack of mutable revisions\n\nThis command splits changes in the source revision and moves each change to the closest mutable ancestor where the corresponding lines were modified last. If the destination revision cannot be determined unambiguously, the change will be left in the source revision.\n\nThe source revision will be abandoned if all changes are absorbed into the destination revisions, and if the source revision has no description.\n\nThe modification made by `jj absorb` can be reviewed by `jj op show -p`.",
+					Description: "Move changes from a revision into the stack of mutable revisions\n\nThis command splits changes in the source revision and moves each change to the closest mutable ancestor where the corresponding lines were modified last. If the destination revision cannot be determined unambiguously, the change will be left in the source revision.\n\nWith the `--interactive` option, only the selected changes will be considered for absorption. This allows picking specific hunks to absorb (which may then be distributed across multiple ancestors). The `--tool` option can be used to select a different diff editor.\n\nThe source revision will be abandoned if all changes are absorbed into the destination revisions, and if the source revision has no description.\n\nThe modification made by `jj absorb` can be reviewed by `jj op show -p`.",
 					Args: []Arg{
 						{Name: "FILESETS", Description: "Move only changes to these paths (instead of all paths)", Variadic: true},
 					},
 					Flags: []Flag{
 						{Name: "from", Description: "Source revision to absorb from\n\nDefault value: `@`", Value: "-f", RequiresInput: true, InputType: "REVSET"},
 						{Name: "into", Description: "Destination revisions to absorb into\n\nOnly ancestors of the source revision will be considered.\n\nDefault value: `mutable()`", Value: "-t", Alias: "to", RequiresInput: true, InputType: "REVSETS"},
+						{Name: "interactive", Description: "Interactively choose which parts to absorb", Value: "-i", Interactive: true},
+						{Name: "tool", Description: "Specify diff editor to be used (implies --interactive)", Value: "--tool", RequiresInput: true, InputType: "TOOL", Interactive: true},
 					},
 				},
 				{
@@ -542,31 +546,26 @@ func loadCategories() []Category {
 								{Name: "remote", Description: "The remote to fetch from (only named remotes are supported, can be repeated)\n\nBy default, the specified pattern matches remote names with glob syntax, e.g. `--remote '*'`. You can also use other [string pattern syntax].\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "--remote", RequiresInput: true, ConflictingFlags: []string{"--all-remotes"}, InputType: "REMOTE"},
 								{Name: "all-remotes", Description: "Fetch from all remotes", Value: "--all-remotes", ConflictingFlags: []string{"--remote"}},
 								{Name: "branch", Description: "Name of the branch to fetch (can be repeated)\n\nBy default, the specified pattern matches branch names with glob syntax, but only `*` is expanded. Other wildcard characters such as `?` are *not* supported. Patterns can be repeated or combined with [logical operators] to specify multiple branches, but only union and negative intersection are supported.\n\nExamples: `push-*`, `(push-* | foo/*) ~ foo/unwanted`\n\n[logical operators]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "--branch", RequiresInput: true, InputType: "BRANCH"},
-								// Hidden/undocumented option, not listed in `jj git fetch --help`.
-								// Confirmed to work manually (exact tag name only — repeat/pattern behavior unverified).
-								// See https://github.com/jj-vcs/jj/discussions/9455#discussioncomment-16858209
-								{Name: "tag", Description: "Name of the tag to fetch", Value: "--tag", RequiresInput: true, InputType: "TAG"},
-								{Name: "tracked", Description: "Fetch only tracked bookmarks\n\nThis fetches only bookmarks that are already tracked from the specified remote(s).", Value: "--tracked"},
+								{Name: "tag", Description: "Fetch only some of the tags (can be repeated)\n\nBy default, the specified pattern matches tag names with glob syntax, but only `*` is expanded. Other wildcard characters such as `?` are *not* supported. Patterns can be repeated or combined with [logical operators] to specify multiple tags, but only union and negative intersection are supported.\n\n[logical operators]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "--tag", RequiresInput: true, InputType: "TAG"},
+								{Name: "tracked", Description: "Fetch only tracked bookmarks and tags\n\nThis fetches only bookmarks and tags that are already tracked from the specified remote(s).", Value: "--tracked"},
 							},
 						},
 						{
 							Summary: "Push to a Git remote", Name: "push",
-							Description: "Push to a Git remote\n\nBy default, pushes tracking bookmarks pointing to `remote_bookmarks(remote=<remote>)..@`. Use `--bookmark` to push specific bookmarks. Use `--all` to push all bookmarks. Use `--change` to generate bookmark names based on the change IDs of specific commits.\n\nWhen pushing a bookmark, the command pushes all commits in the range from the remote's current position up to and including the bookmark's target commit. Any descendant commits beyond the bookmark are not pushed.\n\nIf the local bookmark has changed from the last fetch, push will update the remote bookmark to the new position after passing safety checks. This is similar to `git push --force-with-lease` - the remote is updated only if its current state matches what Jujutsu last fetched.\n\nUnlike in Git, the remote to push to is not derived from the tracked remote bookmarks. Use `--remote` to select the remote Git repository by name. There is no option to push to multiple remotes.\n\nBefore the command actually moves, creates, or deletes a remote bookmark, it makes several [safety checks]. If there is a problem, you may need to run `jj git fetch --remote <remote name>` and/or resolve some [bookmark conflicts].\n\n[safety checks]: https://docs.jj-vcs.dev/latest/bookmarks/#pushing-bookmarks-safety-checks\n\n[bookmark conflicts]: https://docs.jj-vcs.dev/latest/bookmarks/#conflicts",
+							Description: "Push to a Git remote\n\nBy default, pushes tracking bookmarks and tags pointing to `remote_bookmarks(remote=<remote>)..@`. Use `--bookmark`/`--tag` to push specific bookmarks or tags. Use `--all` to push all bookmarks and tags. Use `--change` to generate bookmark names based on the change IDs of specific commits.\n\nWhen pushing a bookmark or tag, the command pushes all commits in the range from the remote's current position up to and including its target commit. Any descendant commits beyond the reference are not pushed.\n\nIf the local reference has changed from the last fetch, push will update the remote reference to the new position after passing safety checks. This is similar to `git push --force-with-lease` - the remote is updated only if its current state matches what Jujutsu last fetched.\n\nUnlike in Git, the remote to push to is not derived from the tracked remote bookmarks. Use `--remote` to select the remote Git repository by name. There is no option to push to multiple remotes.\n\nBefore the command actually moves, creates, or deletes a remote bookmark, it makes several [safety checks]. If there is a problem, you may need to run `jj git fetch --remote <remote name>` and/or resolve some [bookmark conflicts].\n\n[safety checks]: https://docs.jj-vcs.dev/latest/bookmarks/#pushing-bookmarks-safety-checks\n\n[bookmark conflicts]: https://docs.jj-vcs.dev/latest/bookmarks/#conflicts",
 							Flags: []Flag{
 								{Name: "bookmark", Description: "Push only this bookmark, or bookmarks matching a pattern (can be repeated)\n\nIf a bookmark isn't tracking anything yet, the remote bookmark will be tracked automatically.\n\nBy default, the specified pattern matches bookmark names with glob syntax. You can also use other [string pattern syntax].\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "--bookmark", RequiresInput: true, InputType: "BOOKMARK"},
 								{Name: "remote", Description: "The remote to push to (only named remotes are supported)\n\nThis defaults to the `git.push` setting. If that is not configured, and if there are multiple remotes, the remote named \"origin\" will be used.", Value: "--remote", RequiresInput: true, InputType: "REMOTE"},
-								{Name: "revision", Description: "Push bookmarks pointing to these commits (can be repeated)", Value: "-r", RequiresInput: true, InputType: "REVSETS"},
+								{Name: "revision", Description: "Push bookmarks and tags pointing to these commits (can be repeated)", Value: "-r", RequiresInput: true, InputType: "REVSETS"},
 								{Name: "change", Description: "Push this commit by creating a bookmark (can be repeated)\n\nThe created bookmark will be tracked automatically. Use the `templates.git_push_bookmark` setting to customize the generated bookmark name. The default is `\"push-\" ++ change_id.short()`.", Value: "-c", RequiresInput: true, InputType: "REVSETS"},
-								// Hidden/undocumented option, not listed in `jj git push --help`.
-								// Confirmed to work manually (exact tag name only — repeat/pattern behavior unverified).
-								// See https://github.com/jj-vcs/jj/discussions/9455#discussioncomment-16858209
-								{Name: "tag", Description: "Name of the tag to push", Value: "--tag", RequiresInput: true, InputType: "TAG"},
-								{Name: "all", Description: "Push all bookmarks (including new bookmarks)", Value: "--all"},
-								{Name: "tracked", Description: "Push all tracked bookmarks\n\nThis usually means that the bookmark was already pushed to or fetched from the [relevant remote].\n\n[relevant remote]: https://docs.jj-vcs.dev/latest/bookmarks#remotes-and-tracked-bookmarks", Value: "--tracked"},
+								{Name: "tag", Description: "Push only this tag, or tags matching a pattern (can be repeated)\n\nIf a tag isn't tracking anything yet, the remote tag will be tracked automatically.\n\nBy default, the specified pattern matches tag names with glob syntax. You can also use other [string pattern syntax].\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "--tag", RequiresInput: true, InputType: "TAG"},
+								{Name: "all", Description: "Push all bookmarks and tags (including new ones)", Value: "--all"},
+								{Name: "tracked", Description: "Push all tracked bookmarks and tags\n\nThis usually means that the bookmark or tag was already pushed to or fetched from the [relevant remote].\n\n[relevant remote]: https://docs.jj-vcs.dev/latest/bookmarks#remotes-and-tracked-bookmarks", Value: "--tracked"},
 								{Name: "named", Description: "Specify a new bookmark name and a revision to push under that name, e.g. '--named myfeature=@'\n\nAutomatically tracks the bookmark if it is new.", Value: "--named", RequiresInput: true},
-								{Name: "deleted", Description: "Push all deleted bookmarks\n\nOnly tracked bookmarks can be successfully deleted on the remote. A warning will be printed if any untracked bookmarks on the remote correspond to missing local bookmarks.", Value: "--deleted"},
+								{Name: "deleted", Description: "Push all deleted bookmarks and tags\n\nOnly tracked bookmarks and tags can be successfully deleted on the remote. A warning will be printed if any untracked bookmarks or tags on the remote correspond to missing local bookmarks or tags.", Value: "--deleted"},
 								{Name: "allow-empty-description", Description: "Allow pushing commits with empty descriptions", Value: "--allow-empty-description"},
 								{Name: "allow-private", Description: "Allow pushing commits that are private\n\nThe set of private commits can be configured by the `git.private-commits` setting. The default is `none()`, meaning all commits are eligible to be pushed.", Value: "--allow-private"},
+								{Name: "allow-conflicts", Description: "Allow pushing commits that contain conflicts", Value: "--allow-conflicts"},
 								{Name: "dry-run", Description: "Only display what will change on the remote", Value: "--dry-run"},
 							},
 						},
@@ -603,12 +602,12 @@ func loadCategories() []Category {
 						},
 						{
 							Summary: "Update repo with changes made in the underlying Git repo", Name: "import",
-							Description: "Update repo with changes made in the underlying Git repo\n\nCommits that are no longer reachable from any branch in the Git repo will be considered abandoned in the Git repo, and will be abandoned in the jj repo to match the Git repo. Set `git.abandon-unreachable-commits` to `false` to disable this behavior.\n\nIf a working-copy commit gets abandoned, it will be given a new, empty commit. This is true in general; it is not specific to this command.\n\nThere is no need to run this command if you're in colocated workspace because the import happens automatically there.",
+							Description: "Update repo with changes made in the underlying Git repo\n\nCommits that are no longer reachable from any branch in the Git repo will be considered abandoned in the Git repo, and will be abandoned in the jj repo to match the Git repo. Set `git.abandon-unreachable-commits` to `false` to disable this behavior.\n\nIf a working-copy commit gets abandoned, it will be given a new, empty commit. This is true in general; it is not specific to this command.\n\nBy default, this command does nothing in colocated workspaces because the import happens automatically. Use `--ignore-working-copy` to forcibly import changes.",
 							Flags:       []Flag{},
 						},
 						{
 							Summary: "Update the underlying Git repo with changes made in the repo", Name: "export",
-							Description: "Update the underlying Git repo with changes made in the repo\n\nThere is no need to run this command if you're in colocated workspace because the export happens automatically there.",
+							Description: "Update the underlying Git repo with changes made in the repo\n\nBy default, this command does nothing in colocated workspaces because the export happens automatically. Use `--ignore-working-copy` to forcibly export changes.",
 							Flags:       []Flag{},
 						},
 					},
@@ -775,6 +774,26 @@ func loadCategories() []Category {
 								{Name: "NAMES", Description: "Tag names to delete\n\nBy default, the specified pattern matches tag names with glob syntax. You can also use other [string pattern syntax].\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Variadic: true, Required: true},
 							},
 							Flags: []Flag{},
+						},
+						{
+							Summary: "Start tracking given remote tags", Name: "track",
+							Description: "Start tracking given remote tags\n\nA tracked remote tag will be imported as a local tag of the same name. Changes to it will propagate to the existing local tag on future pulls.",
+							Args: []Arg{
+								{Name: "TAG[@REMOTE]", Description: "Tag name patterns or remote tag symbols to track\n\n`TAG` matches tag names using glob syntax by default. You can also use other [string pattern syntax].\n\n`TAG@REMOTE` resolves to a remote tag exactly.\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Variadic: true, Required: true},
+							},
+							Flags: []Flag{
+								{Name: "remote", Description: "Remote names to track\n\nBy default, the specified pattern matches remote names with glob syntax. You can also use other [string pattern syntax].\n\nIf no remote names are given, all remote tags matching the tag names will be tracked.\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "--remote", RequiresInput: true, InputType: "REMOTE"},
+							},
+						},
+						{
+							Summary: "Stop tracking given remote tags", Name: "untrack",
+							Description: "Stop tracking given remote tags\n\nAn untracked remote tag is just a pointer to the last-fetched remote tag. It won't be imported as a local tag on future pulls.",
+							Args: []Arg{
+								{Name: "TAG[@REMOTE]", Description: "Tag name patterns or remote tag symbols to untrack\n\n`TAG` matches tag names using glob syntax by default. You can also use other [string pattern syntax].\n\n`TAG@REMOTE` resolves to a remote tag exactly.\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Variadic: true, Required: true},
+							},
+							Flags: []Flag{
+								{Name: "remote", Description: "Remote names to untrack\n\nBy default, the specified pattern matches remote names with glob syntax. You can also use other [string pattern syntax].\n\nIf no remote names are given, all remote tags matching the tag names will be untracked.\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "--remote", RequiresInput: true, InputType: "REMOTE"},
+							},
 						},
 					},
 				},
@@ -960,7 +979,7 @@ func loadCategories() []Category {
 				},
 				{
 					Name:        "run",
-					Description: "Run a command across a set of revisions.\n\nChecks out each revision in an isolated working copy, runs the command, then amends the revision with the resulting working copy. By default, descendants are rebased on top of the amended revisions, propagating the diff. Use `--restore-descendants` to keep descendants' content unchanged instead.\n\nThe command is executed with the following environment variables set:\n\n- JJ_CHANGE_ID - JJ_COMMIT_ID - JJ_WORKSPACE_ROOT\n\n# Example\n\n  # Run pre-commit on your local work\n  $ jj run -j 4 -- pre-commit run .github/pre-commit.yaml",
+					Description: "Run a command across a set of revisions.\n\nChecks out each revision in an isolated working copy, runs the command, then amends the revision with the resulting working copy. By default, descendants are rebased on top of the amended revisions, propagating the diff. Use `--restore-descendants` to keep descendants' content unchanged instead, or `--ignore-changes` to run the command without rewriting any commits.\n\nThe command is executed with the following environment variables set:\n\n- JJ_CHANGE_ID - JJ_COMMIT_ID - JJ_WORKSPACE_ROOT\n\n### Example\n\n  # Run pre-commit on your local work\n  $ jj run -j 4 -- pre-commit run .github/pre-commit.yaml",
 					Args: []Arg{
 						{Name: "COMMAND", Description: "Command to run across all selected revisions", Required: true},
 						{Name: "ARGS", Description: "Arguments to pass to the command\n\nHint: Use a `--` separator to allow passing arguments starting with `-`. For example `jj run --revisions=... -- cargo build --release`.", Variadic: true},
@@ -971,6 +990,9 @@ func loadCategories() []Category {
 						{Name: "root", Description: "Run the command from the working-copy root in each commit instead of from the subdirectory `jj run` was invoked from", Value: "--root"},
 						{Name: "clean", Description: "Delete each working copy before running the command\n\nBy default `jj run` reuses working copies between invocations so build artifacts are preserved. With `--clean`, every commit starts from a freshly checked-out tree.", Value: "--clean"},
 						{Name: "restore-descendants", Description: "Preserve the content (not the diff) when rebasing descendants", Value: "--restore-descendants"},
+						{Name: "passthrough", Description: "Pass through stdout and stderr directly to the terminal\n\nThe command's stdout and stderr are connected directly to the terminal (instead of being captured), so programs that behave differently on a TTY (e.g. colored output, progress bars) work as expected. Stdin is not inherited. Only one job is allowed since parallel jobs would interleave their output.", Value: "--passthrough"},
+						{Name: "ignore-changes", Description: "Run the command without rewriting any commits.\n\nEach revision is checked out and the command is executed, but changes made to the working copy are discarded. Useful for read-only checks (tests, linters).\n\nThis option permits running on immutable commits without passing `--ignore-immutable`.", Value: "--ignore-changes"},
+						{Name: "ignore-errors", Description: "Continue with remaining revisions when a command's exit code indicates failure\n\nAny changes made by a failed command will not be saved, but changes from successful commands are still applied atomically at the end.\n\nThe exit code from any failed command will not impact the exit code of `jj run` itself.", Value: "--ignore-errors"},
 					},
 				},
 				{
@@ -1136,6 +1158,7 @@ func loadCategories() []Category {
 							Flags: []Flag{
 								{Name: "depth", Description: "Create a shallow clone of the given depth", Value: "--depth", RequiresInput: true, InputType: "DEPTH"},
 								{Name: "colocate", Description: "Colocate the Jujutsu repo with the git repo\n\nSpecifies that the `jj` repo should also be a valid `git` repo, allowing the use of both `jj` and `git` commands in the same directory.\n\nThe repository will contain a `.git` dir in the top-level. Regular Git tools will be able to operate on the repo.\n\n**This is the default**, and this option has no effect, unless the [git.colocate config] is set to `false`.\n\n[git.colocate config]: https://docs.jj-vcs.dev/latest/config/#default-colocation", Value: "--colocate"},
+								{Name: "tag", Description: "Fetch only some of the tags (can be repeated)\n\nBy default, the specified pattern matches tag names with glob syntax, but only `*` is expanded. Other wildcard characters such as `?` are *not* supported. Patterns can be repeated or combined with [logical operators] to specify multiple tags, but only union and negative intersection are supported.\n\n[logical operators]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "--tag", RequiresInput: true, InputType: "TAG"},
 							},
 						},
 						{

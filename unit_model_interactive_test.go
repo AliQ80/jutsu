@@ -142,6 +142,17 @@ func TestIsInteractiveInvocation(t *testing.T) {
 			focusCommand(t, m, "metaedit", "")
 			selectFlag(t, m, "--update-author", "")
 		}, false},
+		{"bare absorb is direct", func(t *testing.T, m *mainModel) {
+			focusCommand(t, m, "absorb", "")
+		}, false},
+		{"absorb -i is interactive", func(t *testing.T, m *mainModel) {
+			focusCommand(t, m, "absorb", "")
+			selectFlag(t, m, "-i", "")
+		}, true},
+		{"absorb --tool is interactive", func(t *testing.T, m *mainModel) {
+			focusCommand(t, m, "absorb", "")
+			selectFlag(t, m, "--tool", "meld")
+		}, true},
 	}
 
 	for _, tc := range cases {
