@@ -1,0 +1,36 @@
+---
+title: Jutsu
+description: A terminal UI command composer for the jj (Jujutsu) version control system.
+template: splash
+hero:
+  tagline: A keyboard-driven Bubble Tea TUI command composer for jj (Jujutsu).
+  actions:
+    - text: Get Started (Installation)
+      link: /jutsu/installation/
+      icon: right-arrow
+    - text: View Usage Guide
+      link: /jutsu/usage/
+      icon: document
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Discover Jutsu
+
+Jutsu is an interactive, multi-pane command composer for the `jj` (Jujutsu) VCS CLI, built using Go and Bubble Tea.
+
+<CardGrid stagger>
+	<Card title="Simple Setup" icon="rocket">
+		Read the [Installation Guide](/jutsu/installation/) to learn about quick installers, building from source, and troubleshooting terminal compatibility.
+	</Card>
+	<Card title="Explore the Interface" icon="open-book">
+		Read the [Usage Guide](/jutsu/usage/) to understand focus states, command categories, active flag indicators, and the docs and output panes.
+	</Card>
+	<Card title="Composing a Command" icon="setting">
+		Follow the [Composing a Command](/jutsu/workflows/composing-a-command/) tutorial to see how selections, subcommands, and flags are compiled in real-time.
+	</Card>
+	<Card title="Multiplexer & TTY Handoffs" icon="external">
+		Dive into the [Interactive & Remote Operations](/jutsu/workflows/interactive-and-remote-operations/) guide to see how Jutsu handles full-screen editors and secure prompts.
+	</Card>
+</CardGrid>

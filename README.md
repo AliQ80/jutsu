@@ -5,7 +5,7 @@ A sleek, modern Terminal User Interface for composing and executing Jujutsu (`jj
 ![Jutsu TUI](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go&logoColor=white)
 ![License](https://img.shields.io/badge/license-GPLv3-blue?style=flat-square)
 
-![Jutsu hero](docs/images/hero.png)
+![Jutsu hero](legacy-docs/images/hero.png)
 
 ## 💭 Why Jutsu?
 
@@ -33,11 +33,15 @@ them, so you get faster with it, but never dependent on it.
 curl -fsSL https://raw.githubusercontent.com/AliQ80/jutsu/main/install.sh | sh
 ```
 
-See [docs/installation.md](docs/installation.md) for prerequisites, alternative installation methods, and troubleshooting.
+See the [installation guide](https://aliq80.github.io/jutsu/installation/) for prerequisites, alternative installation methods, and troubleshooting.
 
 ## Usage
 
-Launch `jutsu`, navigate the panes with `hjkl` or arrows to compose your command, then `Tab` and `Enter` to run it. See [docs/usage.md](docs/usage.md) for the full keybinding reference.
+Launch `jutsu`, navigate the panes with `hjkl` or arrows to compose your command, then `Tab` and `Enter` to run it. See the [usage guide](https://aliq80.github.io/jutsu/usage/) for the full keybinding reference.
+
+## 📚 Documentation
+
+Full documentation, including installation, usage, and interface guides, is published at **[aliq80.github.io/jutsu](https://aliq80.github.io/jutsu/)**.
 
 ## License
 
