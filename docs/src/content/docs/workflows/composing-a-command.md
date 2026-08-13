@@ -5,6 +5,8 @@ description: A step-by-step guide on how to navigate, select options, and dynami
 
 Jutsu's core strength is its ability to let you compose complex `jj` commands interactively, with safety and documentation guiding every choice. This tutorial walks you through the step-by-step process of building a command from scratch and highlights key shortcuts that speed up your daily version control workflows.
 
+For the general mechanics referenced below, see the canonical **[Commands](/jutsu/usage/commands/)** and **[Flags](/jutsu/usage/flags/)** pages.
+
 ---
 
 ## The Workflow Loop
@@ -28,9 +30,9 @@ Let's look at each phase in detail.
 
 ---
 
-## Step-by-Step Walkthrough: Viewing a Branch Log
+## Step-by-Step Walkthrough: Viewing a Filtered Log
 
-Let's say you want to view a formatted log of a specific branch.
+Let's say you want to view the log filtered down to a specific revset instead of the default view.
 
 ### Step 1: Select the Category
 1. When Jutsu launches, your focus begins in the **Categories** pane (far-left column).
@@ -47,11 +49,11 @@ For `jj log`, there are no subcommands.
 1. If you press `l` (or `→`), Jutsu detects that the `Sub-cmds` column is empty and **automatically skips** to the next available column—the **Flags** column.
 2. This automatic column skipping prevents unnecessary keystrokes and keeps your focus moving efficiently.
 
-### Step 4: Toggle Flags
-Now, in the **Flags Pane**, you'll see a list of flags specific to `jj log`.
-1. Scroll down using `j`/`k` to find the `--branch` (or `-b`) flag.
-2. Press `Space` to toggle it.
-3. The flag is highlighted in **peach** (active) with an asterisk next to it, and the dynamic **Command Bar** at the very bottom updates in real-time to append `--branch`.
+### Step 4: Toggle a Flag That Requires a Value
+Now, in the **Flags Pane**, you'll see a list of flags specific to `jj log`. See [Flags](/jutsu/usage/flags/) for the full set of flag states and indicators.
+1. Scroll down using `j`/`k` to find the `revisions` flag (`-r`).
+2. Press `Space` to toggle it. The flag is highlighted in **peach** (active), and the dynamic **Command Bar** at the very bottom updates in real-time to append `-r`.
+3. Because `-r` requires a value, press `i` to jump into the **Inputs Pane** — see [Inputs](/jutsu/usage/inputs/) for details — and type a revset, e.g. `main`. The Command Bar updates to `jj log -r main`.
 
 :::tip[Active Memory]
 As you navigate between panes, your selected category, command, and toggled flags remain highlighted in **sapphire** (selected but unfocused) so you never lose track of your current configuration.

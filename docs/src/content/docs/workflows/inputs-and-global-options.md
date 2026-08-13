@@ -5,11 +5,13 @@ description: Master the inputs system, required arguments, and global option ove
 
 Many Jujutsu operations require dynamic parameters—such as target commit revisions, custom messages, file paths, or global repository overrides. Jutsu handles these variables through two distinct mechanisms: the **Inputs Pane** (for arguments and flag values) and the **Global Options Modal** (for flags that modify `jj`'s global behavior).
 
+For the general mechanics referenced below, see the canonical **[Inputs](/jutsu/usage/inputs/)** and **[Global Options](/jutsu/usage/global-options/)** pages. This tutorial focuses on a concrete scenario: targeting another repository with a global option while supplying a commit message.
+
 ---
 
 ## The Inputs Pane
 
-The **Inputs Pane** is a dynamic input tray that automatically slides open at the bottom of the composer when your composed command requires additional text parameters (e.g., a message for `jj describe` or a target revision for `jj rebase`).
+The **Inputs Pane** is a dynamic input tray that automatically slides open at the bottom of the composer when your composed command requires additional text parameters (e.g., a message for `jj describe` or a target revision for `jj rebase`). See [Inputs](/jutsu/usage/inputs/) for field navigation and validation details.
 
 ```
 ┌────────────────────────────────────────────────────────┐
@@ -18,31 +20,15 @@ The **Inputs Pane** is a dynamic input tray that automatically slides open at th
 └────────────────────────────────────────────────────────┘
 ```
 
-### Entering and Navigating Inputs
+### Applying an Input Value
 
-When a flag or command requiring a value is selected, press `i` from any pane to enter text-input mode:
-
-1.  **Direct Typing:** Once active, your keyboard focus shifts entirely to typing. The cursor flashes within the first active input field.
-2.  **Field Navigation:** 
-    *   Use `↑` / `↓` to move focus between different input fields (e.g., moving from a flag's value field to a positional argument field).
-    *   Press `Enter` to cycle down to the next field (wrapping back to the top field if you are on the last one). **Note:** Pressing `Enter` in the Inputs Pane does *not* execute the command; it is reserved for field switching.
-3.  **Applying Inputs:** Once finished, press `Tab` to validate your inputs and focus the Command Bar.
-4.  **Canceling / Backing Out:** Press `Esc` at any time to discard focus from the inputs and return to the main composer. Your text entries are preserved so you can jump back in easily.
-
-### Input Validation & Safety Flashes
-
-To prevent you from running incomplete commands that would error out in the shell, Jutsu enforces structural input validation:
-
-*   If a selected flag has `RequiresInput` enabled but you leave the field empty, attempting to navigate away to the Command Bar will trigger a **validation flash**.
-*   The entire Inputs Pane border will flash **bright red for 400 milliseconds**, and focus is forced to remain inside the Inputs Pane until you either fill in the required field or deselect the flag.
+When a flag or command requiring a value is selected, press `i` from any non-Inputs, non-enlarged view to enter text-input mode, type your value, then press `Tab` to validate your inputs and focus the Command Bar. If a required field is left empty, the Inputs Pane border flashes red — see [Inputs](/jutsu/usage/inputs/) for the full validation flash behavior.
 
 ---
 
 ## Global Options Modal
 
-Jujutsu's global options—such as `--repository <path>`, `--config <key=value>`, or `--at-operation <id>`—modify the environment of the command and must precede the subcommand (e.g., `jj --repository ../other log`).
-
-Because these options are distinct from command-specific flags, they reside in a specialized, dedicated modal.
+Jujutsu's global options—such as `--repository <path>`, `--config <key=value>`, or `--at-operation <id>`—modify the environment of the command and must precede the subcommand (e.g., `jj --repository ../other log`). See [Global Options](/jutsu/usage/global-options/) for the full modal mechanics.
 
 ```
 ┌────────────────────────────────────────────────────────┐
@@ -52,30 +38,19 @@ Because these options are distinct from command-specific flags, they reside in a
 └────────────────────────────────────────────────────────┘
 ```
 
-### Accessing and Navigating the Modal
+### Scenario: Targeting Another Repository
 
-*   **Open/Close:** Press `g` from any composer pane to toggle the modal. Pressing `g`, `Esc`, or `q` will close it and return you to your previous composer state.
-*   **Dual-Column Layout:** The modal is split into a **Checklist** on the left and full **Help Documentation** on the right.
-*   **Focus Switch:** Use `h` / `l` (or `←` / `→`) to toggle focus between the checklist and the help viewport.
-*   **Scrolling Docs:** Focus the right column with `l` and use `j` / `k` (or `↓` / `↑`) to scroll through long option help pages.
-*   **Toggling Options:** Highlight an option on the left column and press `Space` to activate/deactivate it.
+Suppose you want to describe the working-copy commit in a different repository checkout at `../other-repo`, rather than the one Jutsu was launched in:
 
-### Typing Global Values (The Multi-Value Flow)
+1. Press `g` to open the Global Options Modal, highlight `--repository`, and press `Space` to select it.
+2. Close the modal with `Esc` or `g` (pressing `q` here quits Jutsu entirely, not just the modal). Closing the modal returns you to your last composer pane — it does not automatically jump into the Inputs Pane.
+3. Press `i` yourself to enter the Inputs Pane, where a new field for `--repository` appears alongside the command's own inputs (e.g., the commit message for `jj describe`). Note that `g` cannot reopen the modal while you're focused in the Inputs Pane.
+4. Type `../other-repo` into the `--repository` field, and your message into the `Commit Message` field, then press `Tab` to move to the Command Bar.
+5. The Command Bar splices the global option before the subcommand: `jj --repository ../other-repo describe -m "..."`.
 
-If a global option takes a value (e.g., `--repository` requires a path), **you do not type it inside the modal**.
+### Visual Pinned Indicators
 
-Instead, follow this streamlined flow:
-1.  Open the modal (`g`), toggle `--repository` with `Space`, and close the modal (`g`).
-2.  Jutsu notices that an active option requires input and automatically redirects your cursor.
-3.  Press `i` to enter the Inputs Pane, where a new input field for `--repository` has been dynamically created alongside your command's normal inputs. This keeps all text values visible at once!
-
-### Visual Pinned Indicators and Command Splicing
-
-Once a global option is selected, Jutsu provides clear visual indicators to remind you that your environment is modified:
-
-1.  **Teal Pinned Rows (`◆`):** Active global options are pinned directly to the very top of the standard **Flags Pane** with a teal `◆` prefix. They stay visible even if you scroll down a long list of command flags.
-2.  **Spliced Command String:** Look at the Command Bar. Jutsu automatically splices active global options *before* the subcommand, matching `jj`'s precise command-line interface:
-    `jj --repository ../my-repo log` instead of `jj log --repository ../my-repo`.
+Once a global option is selected, Jutsu pins it to the top of the **Flags Pane** with a teal `◆` prefix so it stays visible even if you scroll down a long list of command flags — see [Global Options](/jutsu/usage/global-options/) for details.
 
 ---
 
@@ -83,4 +58,5 @@ Once a global option is selected, Jutsu provides clear visual indicators to remi
 
 With command composing, inputs, and global options mastered, explore how Jutsu safely manages heavy background processes, interactive terminal handoffs, and remote operations:
 
-*   👉 **[Interactive & Remote Operations](/jutsu/workflows/interactive-and-remote-operations/)**
+- 👉 **[Interactive & Remote Operations](/jutsu/workflows/interactive-and-remote-operations/)**
+- 👉 **[Running Commands](/jutsu/usage/execution/)**

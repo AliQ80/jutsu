@@ -15,9 +15,20 @@ export default defineConfig({
 			sidebar: [
 				{
 					label: 'Getting Started',
+					items: [{ label: 'Installation', slug: 'installation' }],
+				},
+				{
+					label: 'Usage',
 					items: [
-						{ label: 'Installation', slug: 'installation' },
-						{ label: 'Usage', slug: 'usage' },
+						{ label: 'Overview', slug: 'usage' },
+						{ label: 'Interface', slug: 'usage/interface' },
+						{ label: 'Navigation', slug: 'usage/navigation' },
+						{ label: 'Commands', slug: 'usage/commands' },
+						{ label: 'Flags', slug: 'usage/flags' },
+						{ label: 'Inputs', slug: 'usage/inputs' },
+						{ label: 'Global Options', slug: 'usage/global-options' },
+						{ label: 'Running Commands', slug: 'usage/execution' },
+						{ label: 'Output & Docs', slug: 'usage/output-and-docs' },
 					],
 				},
 				{

@@ -7,6 +7,8 @@ Working with version control often requires stepping outside a pure terminal UI�
 
 Jutsu handles these scenarios seamlessly using **TTY Handoffs**, **Multiplexer Splits**, and **Dynamic Prompts**. This tutorial explains how these features protect your workflow from freezing or hanging.
 
+For an overview of the three execution paths (background, standalone handoff, multiplexer handoff), see the canonical **[Running Commands](/jutsu/usage/execution/)** page. This tutorial walks through the standalone and multiplexer scenarios in more depth, plus remote credential prompts.
+
 ---
 
 ## Interactive Commands (TTY Handoffs)
@@ -48,7 +50,7 @@ If you run Jutsu inside **Tmux** or **Herdr**, the TUI doesn't need to suspend i
 
 ## Remote Operations & Secure Prompts
 
-Synchronizing with Git remotes via `jj git push` or `jj git fetch` usually runs in the background. If a remote operation needs credentials or verification, Jutsu triggers secure popups so your command never hangs indefinitely in the background.
+Synchronizing with Git remotes via `jj git push` or `jj git fetch` usually runs in the background. If a remote operation fails because it needs credentials or host verification, Jutsu first shows an in-TUI modal explaining that the command needs terminal input — the standalone or multiplexer handoff described below only happens after you confirm it; it does not open automatically the moment credentials are needed.
 
 ### 1. SSH Host Verification
 
@@ -67,13 +69,17 @@ If you are pushing to or fetching from a remote server for the first time, SSH r
 *   **One-Tap Save:** Pressing `y` automatically appends the host signature to your `~/.ssh/known_hosts` file and retries the remote operation instantly.
 *   **Security Guard:** If an SSH host key changes (indicating a potential security issue), Jutsu raises a strict warning and will never offer a one-tap trust override.
 
+:::caution[Verify the fingerprint yourself]
+Jutsu fetches the host's key with `ssh-keyscan`, which is not authenticated on its own — it simply reports whatever key the server currently presents, the same way it would to an attacker performing a man-in-the-middle attack. Before pressing `y`, verify the displayed `SHA256:` fingerprint against a trusted source (e.g., your hosting provider's published host-key fingerprints) rather than trusting the prompt by default.
+:::
+
 ### 2. Password and Passphrase Credentials
 
 When a remote HTTPS or SSH server requests a username, password, or key passphrase:
 
-*   **Prompt Detection:** Jutsu detects the authentication request and displays a prompt modal.
-*   **Standalone Flow:** Pressing `Enter` hands your active TTY over to the secure credential prompt. Once typed, control returns to Jutsu.
-*   **Multiplexer Flow:** Inside Tmux or Herdr, a **split pane** (~30% height) opens at the bottom of the screen to collect your credentials, leaving your main TUI layout untouched. The split pane is disposed of automatically once authentication succeeds.
+*   **Prompt Detection:** Jutsu detects the authentication request and displays a "continue in terminal" prompt modal — it waits for your confirmation rather than opening a terminal automatically.
+*   **Standalone Flow:** Pressing `Enter` confirms the prompt and hands your active TTY over to the secure credential prompt. Once typed, control returns to Jutsu. Pressing `n`/`Esc`/`q` cancels instead.
+*   **Multiplexer Flow:** Inside Tmux or Herdr, confirming with `Enter` opens a **split pane** (~30% height) at the bottom of the screen to collect your credentials, leaving your main TUI layout untouched. The split pane is disposed of automatically once authentication succeeds.
 
 ---
 
@@ -87,3 +93,10 @@ env -u TMUX -u HERDR_ENV jutsu
 ```
 
 This ensures that regardless of your complex terminal shell configuration, you can always commit, rebase, and write logs reliably.
+
+---
+
+## Related Topics
+
+- 👉 **[Running Commands](/jutsu/usage/execution/)** — the canonical explanation of background execution, standalone handoffs, and multiplexer handoffs.
+- 👉 **[Output & Docs](/jutsu/usage/output-and-docs/)** — where execution summaries and streamed output are displayed.
