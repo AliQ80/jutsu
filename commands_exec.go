@@ -36,6 +36,34 @@ func fetchJJVersion() tea.Cmd {
 	}
 }
 
+// latestTagMsg carries the latest tag name resolved from the current jj repo
+// (empty if jj is unavailable, the working directory is not a jj repo, or the
+// repo has no tags yet). When non-empty and the build-stamped jutsuVersion is
+// still "dev", the about modal substitutes this value as the display version.
+type latestTagMsg string
+
+// fetchLatestTag resolves the latest tag in the current jj repo at startup,
+// so a `go run .` / `go build` from source (where jutsuVersion defaults to
+// "dev") shows the real release tag instead of "dev". No-op when jj is
+// missing or we're not in a jj repo.
+func fetchLatestTag() tea.Cmd {
+	return func() tea.Msg {
+		// --no-graph suppresses the ◆ / ~ decoration jj log normally prints
+		// ahead of the template output, so we get just the tag name(s).
+		// The `tags` template emits space-separated names if multiple tags
+		// point to the same commit; take the first.
+		out, err := exec.Command("jj", "log", "-r", "tags()", "--limit", "1", "--no-graph", "-T", "tags").Output()
+		if err != nil {
+			return latestTagMsg("")
+		}
+		line := strings.TrimSpace(string(out))
+		if line == "" {
+			return latestTagMsg("")
+		}
+		return latestTagMsg(strings.SplitN(line, " ", 2)[0])
+	}
+}
+
 type copyDoneMsg struct{}
 
 func copyToClipboard(text string) tea.Cmd {

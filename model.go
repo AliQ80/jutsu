@@ -63,10 +63,12 @@ type mainModel struct {
 	hostKeyTried     bool              // loop guard: only offer the host-key modal once per run
 	authModalOpen    bool              // "continue in terminal" popup for credential prompts
 	authModalCmd     string            // the command that popup would retry via the pty handoff
+	aboutModalOpen   bool              // read-only popup with the running jutsu version + GitHub link (opened via ?)
 
 	validationFlash bool
 	copyFlash       bool
 	jjVersion       string
+	latestTag       string // latest jj tag resolved at startup; overrides "dev" in the about modal
 	cwd             string
 
 	width  int
@@ -311,7 +313,7 @@ func newModel() mainModel {
 }
 
 func (m mainModel) Init() tea.Cmd {
-	return fetchJJVersion()
+	return tea.Batch(fetchJJVersion(), fetchLatestTag())
 }
 
 func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -429,6 +431,10 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case jjVersionMsg:
 		m.jjVersion = string(msg)
+		return m, nil
+
+	case latestTagMsg:
+		m.latestTag = string(msg)
 		return m, nil
 
 	case clearValidationFlashMsg:
@@ -599,6 +605,9 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.authModalOpen {
 			return m.handleAuthModalKeys(msg)
 		}
+		if m.aboutModalOpen {
+			return m.handleAboutModalKeys(msg)
+		}
 		switch msg.String() {
 		case "ctrl+c":
 			return m, tea.Quit
@@ -676,6 +685,14 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if cmd := m.focusInput(0); cmd != nil {
 					return m, cmd
 				}
+			}
+		case "?":
+			// Open the about modal (version + GitHub link). Blocked inside
+			// the inputs pane, where "?" is a literal character being typed.
+			// No enlarged-view guard needed: "? "is harmless in those views.
+			if m.focusPane != focusInputs {
+				m.aboutModalOpen = true
+				return m, nil
 			}
 		}
 
@@ -859,6 +876,20 @@ func (m mainModel) handleOutputKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.outputEnlarged = false
 	}
 	m.layoutViewports()
+	return m, nil
+}
+
+// handleAboutModalKeys drives the read-only about popup. esc closes; every
+// other key — including q — is either a no-op or, in q's case, an explicit
+// quit (matches `q`'s app-wide semantics; it is never a modal close).
+func (m mainModel) handleAboutModalKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.aboutModalOpen = false
+		return m, nil
+	case "q":
+		return m, tea.Quit
+	}
 	return m, nil
 }
 

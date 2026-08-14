@@ -54,6 +54,14 @@ func (m mainModel) View() tea.View {
 		return v
 	}
 
+	if m.aboutModalOpen {
+		content := m.renderOnBackdrop(m.renderAboutModal())
+		v := tea.NewView(content)
+		v.AltScreen = true
+		v.MouseMode = tea.MouseModeCellMotion
+		return v
+	}
+
 	content := m.renderContentFrame()
 	v := tea.NewView(content)
 	v.AltScreen = true
@@ -694,6 +702,7 @@ func (m mainModel) renderHelpBar(width int) string {
 			{"esc", "back"},
 			{"tab", "finalize"},
 			{"g", "global"},
+			{"?", "about"},
 			{"q", "quit"},
 		}
 	case focusDocs:
@@ -704,6 +713,7 @@ func (m mainModel) renderHelpBar(width int) string {
 			{"tab", "finalize"},
 			{"esc", "back"},
 			{"g", "global"},
+			{"?", "about"},
 		}
 	case focusCmdBar:
 		entries = []entry{
@@ -711,6 +721,7 @@ func (m mainModel) renderHelpBar(width int) string {
 			{"c", "copy"},
 			{"esc", "back"},
 			{"g", "global"},
+			{"?", "about"},
 			{"q", "quit"},
 		}
 	case focusInputs:
@@ -728,6 +739,7 @@ func (m mainModel) renderHelpBar(width int) string {
 			{"o/O", "output"},
 			{"g", "global"},
 			{"tab", "finalize"},
+			{"?", "about"},
 			{"q", "quit"},
 		}
 		if m.lastCmd != nil {
@@ -880,6 +892,39 @@ const (
 	globalDocsW = 56
 	globalDocsH = 18
 )
+
+// renderAboutModal renders the read-only popup that shows the running Jutsu
+// version (build-stamped via the jutsuVersion ldflag, or resolved at startup
+// from the local jj repo when the ldflag is absent — see displayVersion) and
+// a link to the repo. Opened via `?`, closed via `esc` — see
+// handleAboutModalKeys.
+func (m mainModel) renderAboutModal() string {
+	// Title is centered across the modal's inner content width (the github
+	// URL is the widest line at 22 chars — pin the title to that width).
+	const innerW = 22
+	title := lipgloss.PlaceHorizontal(innerW, lipgloss.Center, headerStyle.Render("Jutsu"))
+	lines := []string{
+		title,
+		"",
+		"jutsu     " + m.displayVersion(),
+		"github.com/AliQ80/jutsu",
+	}
+	return modalBoxStyle.Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
+}
+
+// displayVersion returns the version string to show in the about modal.
+// Release builds have jutsuVersion set to the stamped tag (e.g. "v1.2.3") and
+// the latestTag fallback is a no-op. Source builds (`go run .`, `go build`)
+// leave jutsuVersion as "dev"; if a runtime fetch of the latest jj tag
+// succeeded, that tag overrides "dev" here. Either way the package-level
+// jutsuVersion var is never mutated — it's a build-time constant for release
+// builds, and the override is a pure render-time substitution.
+func (m mainModel) displayVersion() string {
+	if jutsuVersion == "dev" && m.latestTag != "" {
+		return m.latestTag
+	}
+	return jutsuVersion
+}
 
 // renderHostKeyModal renders the SSH host-key approval popup: the unknown host,
 // the fingerprint(s) to verify, and the trust/cancel choices.
