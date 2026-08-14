@@ -82,7 +82,7 @@ func TestIsInteractiveInvocation(t *testing.T) {
 		}, true},
 		{"resolve --list only prints", func(t *testing.T, m *mainModel) {
 			focusCommand(t, m, "resolve", "")
-			selectFlag(t, m, "--list", "")
+			selectFlag(t, m, "-l", "")
 		}, false},
 		{"bare split opens diff editor", func(t *testing.T, m *mainModel) {
 			focusCommand(t, m, "split", "")
@@ -109,9 +109,9 @@ func TestIsInteractiveInvocation(t *testing.T) {
 			focusCommand(t, m, "squash", "")
 			selectFlag(t, m, "-m", "msg")
 		}, false},
-		{"squash with --use-destination-message is direct", func(t *testing.T, m *mainModel) {
+		{"squash with -u is direct", func(t *testing.T, m *mainModel) {
 			focusCommand(t, m, "squash", "")
-			selectFlag(t, m, "--use-destination-message", "")
+			selectFlag(t, m, "-u", "")
 		}, false},
 		{"squash with -k never prompts even without -m", func(t *testing.T, m *mainModel) {
 			focusCommand(t, m, "squash", "")

@@ -5,10 +5,12 @@ package main
 type Flag struct {
 	Name             string
 	Description      string
-	Value            string
-	Alias            string // word alias from jj help, e.g. "after" for --insert-after — hand-authored, drift-checked by gen-descriptions
-	NoBarAlias       bool   // when true, the command bar always shows --Name even if Alias is shorter (Alias still appears in docs via flagDocsLabel)
-	InputType        string // e.g. "REVSET", "PATH", "TEMPLATE" — populated by gen-descriptions
+	Value            string   // primary deterministic execution spelling (e.g. "-A", "--operation") — command building always emits this
+	Alias            string   // word alias from jj help, e.g. "after" for --insert-after — hand-authored, drift-checked by gen-descriptions; docs-only
+	Alternates       []string // additional accepted spellings beyond Value/Name/Alias (e.g. "-d" for --onto), docs-only — never emitted
+	ShortOnly        bool     // no long spelling exists (e.g. run -x): docs label shows just Value, never "--"+Name
+	NoBarAlias       bool     // deprecated: the command bar always shows Value now; kept for struct compatibility
+	InputType        string   // e.g. "REVSET", "PATH", "TEMPLATE" — populated by gen-descriptions
 	Selected         bool
 	RequiresInput    bool
 	NeedsQuotes      bool
@@ -66,11 +68,11 @@ func loadCategories() []Category {
 						{Name: "FILESETS", Description: "Show revisions modifying the given paths", Variadic: true},
 					},
 					Flags: []Flag{
-						{Name: "revisions", Description: "Which revisions to show\n\nIf no paths nor revisions are specified, this defaults to the `revsets.log` setting.", Value: "-r", RequiresInput: true, InputType: "REVSETS"},
+						{Name: "revision", Description: "Which revisions to show\n\nIf no paths nor revisions are specified, this defaults to the `revsets.log` setting.", Value: "-r", RequiresInput: true, InputType: "REVSETS"},
 						{Name: "limit", Description: "Limit number of revisions to show\n\nApplied after revisions are filtered and reordered topologically, but before being reversed.", Value: "-n", RequiresInput: true, InputType: "LIMIT"},
 						{Name: "reversed", Description: "Show revisions in the opposite order (older revisions first)", Value: "--reversed"},
-						{Name: "no-graph", Description: "Don't show the graph, show a flat list of revisions", Value: "--no-graph"},
-						{Name: "count", Description: "Print the number of commits instead of showing them", Value: "--count"},
+						{Name: "no-graph", Description: "Don't show the graph, show a flat list of revisions", Value: "-G"},
+						{Name: "count", Description: "Print the number of commits instead of showing them", Value: "--count", ConflictingFlags: []string{"-s", "--stat", "--types", "--name-only", "--git", "--color-words", "--tool", "--context", "--ignore-all-space", "--ignore-space-change", "-G", "-p", "--reversed", "-T"}},
 						{Name: "template", Description: "Render each revision using the given template\n\nRun `jj log -T` to list the built-in templates.\n\nYou can also specify arbitrary template expressions using the [built-in keywords]. See [`jj help -k templates`] for more information.\n\nIf not specified, this defaults to the `templates.log` setting.\n\n[built-in keywords]: https://docs.jj-vcs.dev/latest/templates/#commit-keywords\n\n[`jj help -k templates`]: https://docs.jj-vcs.dev/latest/templates/", Value: "-T", RequiresInput: true, InputType: "TEMPLATE"},
 						{Name: "patch", Description: "Show patch", Value: "-p"},
 						{Name: "summary", Description: "For each path, show only whether it was modified, added, or deleted", Value: "-s", ConflictingFlags: []string{"--stat", "--types", "--name-only"}},
@@ -93,8 +95,8 @@ func loadCategories() []Category {
 					},
 					Flags: []Flag{
 						{Name: "revisions", Description: "Show changes in these revisions\n\nIf there are multiple revisions, then the total diff for all of them will be shown. For example, if you have a linear chain of revisions A..D, then `jj diff -r B::D` equals `jj diff --from A --to D`. Multiple heads and/or roots are supported, but gaps in the revset are not supported (e.g. `jj diff -r 'A|C'` in a linear chain A..C).\n\nIf a revision is a merge commit, this shows changes *from* the automatic merge of the contents of all of its parents *to* the contents of the revision itself.\n\nIf none of `-r`, `-f`, or `-t` is provided, then the default is `-r @`.", Value: "-r", RequiresInput: true, ConflictingFlags: []string{"--from", "--to"}, InputType: "REVSETS"},
-						{Name: "from", Description: "Show changes from this revision\n\nIf none of `-r`, `-f`, or `-t` is provided, then the default is `-r @`.", Value: "--from", RequiresInput: true, ConflictingFlags: []string{"-r"}, InputType: "REVSET"},
-						{Name: "to", Description: "Show changes to this revision\n\nIf none of `-r`, `-f`, or `-t` is provided, then the default is `-r @`.", Value: "--to", RequiresInput: true, ConflictingFlags: []string{"-r"}, InputType: "REVSET"},
+						{Name: "from", Description: "Show changes from this revision\n\nIf none of `-r`, `-f`, or `-t` is provided, then the default is `-r @`.", Value: "-f", RequiresInput: true, ConflictingFlags: []string{"-r"}, InputType: "REVSET"},
+						{Name: "to", Description: "Show changes to this revision\n\nIf none of `-r`, `-f`, or `-t` is provided, then the default is `-r @`.", Value: "-t", RequiresInput: true, ConflictingFlags: []string{"-r"}, InputType: "REVSET"},
 						{Name: "summary", Description: "For each path, show only whether it was modified, added, or deleted", Value: "-s", ConflictingFlags: []string{"--stat", "--types", "--name-only"}},
 						{Name: "stat", Description: "Show a histogram of the changes", Value: "--stat", ConflictingFlags: []string{"-s", "--types", "--name-only"}},
 						{Name: "types", Description: "For each path, show only its type before and after\n\nThe diff is shown as two letters. The first letter indicates the type before and the second letter indicates the type after. '-' indicates that the path was not present, 'F' represents a regular file, `L' represents a symlink, 'C' represents a conflict, and 'G' represents a Git submodule.", Value: "--types", ConflictingFlags: []string{"-s", "--stat", "--name-only"}},
@@ -103,7 +105,7 @@ func loadCategories() []Category {
 						{Name: "color-words", Description: "Show a word-level diff with changes indicated only by color", Value: "--color-words", ConflictingFlags: []string{"--git"}},
 						{Name: "ignore-all-space", Description: "Ignore whitespace when comparing lines", Value: "-w", ConflictingFlags: []string{"-b"}},
 						{Name: "ignore-space-change", Description: "Ignore changes in amount of whitespace when comparing lines", Value: "-b", ConflictingFlags: []string{"-w"}},
-						{Name: "template", Description: "Render each file diff entry using the given template\n\nAll 0-argument methods of the [`TreeDiffEntry` type] are available as keywords in the template expression. See [`jj help -k templates`] for more information.\n\n[`TreeDiffEntry` type]: https://docs.jj-vcs.dev/latest/templates/#treediffentry-type\n\n[`jj help -k templates`]: https://docs.jj-vcs.dev/latest/templates/", Value: "-T", RequiresInput: true, InputType: "TEMPLATE"},
+						{Name: "template", Description: "Render each file diff entry using the given template\n\nAll 0-argument methods of the [`TreeDiffEntry` type] are available as keywords in the template expression. See [`jj help -k templates`] for more information.\n\n[`TreeDiffEntry` type]: https://docs.jj-vcs.dev/latest/templates/#treediffentry-type\n\n[`jj help -k templates`]: https://docs.jj-vcs.dev/latest/templates/", Value: "-T", RequiresInput: true, ConflictingFlags: []string{"-s", "--stat", "--types", "--name-only", "--git", "--color-words", "--tool"}, InputType: "TEMPLATE"},
 						{Name: "tool", Description: "Generate diff by external command\n\nA builtin format can also be specified as `:<name>`. For example, `--tool=:git` is equivalent to `--git`.", Value: "--tool", RequiresInput: true, InputType: "TOOL"},
 						{Name: "context", Description: "Number of lines of context to show", Value: "--context", RequiresInput: true, InputType: "CONTEXT"},
 					},
@@ -126,7 +128,7 @@ func loadCategories() []Category {
 					Flags: []Flag{
 						{Name: "template", Description: "Render each revision using the given template\n\nYou can specify arbitrary template expressions using the [built-in keywords]. See [`jj help -k templates`] for more information.\n\n[built-in keywords]: https://docs.jj-vcs.dev/latest/templates/#commit-keywords\n\n[`jj help -k templates`]: https://docs.jj-vcs.dev/latest/templates/", Value: "-T", RequiresInput: true, InputType: "TEMPLATE"},
 						{Name: "reversed", Description: "Show revisions in the opposite order (older revisions first)", Value: "--reversed"},
-						{Name: "no-patch", Description: "Do not show the patch", Value: "--no-patch"},
+						{Name: "no-patch", Description: "Do not show the patch", Value: "--no-patch", ConflictingFlags: []string{"-s", "--stat", "--types", "--name-only", "--git", "--color-words", "--tool", "--context", "-w", "-b"}},
 						{Name: "summary", Description: "For each path, show only whether it was modified, added, or deleted", Value: "-s", ConflictingFlags: []string{"--stat", "--types", "--name-only"}},
 						{Name: "stat", Description: "Show a histogram of the changes", Value: "--stat", ConflictingFlags: []string{"-s", "--types", "--name-only"}},
 						{Name: "types", Description: "For each path, show only its type before and after\n\nThe diff is shown as two letters. The first letter indicates the type before and the second letter indicates the type after. '-' indicates that the path was not present, 'F' represents a regular file, `L' represents a symlink, 'C' represents a conflict, and 'G' represents a Git submodule.", Value: "--types", ConflictingFlags: []string{"-s", "--stat", "--name-only"}},
@@ -147,7 +149,7 @@ func loadCategories() []Category {
 						{Name: "revisions", Description: "Follow changes from these revisions\n\nDefault value: `@`", Value: "-r", RequiresInput: true, InputType: "REVSETS"},
 						{Name: "limit", Description: "Limit number of revisions to show\n\nApplied after revisions are reordered topologically, but before being reversed.", Value: "-n", RequiresInput: true, InputType: "LIMIT"},
 						{Name: "reversed", Description: "Show revisions in the opposite order (older revisions first)", Value: "--reversed"},
-						{Name: "no-graph", Description: "Don't show the graph, show a flat list of revisions", Value: "--no-graph"},
+						{Name: "no-graph", Description: "Don't show the graph, show a flat list of revisions", Value: "-G"},
 						{Name: "template", Description: "Render each revision using the given template\n\nAll 0-argument methods of the [`CommitEvolutionEntry` type] are available as keywords in the template expression. See [`jj help -k templates`] for more information.\n\nIf not specified, this defaults to the `templates.evolog` setting.\n\n[`CommitEvolutionEntry` type]: https://docs.jj-vcs.dev/latest/templates/#commitevolutionentry-type\n\n[`jj help -k templates`]: https://docs.jj-vcs.dev/latest/templates/", Value: "-T", RequiresInput: true, InputType: "TEMPLATE"},
 						{Name: "patch", Description: "Show patch compared to the previous version of this change\n\nIf the previous version has different parents, it will be temporarily rebased to the parents of the new version, so the diff is not contaminated by unrelated changes.", Value: "-p"},
 						{Name: "summary", Description: "For each path, show only whether it was modified, added, or deleted", Value: "-s", ConflictingFlags: []string{"--stat", "--types", "--name-only"}},
@@ -169,8 +171,8 @@ func loadCategories() []Category {
 						{Name: "FILESETS", Description: "Restrict the diff to these paths", Variadic: true},
 					},
 					Flags: []Flag{
-						{Name: "from", Description: "The first revision to compare (default: @)", Value: "--from", RequiresInput: true, Mandatory: true, Selected: true, InputType: "REVSET"},
-						{Name: "to", Description: "The second revision to compare (default: @)", Value: "--to", RequiresInput: true, Mandatory: true, Selected: true, InputType: "REVSET"},
+						{Name: "from", Description: "The first revision to compare (default: @)", Value: "-f", RequiresInput: true, Mandatory: true, Selected: true, InputType: "REVSET"},
+						{Name: "to", Description: "The second revision to compare (default: @)", Value: "-t", RequiresInput: true, Mandatory: true, Selected: true, InputType: "REVSET"},
 						{Name: "summary", Description: "For each path, show only whether it was modified, added, or deleted", Value: "-s", ConflictingFlags: []string{"--stat", "--types", "--name-only"}},
 						{Name: "stat", Description: "Show a histogram of the changes", Value: "--stat", ConflictingFlags: []string{"-s", "--types", "--name-only"}},
 						{Name: "types", Description: "For each path, show only its type before and after\n\nThe diff is shown as two letters. The first letter indicates the type before and the second letter indicates the type after. '-' indicates that the path was not present, 'F' represents a regular file, `L' represents a symlink, 'C' represents a conflict, and 'G' represents a Git submodule.", Value: "--types", ConflictingFlags: []string{"-s", "--stat", "--name-only"}},
@@ -227,10 +229,10 @@ func loadCategories() []Category {
 								{Name: "FILESETS", Description: "Only search files matching these prefixes (instead of all files)", Variadic: true},
 							},
 							Flags: []Flag{
-								{Name: "pattern", Description: "The pattern to search for in a single line\n\nIt is a [string pattern syntax] like `kind:pattern`.  The kind defaults to regex when omitted.\n\nIf it is a glob pattern, the whole line must match the pattern, so you may want to pass something like `--pattern 'glob:*foo*'`.\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "--pattern", RequiresInput: true, Mandatory: true, Selected: true, InputType: "PATTERN"},
+								{Name: "pattern", Description: "The pattern to search for in a single line\n\nIt is a [string pattern syntax] like `kind:pattern`.  The kind defaults to regex when omitted.\n\nIf it is a glob pattern, the whole line must match the pattern, so you may want to pass something like `--pattern 'glob:*foo*'`.\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "-p", RequiresInput: true, Mandatory: true, Selected: true, InputType: "PATTERN"},
 								{Name: "revision", Description: "The revision to search files in\n\nDefault value: `@`", Value: "-r", RequiresInput: true, InputType: "REVSET"},
-								{Name: "name-only", Description: "Print only the paths of files that contain a match, not the matched lines", Value: "--name-only"},
-								{Name: "line-number", Description: "Prefix each matched line with its 1-based line number within the file", Value: "-n"},
+								{Name: "name-only", Description: "Print only the paths of files that contain a match, not the matched lines", Value: "--name-only", ConflictingFlags: []string{"-n"}},
+								{Name: "line-number", Description: "Prefix each matched line with its 1-based line number within the file", Value: "-n", ConflictingFlags: []string{"--name-only"}},
 							},
 						},
 					},
@@ -254,6 +256,7 @@ func loadCategories() []Category {
 							Flags: []Flag{
 								{Name: "range", Description: "Range of revisions to bisect (can be repeated)\n\nThis is typically a range like `v1.0..main`. The heads of the range are assumed to be bad. Ancestors of the range that are not also in the range are assumed to be good.\n\nThe union of all given ranges are used as the input for the bisection.", Value: "-r", RequiresInput: true, Mandatory: true, InputType: "REVSETS"},
 								{Name: "find-good", Description: "Find the first good revision instead\n\nThe interpretation of exit statuses will be inverted (excluding special exit statuses), so status 0 means bad and other non-zero statuses mean good.\n\nDefault value: `false`", Value: "--find-good"},
+								{Name: "command", Description: "Deprecated. Use positional arguments instead", Value: "--command", RequiresInput: true, InputType: "COMMAND"},
 							},
 						},
 					},
@@ -273,6 +276,8 @@ func loadCategories() []Category {
 					Flags: []Flag{
 						{Name: "message", Description: "The change description to use (don't open editor)", Value: "-m", RequiresInput: true, NeedsQuotes: true, InputType: "MESSAGE"},
 						{Name: "interactive", Description: "Interactively choose which changes to include in the current commit", Value: "-i", Interactive: true},
+						{Name: "editor", Description: "Open an editor to edit the change description\n\nForces an editor to open when using `--message` to allow the message to be edited afterwards.", Value: "--editor", Interactive: true},
+						{Name: "tool", Description: "Specify diff editor to be used (implies --interactive)", Value: "--tool", RequiresInput: true, InputType: "TOOL", Interactive: true},
 					},
 				},
 				{
@@ -285,7 +290,8 @@ func loadCategories() []Category {
 						{Name: "message", Description: "The change description to use", Value: "-m", RequiresInput: true, NeedsQuotes: true, InputType: "MESSAGE"},
 						{Name: "insert-after", Description: "Insert the new change after the given commit(s)\n\nExample: `jj new --insert-after A` creates a new change between `A` and its children:\n\n              B   C\n               \\ /\n  B   C   =>    @\n   \\ /          |\n    A           A\n\nSpecifying `--insert-after` multiple times will relocate all children of the given commits.\n\nExample: `jj new --insert-after A --insert-after X` creates a change with `A` and `X` as parents, and rebases all children on top of the new change:\n\n              B   Y\n               \\ /\n  B  Y    =>    @\n  |  |         / \\\n  A  X        A   X", Value: "-A", Alias: "after", RequiresInput: true, InputType: "REVSETS"},
 						{Name: "insert-before", Description: "Insert the new change before the given commit(s)\n\nExample: `jj new --insert-before C` creates a new change between `C` and its parents:\n\n                 C\n                 |\n    C     =>     @\n   / \\          / \\\n  A   B        A   B\n\n`--insert-after` and `--insert-before` can be combined.\n\nExample: `jj new --insert-after A --insert-before D`:\n\n  D            D\n  |           / \\\n  C          |   C\n  |    =>    @   |\n  B          |   B\n  |           \\ /\n  A            A\n\nSimilar to `--insert-after`, you can specify `--insert-before` multiple times.", Value: "-B", Alias: "before", RequiresInput: true, InputType: "REVSETS"},
-						{Name: "no-edit", Description: "Do not edit the newly created change", Value: "--no-edit"},
+						{Name: "no-edit", Description: "Do not edit the newly created change", Value: "--no-edit", ConflictingFlags: []string{"--edit"}},
+						{Name: "edit", Description: "No-op flag to pair with --no-edit", Value: "--edit", ConflictingFlags: []string{"--no-edit"}},
 					},
 				},
 				{
@@ -296,7 +302,9 @@ func loadCategories() []Category {
 						{Name: "REVSETS", Description: "The revision(s) whose description to edit (default: @) [aliases: -r]", Variadic: true},
 					},
 					Flags: []Flag{
-						{Name: "message", Description: "The change description to use (don't open editor)\n\nIf multiple revisions are specified, the same description will be used for all of them.", Value: "-m", RequiresInput: true, NeedsQuotes: true, InputType: "MESSAGE"},
+						{Name: "message", Description: "The change description to use (don't open editor)\n\nIf multiple revisions are specified, the same description will be used for all of them.", Value: "-m", RequiresInput: true, NeedsQuotes: true, ConflictingFlags: []string{"--stdin"}, InputType: "MESSAGE"},
+						{Name: "stdin", Description: "Read the change description from stdin\n\nIf multiple revisions are specified, the same description will be used for all of them.", Value: "--stdin", ConflictingFlags: []string{"-m"}},
+						{Name: "editor", Description: "Open an editor to edit the change description\n\nForces an editor to open when using `--stdin` or `--message` to allow the message to be edited afterwards.", Value: "--editor", Interactive: true},
 					},
 				},
 				{
@@ -306,9 +314,9 @@ func loadCategories() []Category {
 						{Name: "FILESETS", Description: "Only resolve conflicts in these paths. You can use the `--list` argument to find paths to use here", Variadic: true},
 					},
 					Flags: []Flag{
-						{Name: "list", Description: "Instead of resolving conflicts, list all the conflicts", Value: "--list"},
+						{Name: "list", Description: "Instead of resolving conflicts, list all the conflicts", Value: "-l", ConflictingFlags: []string{"--tool"}},
 						{Name: "revision", Description: "Default value: `@`", Value: "-r", RequiresInput: true, InputType: "REVSET"},
-						{Name: "tool", Description: "Specify 3-way merge tool to be used\n\nThe built-in merge tools `:ours` and `:theirs` can be used to choose side #1 and side #2 of the conflict respectively.", Value: "--tool", RequiresInput: true, InputType: "TOOL", Interactive: true},
+						{Name: "tool", Description: "Specify 3-way merge tool to be used\n\nThe built-in merge tools `:ours` and `:theirs` can be used to choose side #1 and side #2 of the conflict respectively.", Value: "--tool", RequiresInput: true, InputType: "TOOL", Interactive: true, ConflictingFlags: []string{"-l"}},
 					},
 				},
 				{
@@ -318,9 +326,12 @@ func loadCategories() []Category {
 						{Name: "FILESETS", Description: "Restore only these paths (instead of all paths)", Variadic: true},
 					},
 					Flags: []Flag{
-						{Name: "from", Description: "Revision to restore from (source)", Value: "--from", RequiresInput: true, InputType: "REVSET"},
-						{Name: "into", Description: "Revision to restore into (destination)", Value: "-t", Alias: "to", RequiresInput: true, InputType: "REVSET"},
-						{Name: "changes-in", Description: "Undo the changes in a revision as compared to the merge of its parents.\n\nThis undoes the changes that can be seen with `jj diff -r REVSET`. If `REVSET` only has a single parent, this option is equivalent to `jj restore --into REVSET --from REVSET-`.\n\nThe default behavior of `jj restore` is equivalent to `jj restore --changes-in @`.", Value: "--changes-in", RequiresInput: true, InputType: "REVSET"},
+						{Name: "from", Description: "Revision to restore from (source)", Value: "-f", RequiresInput: true, ConflictingFlags: []string{"-c"}, InputType: "REVSET"},
+						{Name: "into", Description: "Revision to restore into (destination)", Value: "-t", Alias: "to", RequiresInput: true, ConflictingFlags: []string{"-c"}, InputType: "REVSET"},
+						{Name: "changes-in", Description: "Undo the changes in a revision as compared to the merge of its parents.\n\nThis undoes the changes that can be seen with `jj diff -r REVSET`. If `REVSET` only has a single parent, this option is equivalent to `jj restore --into REVSET --from REVSET-`.\n\nThe default behavior of `jj restore` is equivalent to `jj restore --changes-in @`.", Value: "-c", RequiresInput: true, ConflictingFlags: []string{"-t", "-f"}, InputType: "REVSET"},
+						{Name: "revision", Description: "Prints an error. DO NOT USE", Value: "-r", RequiresInput: true, InputType: "REVSET"},
+						{Name: "interactive", Description: "Interactively choose which parts to restore", Value: "-i", Interactive: true},
+						{Name: "tool", Description: "Specify diff editor to be used (implies --interactive)", Value: "--tool", RequiresInput: true, InputType: "TOOL", Interactive: true},
 						{Name: "restore-descendants", Description: "Preserve the content (not the diff) when rebasing descendants", Value: "--restore-descendants"},
 					},
 				},
@@ -331,9 +342,9 @@ func loadCategories() []Category {
 						{Name: "FILESETS", Description: "Fix only these paths", Variadic: true},
 					},
 					Flags: []Flag{
-						{Name: "source", Description: "Fix files in the specified revision(s) and their descendants. If no revisions are specified, this defaults to the `revsets.fix` setting, or `reachable(@, mutable())` if it is not set", Value: "--source", RequiresInput: true, InputType: "REVSETS"},
+						{Name: "source", Description: "Fix files in the specified revision(s) and their descendants. If no revisions are specified, this defaults to the `revsets.fix` setting, or `reachable(@, mutable())` if it is not set", Value: "-s", RequiresInput: true, InputType: "REVSETS"},
 						{Name: "include-unchanged-files", Description: "Fix unchanged files in addition to changed ones. If no paths are specified, all files in the repo will be fixed", Value: "--include-unchanged-files"},
-						{Name: "all-lines", Description: "Format all lines instead of only modified lines.\n\nIf the formatter doesn't support formatting only modified lines, then this option has no effect since the formatter always formats all lines.", Value: "--all-lines"},
+						{Name: "all-lines", Description: "Format all lines instead of only modified lines.\n\nIf the formatter doesn't support formatting only modified lines, then this option has no effect since the formatter always formats all lines.", Value: "-a"},
 					},
 				},
 				{
@@ -385,14 +396,15 @@ func loadCategories() []Category {
 					Flags: []Flag{
 						{Name: "revision", Description: "Revision to squash into its parent (default: @). Incompatible with the experimental `-o`/`-A`/`-B` options", Value: "-r", RequiresInput: true, ConflictingFlags: []string{"-o", "-A", "-B", "-f", "-t"}, InputType: "REVSET"},
 						{Name: "from", Description: "Revision(s) to squash from (default: @)", Value: "-f", RequiresInput: true, ConflictingFlags: []string{"-r"}, InputType: "REVSETS"},
-						{Name: "into", Description: "Revision to squash into (default: @)", Value: "-t", Alias: "to", RequiresInput: true, ConflictingFlags: []string{"-r"}, InputType: "REVSET"},
-						{Name: "onto", Description: "(Experimental) The revision(s) to use as parent for the new commit (can be repeated to create a merge commit)", Value: "-o", Alias: "destination", RequiresInput: true, ConflictingFlags: []string{"-r", "-A", "-B"}, InputType: "REVSETS"},
-						{Name: "insert-after", Description: "(Experimental) The revision(s) to insert the new commit after (can be repeated to create a merge commit)", Value: "-A", Alias: "after", RequiresInput: true, ConflictingFlags: []string{"-r", "-o"}, InputType: "REVSETS"},
-						{Name: "insert-before", Description: "(Experimental) The revision(s) to insert the new commit before (can be repeated to create a merge commit)", Value: "-B", Alias: "before", RequiresInput: true, ConflictingFlags: []string{"-r", "-o"}, InputType: "REVSETS"},
-						{Name: "message", Description: "The description to use for squashed revision (don't open editor)", Value: "-m", RequiresInput: true, NeedsQuotes: true, ConflictingFlags: []string{"--use-destination-message"}, InputType: "MESSAGE"},
-						{Name: "use-destination-message", Description: "Use the description of the destination revision and discard the description(s) of the source revision(s)", Value: "--use-destination-message", ConflictingFlags: []string{"-m"}},
+						{Name: "into", Description: "Revision to squash into (default: @)", Value: "-t", Alias: "to", RequiresInput: true, ConflictingFlags: []string{"-r", "-o"}, InputType: "REVSET"},
+						{Name: "onto", Description: "(Experimental) The revision(s) to use as parent for the new commit (can be repeated to create a merge commit)", Value: "-o", Alias: "destination", Alternates: []string{"-d"}, RequiresInput: true, ConflictingFlags: []string{"-r", "-A", "-B", "-t"}, InputType: "REVSETS"},
+						{Name: "insert-after", Description: "(Experimental) The revision(s) to insert the new commit after (can be repeated to create a merge commit)", Value: "-A", Alias: "after", RequiresInput: true, ConflictingFlags: []string{"-r", "-o", "-t"}, InputType: "REVSETS"},
+						{Name: "insert-before", Description: "(Experimental) The revision(s) to insert the new commit before (can be repeated to create a merge commit)", Value: "-B", Alias: "before", RequiresInput: true, ConflictingFlags: []string{"-r", "-o", "-t"}, InputType: "REVSETS"},
+						{Name: "message", Description: "The description to use for squashed revision (don't open editor)", Value: "-m", RequiresInput: true, NeedsQuotes: true, ConflictingFlags: []string{"-u"}, InputType: "MESSAGE"},
+						{Name: "use-destination-message", Description: "Use the description of the destination revision and discard the description(s) of the source revision(s)", Value: "-u", ConflictingFlags: []string{"-m"}},
 						{Name: "keep-emptied", Description: "The source revision will not be abandoned", Value: "-k"},
 						{Name: "interactive", Description: "Interactively choose which parts to squash", Value: "-i", Interactive: true},
+						{Name: "editor", Description: "Open an editor to edit the change description\n\nForces an editor to open when using `--message` to allow the message to be edited afterwards.", Value: "--editor", Interactive: true},
 						{Name: "tool", Description: "Specify diff editor to be used (implies --interactive)", Value: "--tool", RequiresInput: true, InputType: "TOOL", Interactive: true},
 					},
 				},
@@ -404,8 +416,13 @@ func loadCategories() []Category {
 					},
 					Flags: []Flag{
 						{Name: "revision", Description: "The revision to split\n\nDefault value: `@`", Value: "-r", RequiresInput: true, InputType: "REVSET"},
+						{Name: "onto", Description: "The revision(s) to rebase the selected changes onto (can be repeated to create a merge commit)\n\nExtracts the selected changes into a new commit based on the given revision(s). The remaining changes stay in the original commit's location.", Value: "-o", Alias: "destination", Alternates: []string{"-d"}, RequiresInput: true, ConflictingFlags: []string{"-p", "-A", "-B"}, InputType: "REVSETS"},
+						{Name: "insert-after", Description: "The revision(s) to insert after (can be repeated to create a merge commit)\n\nExtracts the selected changes into a new commit inserted after the given revision(s). The remaining changes stay in the original commit's location.", Value: "-A", Alias: "after", RequiresInput: true, ConflictingFlags: []string{"-o", "-p"}, InputType: "REVSETS"},
+						{Name: "insert-before", Description: "The revision(s) to insert before (can be repeated to create a merge commit)\n\nExtracts the selected changes into a new commit inserted before the given revision(s). The remaining changes stay in the original commit's location.", Value: "-B", Alias: "before", RequiresInput: true, ConflictingFlags: []string{"-o", "-p"}, InputType: "REVSETS"},
 						{Name: "message", Description: "The change description to use for the selected changes (don't open editor)\n\nSets the description for the revision containing the selected changes. The other revision will keep its original description, if any.", Value: "-m", RequiresInput: true, NeedsQuotes: true, InputType: "MESSAGE"},
 						{Name: "interactive", Description: "Interactively choose which parts to split\n\nThis is the default if no filesets are provided.", Value: "-i", Interactive: true},
+						{Name: "editor", Description: "Open an editor to edit the change description(s)\n\nForces an editor to open when using `--message` to allow the message to be edited afterward.", Value: "--editor", Interactive: true},
+						{Name: "parallel", Description: "Split the revision into two parallel revisions instead of a parent and child", Value: "-p", ConflictingFlags: []string{"-o", "-A", "-B"}},
 						{Name: "tool", Description: "Specify diff editor to be used (implies --interactive)", Value: "--tool", RequiresInput: true, InputType: "TOOL", Interactive: true},
 					},
 				},
@@ -416,7 +433,7 @@ func loadCategories() []Category {
 						{Name: "revision", Description: "Rebase the given revisions, rebasing descendants onto this revision's parent(s)\n\nUnlike `-s` or `-b`, you may `jj rebase -r` a revision `A` onto a descendant of `A`.\n\nIf none of `-b`, `-s`, or `-r` is provided, then the default is `-b @`.", Value: "-r", RequiresInput: true, ConflictingFlags: []string{"-s", "-b"}, InputType: "REVSETS"},
 						{Name: "source", Description: "Rebase specified revision(s) together with their trees of descendants (can be repeated)\n\nEach specified revision will become a direct child of the destination revision(s), even if some of the source revisions are descendants of others.\n\nIf none of `-b`, `-s`, or `-r` is provided, then the default is `-b @`.", Value: "-s", RequiresInput: true, ConflictingFlags: []string{"-r", "-b"}, InputType: "REVSETS"},
 						{Name: "branch", Description: "Rebase the whole branch relative to destination's ancestors (can be repeated)\n\n`jj rebase -b=br -o=dst` is equivalent to `jj rebase '-s=roots(dst..br)' -o=dst`.\n\nIf none of `-b`, `-s`, or `-r` is provided, then the default is `-b @`.", Value: "-b", RequiresInput: true, ConflictingFlags: []string{"-r", "-s"}, InputType: "REVSETS"},
-						{Name: "onto", Description: "The revision(s) to rebase onto (can be repeated to create a merge commit)", Value: "-o", Alias: "destination", RequiresInput: true, ConflictingFlags: []string{"-A", "-B"}, InputType: "REVSETS"},
+						{Name: "onto", Description: "The revision(s) to rebase onto (can be repeated to create a merge commit)", Value: "-o", Alias: "destination", Alternates: []string{"-d"}, RequiresInput: true, ConflictingFlags: []string{"-A", "-B"}, InputType: "REVSETS"},
 						{Name: "insert-after", Description: "The revision(s) to insert after (can be repeated to create a merge commit)", Value: "-A", Alias: "after", RequiresInput: true, ConflictingFlags: []string{"-o"}, InputType: "REVSETS"},
 						{Name: "insert-before", Description: "The revision(s) to insert before (can be repeated to create a merge commit)", Value: "-B", Alias: "before", RequiresInput: true, ConflictingFlags: []string{"-o"}, InputType: "REVSETS"},
 						{Name: "skip-emptied", Description: "If true, when rebasing would produce an empty commit, the commit is abandoned. It will not be abandoned if it was already empty before the rebase. Will never skip merge commits with multiple non-empty parents", Value: "--skip-emptied"},
@@ -457,7 +474,7 @@ func loadCategories() []Category {
 					Description: "Apply the reverse of the given revision(s)\n\nThe reverse of each of the given revisions is applied sequentially in reverse topological order at the given location.\n\nThe description of the new revisions can be customized with the `templates.revert_description` config variable.",
 					Flags: []Flag{
 						{Name: "revision", Description: "The revision(s) to apply the reverse of", Value: "-r", RequiresInput: true, Mandatory: true, InputType: "REVSETS"},
-						{Name: "onto", Description: "The revision(s) to apply the reverse changes on top of", Value: "-o", Alias: "destination", RequiresInput: true, ConflictingFlags: []string{"-A", "-B"}, InputType: "REVSETS"},
+						{Name: "onto", Description: "The revision(s) to apply the reverse changes on top of", Value: "-o", Alias: "destination", Alternates: []string{"-d"}, RequiresInput: true, ConflictingFlags: []string{"-A", "-B"}, InputType: "REVSETS"},
 						{Name: "insert-after", Description: "The revision(s) to insert the reverse changes after (can be repeated to create a merge commit)", Value: "-A", Alias: "after", RequiresInput: true, ConflictingFlags: []string{"-o"}, InputType: "REVSETS"},
 						{Name: "insert-before", Description: "The revision(s) to insert the reverse changes before (can be repeated to create a merge commit)", Value: "-B", Alias: "before", RequiresInput: true, ConflictingFlags: []string{"-o"}, InputType: "REVSETS"},
 					},
@@ -493,7 +510,7 @@ func loadCategories() []Category {
 						{Name: "REVSETS", Description: "The revision(s) to duplicate (default: @) [aliases: -r]", Variadic: true},
 					},
 					Flags: []Flag{
-						{Name: "onto", Description: "The revision(s) to duplicate onto (can be repeated to create a merge commit)", Value: "-o", Alias: "destination", RequiresInput: true, ConflictingFlags: []string{"-A", "-B"}, InputType: "REVSETS"},
+						{Name: "onto", Description: "The revision(s) to duplicate onto (can be repeated to create a merge commit)", Value: "-o", Alias: "destination", Alternates: []string{"-d"}, RequiresInput: true, ConflictingFlags: []string{"-A", "-B"}, InputType: "REVSETS"},
 						{Name: "insert-after", Description: "The revision(s) to insert after (can be repeated to create a merge commit)", Value: "-A", Alias: "after", RequiresInput: true, ConflictingFlags: []string{"-o"}, InputType: "REVSETS"},
 						{Name: "insert-before", Description: "The revision(s) to insert before (can be repeated to create a merge commit)", Value: "-B", Alias: "before", RequiresInput: true, ConflictingFlags: []string{"-o"}, InputType: "REVSETS"},
 					},
@@ -511,7 +528,7 @@ func loadCategories() []Category {
 					Description: "Simplify parent edges for the specified revision(s).\n\nRemoves all parents of each of the specified revisions that are also indirect ancestors of the same revisions through other parents. This has no effect on any revision's contents, including the working copy.\n\nIn other words, for all (A, B, C) where A has (B, C) as parents and C is an ancestor of B, A will be rewritten to have only B as a parent instead of B+C.",
 					Flags: []Flag{
 						{Name: "revision", Description: "Simplify specified revision(s) (can be repeated)\n\nIf both `--source` and `--revisions` are not provided, this defaults to the `revsets.simplify-parents` setting, or `reachable(@, mutable())` if it is not set.", Value: "-r", RequiresInput: true, InputType: "REVSETS"},
-						{Name: "source", Description: "Simplify specified revision(s) together with their trees of descendants (can be repeated)", Value: "--source", RequiresInput: true, InputType: "REVSETS"},
+						{Name: "source", Description: "Simplify specified revision(s) together with their trees of descendants (can be repeated)", Value: "-s", RequiresInput: true, InputType: "REVSETS"},
 					},
 				},
 				{
@@ -523,10 +540,10 @@ func loadCategories() []Category {
 					Flags: []Flag{
 						{Name: "message", Description: "Update the change description\n\nThis updates the change description, without opening the editor.\n\nUse `jj describe` if you want to use an editor.", Value: "-m", RequiresInput: true, NeedsQuotes: true, InputType: "MESSAGE"},
 						{Name: "update-change-id", Description: "Generate a new change-id\n\nThis generates a new change-id for the revision.", Value: "--update-change-id"},
-						{Name: "update-author", Description: "Update the author to the configured user\n\nThis updates the author name and email. The author timestamp is not modified – use --update-author-timestamp to update the author timestamp.\n\nYou can use it in combination with the JJ_USER and JJ_EMAIL environment variables to set a different author:\n\n$ JJ_USER='Foo Bar' JJ_EMAIL=foo@bar.com jj metaedit --update-author", Value: "--update-author"},
-						{Name: "update-author-timestamp", Description: "Update the author timestamp\n\nThis updates the author date to the current time, without modifying the author.", Value: "--update-author-timestamp"},
-						{Name: "author", Description: "Set author to the provided string\n\nThis changes author name and email while retaining author timestamp for non-discardable commits.", Value: "--author", RequiresInput: true, NeedsQuotes: true, InputType: "AUTHOR"},
-						{Name: "author-timestamp", Description: "Set the author date to the given date\n\nThe date can either be human readable ([RFC2822], eg 'Sun, 23 Jan 2000 01:23:45 PST') or a time stamp ([RFC3339], eg '2000-01-23T01:23:45-08:00').\n\n[RFC2822]: https://datatracker.ietf.org/doc/html/rfc2822\n\n[RFC3339]: https://datatracker.ietf.org/doc/html/rfc3339", Value: "--author-timestamp", RequiresInput: true, InputType: "AUTHOR_TIMESTAMP"},
+						{Name: "update-author", Description: "Update the author to the configured user\n\nThis updates the author name and email. The author timestamp is not modified – use --update-author-timestamp to update the author timestamp.\n\nYou can use it in combination with the JJ_USER and JJ_EMAIL environment variables to set a different author:\n\n$ JJ_USER='Foo Bar' JJ_EMAIL=foo@bar.com jj metaedit --update-author", Value: "--update-author", ConflictingFlags: []string{"--author"}},
+						{Name: "update-author-timestamp", Description: "Update the author timestamp\n\nThis updates the author date to the current time, without modifying the author.", Value: "--update-author-timestamp", ConflictingFlags: []string{"--author-timestamp"}},
+						{Name: "author", Description: "Set author to the provided string\n\nThis changes author name and email while retaining author timestamp for non-discardable commits.", Value: "--author", RequiresInput: true, NeedsQuotes: true, ConflictingFlags: []string{"--update-author"}, InputType: "AUTHOR"},
+						{Name: "author-timestamp", Description: "Set the author date to the given date\n\nThe date can either be human readable ([RFC2822], eg 'Sun, 23 Jan 2000 01:23:45 PST') or a time stamp ([RFC3339], eg '2000-01-23T01:23:45-08:00').\n\n[RFC2822]: https://datatracker.ietf.org/doc/html/rfc2822\n\n[RFC3339]: https://datatracker.ietf.org/doc/html/rfc3339", Value: "--author-timestamp", RequiresInput: true, ConflictingFlags: []string{"--update-author-timestamp"}, InputType: "AUTHOR_TIMESTAMP"},
 						{Name: "force-rewrite", Description: "Rewrite the commit, even if no other metadata changed\n\nThis updates the committer timestamp to the current time, as well as the committer name and email.\n\nEven if this option is not passed, the committer name, email, and timestamp will be updated if other metadata is updated. This option just forces every commit to be rewritten whether or not there are other changes.\n\nYou can use it in combination with the `JJ_USER` and `JJ_EMAIL` environment variables to set a different committer:\n\n$ JJ_USER='Foo Bar' JJ_EMAIL=foo@bar.com jj metaedit --force-rewrite", Value: "--force-rewrite"},
 					},
 				},
@@ -545,24 +562,25 @@ func loadCategories() []Category {
 							Flags: []Flag{
 								{Name: "remote", Description: "The remote to fetch from (only named remotes are supported, can be repeated)\n\nBy default, the specified pattern matches remote names with glob syntax, e.g. `--remote '*'`. You can also use other [string pattern syntax].\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "--remote", RequiresInput: true, ConflictingFlags: []string{"--all-remotes"}, InputType: "REMOTE"},
 								{Name: "all-remotes", Description: "Fetch from all remotes", Value: "--all-remotes", ConflictingFlags: []string{"--remote"}},
-								{Name: "branch", Description: "Name of the branch to fetch (can be repeated)\n\nBy default, the specified pattern matches branch names with glob syntax, but only `*` is expanded. Other wildcard characters such as `?` are *not* supported. Patterns can be repeated or combined with [logical operators] to specify multiple branches, but only union and negative intersection are supported.\n\nExamples: `push-*`, `(push-* | foo/*) ~ foo/unwanted`\n\n[logical operators]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "--branch", RequiresInput: true, InputType: "BRANCH"},
-								{Name: "tag", Description: "Fetch only some of the tags (can be repeated)\n\nBy default, the specified pattern matches tag names with glob syntax, but only `*` is expanded. Other wildcard characters such as `?` are *not* supported. Patterns can be repeated or combined with [logical operators] to specify multiple tags, but only union and negative intersection are supported.\n\n[logical operators]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "--tag", RequiresInput: true, InputType: "TAG"},
-								{Name: "tracked", Description: "Fetch only tracked bookmarks and tags\n\nThis fetches only bookmarks and tags that are already tracked from the specified remote(s).", Value: "--tracked"},
+								{Name: "branch", Description: "Name of the branch to fetch (can be repeated)\n\nBy default, the specified pattern matches branch names with glob syntax, but only `*` is expanded. Other wildcard characters such as `?` are *not* supported. Patterns can be repeated or combined with [logical operators] to specify multiple branches, but only union and negative intersection are supported.\n\nExamples: `push-*`, `(push-* | foo/*) ~ foo/unwanted`\n\n[logical operators]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "-b", RequiresInput: true, InputType: "BRANCH"},
+								{Name: "tag", Description: "Fetch only some of the tags (can be repeated)\n\nBy default, the specified pattern matches tag names with glob syntax, but only `*` is expanded. Other wildcard characters such as `?` are *not* supported. Patterns can be repeated or combined with [logical operators] to specify multiple tags, but only union and negative intersection are supported.\n\n[logical operators]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "-t", RequiresInput: true, InputType: "TAG"},
+								{Name: "tracked", Description: "Fetch only tracked bookmarks and tags\n\nThis fetches only bookmarks and tags that are already tracked from the specified remote(s).", Value: "--tracked", ConflictingFlags: []string{"-b", "-t"}},
 							},
 						},
 						{
 							Summary: "Push to a Git remote", Name: "push",
 							Description: "Push to a Git remote\n\nBy default, pushes tracking bookmarks and tags pointing to `remote_bookmarks(remote=<remote>)..@`. Use `--bookmark`/`--tag` to push specific bookmarks or tags. Use `--all` to push all bookmarks and tags. Use `--change` to generate bookmark names based on the change IDs of specific commits.\n\nWhen pushing a bookmark or tag, the command pushes all commits in the range from the remote's current position up to and including its target commit. Any descendant commits beyond the reference are not pushed.\n\nIf the local reference has changed from the last fetch, push will update the remote reference to the new position after passing safety checks. This is similar to `git push --force-with-lease` - the remote is updated only if its current state matches what Jujutsu last fetched.\n\nUnlike in Git, the remote to push to is not derived from the tracked remote bookmarks. Use `--remote` to select the remote Git repository by name. There is no option to push to multiple remotes.\n\nBefore the command actually moves, creates, or deletes a remote bookmark, it makes several [safety checks]. If there is a problem, you may need to run `jj git fetch --remote <remote name>` and/or resolve some [bookmark conflicts].\n\n[safety checks]: https://docs.jj-vcs.dev/latest/bookmarks/#pushing-bookmarks-safety-checks\n\n[bookmark conflicts]: https://docs.jj-vcs.dev/latest/bookmarks/#conflicts",
 							Flags: []Flag{
-								{Name: "bookmark", Description: "Push only this bookmark, or bookmarks matching a pattern (can be repeated)\n\nIf a bookmark isn't tracking anything yet, the remote bookmark will be tracked automatically.\n\nBy default, the specified pattern matches bookmark names with glob syntax. You can also use other [string pattern syntax].\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "--bookmark", RequiresInput: true, InputType: "BOOKMARK"},
+								{Name: "bookmark", Description: "Push only this bookmark, or bookmarks matching a pattern (can be repeated)\n\nIf a bookmark isn't tracking anything yet, the remote bookmark will be tracked automatically.\n\nBy default, the specified pattern matches bookmark names with glob syntax. You can also use other [string pattern syntax].\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "-b", RequiresInput: true, InputType: "BOOKMARK"},
 								{Name: "remote", Description: "The remote to push to (only named remotes are supported)\n\nThis defaults to the `git.push` setting. If that is not configured, and if there are multiple remotes, the remote named \"origin\" will be used.", Value: "--remote", RequiresInput: true, InputType: "REMOTE"},
 								{Name: "revision", Description: "Push bookmarks and tags pointing to these commits (can be repeated)", Value: "-r", RequiresInput: true, InputType: "REVSETS"},
 								{Name: "change", Description: "Push this commit by creating a bookmark (can be repeated)\n\nThe created bookmark will be tracked automatically. Use the `templates.git_push_bookmark` setting to customize the generated bookmark name. The default is `\"push-\" ++ change_id.short()`.", Value: "-c", RequiresInput: true, InputType: "REVSETS"},
-								{Name: "tag", Description: "Push only this tag, or tags matching a pattern (can be repeated)\n\nIf a tag isn't tracking anything yet, the remote tag will be tracked automatically.\n\nBy default, the specified pattern matches tag names with glob syntax. You can also use other [string pattern syntax].\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "--tag", RequiresInput: true, InputType: "TAG"},
+								{Name: "tag", Description: "Push only this tag, or tags matching a pattern (can be repeated)\n\nIf a tag isn't tracking anything yet, the remote tag will be tracked automatically.\n\nBy default, the specified pattern matches tag names with glob syntax. You can also use other [string pattern syntax].\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "-t", RequiresInput: true, InputType: "TAG"},
+								{Name: "option", Description: "Git push options", Value: "-o", RequiresInput: true, InputType: "OPTION"},
 								{Name: "all", Description: "Push all bookmarks and tags (including new ones)", Value: "--all"},
 								{Name: "tracked", Description: "Push all tracked bookmarks and tags\n\nThis usually means that the bookmark or tag was already pushed to or fetched from the [relevant remote].\n\n[relevant remote]: https://docs.jj-vcs.dev/latest/bookmarks#remotes-and-tracked-bookmarks", Value: "--tracked"},
 								{Name: "named", Description: "Specify a new bookmark name and a revision to push under that name, e.g. '--named myfeature=@'\n\nAutomatically tracks the bookmark if it is new.", Value: "--named", RequiresInput: true},
-								{Name: "deleted", Description: "Push all deleted bookmarks and tags\n\nOnly tracked bookmarks and tags can be successfully deleted on the remote. A warning will be printed if any untracked bookmarks or tags on the remote correspond to missing local bookmarks or tags.", Value: "--deleted"},
+								{Name: "deleted", Description: "Push all deleted bookmarks and tags\n\nOnly tracked bookmarks and tags can be successfully deleted on the remote. A warning will be printed if any untracked bookmarks or tags on the remote correspond to missing local bookmarks or tags.", Value: "--deleted", ConflictingFlags: []string{"-b", "-t", "-r", "-c", "--named"}},
 								{Name: "allow-empty-description", Description: "Allow pushing commits with empty descriptions", Value: "--allow-empty-description"},
 								{Name: "allow-private", Description: "Allow pushing commits that are private\n\nThe set of private commits can be configured by the `git.private-commits` setting. The default is `none()`, meaning all commits are eligible to be pushed.", Value: "--allow-private"},
 								{Name: "allow-conflicts", Description: "Allow pushing commits that contain conflicts", Value: "--allow-conflicts"},
@@ -581,7 +599,9 @@ func loadCategories() []Category {
 								{Name: "REMOTE", Description: "The remote's name", Required: true},
 								{Name: "URL", Description: "The remote's URL or path\n\nLocal path will be resolved to absolute form.", Required: true},
 							},
-							Flags: []Flag{},
+							Flags: []Flag{
+								{Name: "push-url", Description: "The URL used for push\n\nLocal path will be resolved to absolute form", Value: "--push-url", RequiresInput: true, InputType: "PUSH_URL"},
+							},
 						},
 						{
 							Summary: "Remove a Git remote and forget its bookmarks", Name: "remote remove",
@@ -599,6 +619,18 @@ func loadCategories() []Category {
 								{Name: "NEW", Description: "The desired name for `old`", Required: true},
 							},
 							Flags: []Flag{},
+						},
+						{
+							Summary: "Set the URL of a Git remote", Name: "remote set-url",
+							Description: "Set the URL of a Git remote",
+							Args: []Arg{
+								{Name: "REMOTE", Description: "The remote's name", Required: true},
+								{Name: "URL", Description: "The URL or path to fetch from\n\nThis is a short form, equivalent to using the explicit --fetch.\n\nLocal path will be resolved to absolute form."},
+							},
+							Flags: []Flag{
+								{Name: "push", Description: "The URL or path to push to\n\nLocal path will be resolved to absolute form.", Value: "--push", RequiresInput: true, InputType: "PUSH"},
+								{Name: "fetch", Description: "The URL or path to fetch from\n\nLocal path will be resolved to absolute form.", Value: "--fetch", RequiresInput: true, InputType: "FETCH"},
+							},
 						},
 						{
 							Summary: "Update repo with changes made in the underlying Git repo", Name: "import",
@@ -625,10 +657,10 @@ func loadCategories() []Category {
 								{Name: "NAMES", Description: "Show bookmarks whose local name matches\n\nBy default, the specified pattern matches bookmark names with glob syntax. You can also use other [string pattern syntax].\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Variadic: true},
 							},
 							Flags: []Flag{
-								{Name: "all-remotes", Description: "Show all tracked and untracked remote bookmarks including the ones whose targets are synchronized with the local bookmarks", Value: "-a"},
-								{Name: "remote", Description: "Show all tracked and untracked remote bookmarks belonging to this remote\n\nCan be combined with `--tracked` or `--conflicted` to filter the bookmarks shown (can be repeated.)\n\nBy default, the specified pattern matches remote names with glob syntax. You can also use other [string pattern syntax].\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "--remote", RequiresInput: true, InputType: "REMOTE"},
-								{Name: "tracked", Description: "Show tracked remote bookmarks only\n\nThis omits local Git-tracking bookmarks by default.", Value: "-t"},
-								{Name: "conflicted", Description: "Show conflicted bookmarks only", Value: "-c"},
+								{Name: "all-remotes", Description: "Show all tracked and untracked remote bookmarks including the ones whose targets are synchronized with the local bookmarks", Value: "-a", ConflictingFlags: []string{"--remote", "-t", "-c"}},
+								{Name: "remote", Description: "Show all tracked and untracked remote bookmarks belonging to this remote\n\nCan be combined with `--tracked` or `--conflicted` to filter the bookmarks shown (can be repeated.)\n\nBy default, the specified pattern matches remote names with glob syntax. You can also use other [string pattern syntax].\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "--remote", RequiresInput: true, ConflictingFlags: []string{"-a"}, InputType: "REMOTE"},
+								{Name: "tracked", Description: "Show tracked remote bookmarks only\n\nThis omits local Git-tracking bookmarks by default.", Value: "-t", ConflictingFlags: []string{"-a"}},
+								{Name: "conflicted", Description: "Show conflicted bookmarks only", Value: "-c", ConflictingFlags: []string{"-a"}},
 								{Name: "revision", Description: "Show bookmarks whose local targets are in the given revisions\n\nNote that `-r deleted_bookmark` will not work since `deleted_bookmark` wouldn't have a local target.", Value: "-r", RequiresInput: true, InputType: "REVSETS"},
 								{Name: "template", Description: "Render each bookmark using the given template\n\nAll 0-argument methods of the [`CommitRef` type] are available as keywords in the template expression. See [`jj help -k templates`] for more information.\n\nThe default template can be set by the `templates.bookmark_list` setting.\n\n[`CommitRef` type]: https://docs.jj-vcs.dev/latest/templates/#commitref-type\n\n[`jj help -k templates`]: https://docs.jj-vcs.dev/latest/templates/", Value: "-T", RequiresInput: true, InputType: "TEMPLATE"},
 								{Name: "sort", Description: "Sort bookmarks based on the given key (or multiple keys)\n\nSuffix the key with `-` to sort in descending order of the value (e.g. `--sort name-`). Note that when using multiple keys, the first key is the most significant.\n\nThis defaults to the `ui.bookmark-list-sort-keys` setting.\n\nPossible values: `name`, `name-`, `author-name`, `author-name-`, `author-email`, `author-email-`, `author-date`, `author-date-`, `committer-name`, `committer-name-`, `committer-email`, `committer-email-`, `committer-date`, `committer-date-`", Value: "--sort", RequiresInput: true, InputType: "SORT_KEY"},
@@ -667,7 +699,7 @@ func loadCategories() []Category {
 							},
 							Flags: []Flag{
 								{Name: "revision", Description: "The bookmark's target revision\n\nDefault value: `@`", Value: "-r", Alias: "to", RequiresInput: true, InputType: "REVSET"},
-								{Name: "allow-backwards", Description: "Allow moving the bookmark backwards or sideways", Value: "--allow-backwards"},
+								{Name: "allow-backwards", Description: "Allow moving the bookmark backwards or sideways", Value: "-B"},
 							},
 						},
 						{
@@ -747,8 +779,10 @@ func loadCategories() []Category {
 								{Name: "NAMES", Description: "Show tags whose local name matches\n\nBy default, the specified pattern matches tag names with glob syntax. You can also use other [string pattern syntax].\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Variadic: true},
 							},
 							Flags: []Flag{
-								{Name: "all-remotes", Description: "Show all tracked and untracked remote tags including the ones whose targets are synchronized with the local tags", Value: "-a"},
-								{Name: "conflicted", Description: "Show conflicted tags only", Value: "-c"},
+								{Name: "all-remotes", Description: "Show all tracked and untracked remote tags including the ones whose targets are synchronized with the local tags", Value: "-a", ConflictingFlags: []string{"--remote", "-t", "-c"}},
+								{Name: "remote", Description: "Show all tracked and untracked remote tags belonging to this remote\n\nCan be combined with `--tracked` or `--conflicted` to filter the tags shown (can be repeated.)\n\nBy default, the specified pattern matches remote names with glob syntax. You can also use other [string pattern syntax].\n\n[string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "--remote", RequiresInput: true, ConflictingFlags: []string{"-a"}, InputType: "REMOTE"},
+								{Name: "tracked", Description: "Show tracked remote tags only\n\nThis omits local Git-tracking tags by default.", Value: "-t", ConflictingFlags: []string{"-a"}},
+								{Name: "conflicted", Description: "Show conflicted tags only", Value: "-c", ConflictingFlags: []string{"-a"}},
 								{Name: "revision", Description: "Show tags whose local targets are in the given revisions\n\nNote that `-r deleted_tag` will not work since `deleted_tag` wouldn't have a local target.", Value: "-r", RequiresInput: true, InputType: "REVSETS"},
 								{Name: "template", Description: "Render each tag using the given template\n\nAll 0-argument methods of the [`CommitRef` type] are available as keywords in the template expression. See [`jj help -k templates`] for more information.\n\nThe default template can be set by the `templates.tag_list` setting.\n\n[`CommitRef` type]: https://docs.jj-vcs.dev/latest/templates/#commitref-type\n\n[`jj help -k templates`]: https://docs.jj-vcs.dev/latest/templates/", Value: "-T", RequiresInput: true, InputType: "TEMPLATE"},
 								{Name: "sort", Description: "Sort tags based on the given key (or multiple keys)\n\nSuffix the key with `-` to sort in descending order of the value (e.g. `--sort name-`). Note that when using multiple keys, the first key is the most significant.\n\nThis defaults to the `ui.tag-list-sort-keys` setting.\n\nPossible values: `name`, `name-`, `author-name`, `author-name-`, `author-email`, `author-email-`, `author-date`, `author-date-`, `committer-name`, `committer-name-`, `committer-email`, `committer-email-`, `committer-date`, `committer-date-`", Value: "--sort", RequiresInput: true, InputType: "SORT_KEY"},
@@ -823,6 +857,8 @@ func loadCategories() []Category {
 								{Name: "name-only", Description: "For each path, show only its path\n\nTypically useful for shell commands like: `jj diff -r @- --name-only | xargs perl -pi -e's/OLD/NEW/g`", Value: "--name-only", ConflictingFlags: []string{"-s", "--stat", "--types"}},
 								{Name: "git", Description: "Show a Git-format diff", Value: "--git", ConflictingFlags: []string{"--color-words"}},
 								{Name: "color-words", Description: "Show a word-level diff with changes indicated only by color", Value: "--color-words", ConflictingFlags: []string{"--git"}},
+								{Name: "ignore-all-space", Description: "Ignore whitespace when comparing lines", Value: "--ignore-all-space", ConflictingFlags: []string{"--ignore-space-change"}},
+								{Name: "ignore-space-change", Description: "Ignore changes in amount of whitespace when comparing lines", Value: "--ignore-space-change", ConflictingFlags: []string{"--ignore-all-space"}},
 								{Name: "tool", Description: "Generate diff by external command\n\nA builtin format can also be specified as `:<name>`. For example, `--tool=:git` is equivalent to `--git`.", Value: "--tool", RequiresInput: true, InputType: "TOOL"},
 								{Name: "context", Description: "Number of lines of context to show", Value: "--context", RequiresInput: true, InputType: "CONTEXT"},
 								{Name: "show-changes-in", Description: "Show only changed revisions matching the given revset expression\n\nIf no revisions are specified, this defaults to the `revsets.op-diff-changes-in` setting.", Value: "--show-changes-in", RequiresInput: true, InputType: "REVSETS"},
@@ -838,7 +874,7 @@ func loadCategories() []Category {
 								{Name: "no-graph", Description: "Don't show the graph, show a flat list of modified changes", Value: "-G"},
 								{Name: "template", Description: "Render the operation using the given template\n\nYou can specify arbitrary template expressions using the [built-in keywords]. See [`jj help -k templates`] for more information.\n\n[built-in keywords]: https://docs.jj-vcs.dev/latest/templates/#operation-keywords\n\n[`jj help -k templates`]: https://docs.jj-vcs.dev/latest/templates/", Value: "-T", RequiresInput: true, InputType: "TEMPLATE"},
 								{Name: "patch", Description: "Show patch of modifications to changes\n\nIf the previous version has different parents, it will be temporarily rebased to the parents of the new version, so the diff is not contaminated by unrelated changes.", Value: "-p"},
-								{Name: "no-op-diff", Description: "Do not show operation diff", Value: "--no-op-diff"},
+								{Name: "no-op-diff", Description: "Do not show operation diff", Value: "--no-op-diff", ConflictingFlags: []string{"-p", "-s", "--stat", "--types", "--name-only", "--git", "--color-words", "--tool", "--context", "--ignore-all-space", "--ignore-space-change"}},
 								{Name: "summary", Description: "For each path, show only whether it was modified, added, or deleted", Value: "-s", ConflictingFlags: []string{"--stat", "--types", "--name-only"}},
 								{Name: "stat", Description: "Show a histogram of the changes", Value: "--stat", ConflictingFlags: []string{"-s", "--types", "--name-only"}},
 								{Name: "types", Description: "For each path, show only its type before and after\n\nThe diff is shown as two letters. The first letter indicates the type before and the second letter indicates the type after. '-' indicates that the path was not present, 'F' represents a regular file, `L' represents a symlink, 'C' represents a conflict, and 'G' represents a Git submodule.", Value: "--types", ConflictingFlags: []string{"-s", "--stat", "--name-only"}},
@@ -856,12 +892,12 @@ func loadCategories() []Category {
 							Summary: "Compare changes to the repository between two operations", Name: "diff",
 							Description: "Compare changes to the repository between two operations",
 							Flags: []Flag{
-								{Name: "operation", Description: "Show repository changes in this operation, compared to its parent", Value: "--operation", Alias: "op", RequiresInput: true, InputType: "OPERATION"},
-								{Name: "from", Description: "Show repository changes from this operation", Value: "--from", RequiresInput: true, InputType: "FROM"},
-								{Name: "to", Description: "Show repository changes to this operation", Value: "--to", RequiresInput: true, InputType: "TO"},
+								{Name: "operation", Description: "Show repository changes in this operation, compared to its parent", Value: "--operation", Alias: "op", RequiresInput: true, ConflictingFlags: []string{"-f", "-t"}, InputType: "OPERATION"},
+								{Name: "from", Description: "Show repository changes from this operation", Value: "-f", RequiresInput: true, ConflictingFlags: []string{"--operation"}, InputType: "FROM"},
+								{Name: "to", Description: "Show repository changes to this operation", Value: "-t", RequiresInput: true, ConflictingFlags: []string{"--operation"}, InputType: "TO"},
 								{Name: "no-graph", Description: "Don't show the graph, show a flat list of modified changes", Value: "-G"},
 								{Name: "patch", Description: "Show patch of modifications to changes\n\nIf the previous version has different parents, it will be temporarily rebased to the parents of the new version, so the diff is not contaminated by unrelated changes.", Value: "-p"},
-								{Name: "summary", Description: "For each path, show only whether it was modified, added, or deleted", Value: "--summary", ConflictingFlags: []string{"--name-only", "--stat", "--types"}},
+								{Name: "summary", Description: "For each path, show only whether it was modified, added, or deleted", Value: "-s", ConflictingFlags: []string{"--name-only", "--stat", "--types"}},
 								{Name: "stat", Description: "Show a histogram of the changes", Value: "--stat", ConflictingFlags: []string{"--name-only", "--summary", "--types"}},
 								{Name: "types", Description: "For each path, show only its type before and after\n\nThe diff is shown as two letters. The first letter indicates the type before and the second letter indicates the type after. '-' indicates that the path was not present, 'F' represents a regular file, `L' represents a symlink, 'C' represents a conflict, and 'G' represents a Git submodule.", Value: "--types", ConflictingFlags: []string{"--summary", "--stat", "--name-only"}},
 								{Name: "name-only", Description: "For each path, show only its path\n\nTypically useful for shell commands like: `jj diff -r @- --name-only | xargs perl -pi -e's/OLD/NEW/g`", Value: "--name-only", ConflictingFlags: []string{"--summary", "--stat", "--types"}},
@@ -940,8 +976,8 @@ func loadCategories() []Category {
 						{Name: "OFFSET", Description: "How many revisions to move forward. Advances to the next child by default\n\nDefault value: `1`"},
 					},
 					Flags: []Flag{
-						{Name: "edit", Description: "Instead of creating a new working-copy commit on top of the target commit (like `jj new`), edit the target commit directly (like `jj edit`)\n\nTakes precedence over config in `ui.movement.edit`; i.e. will negate `ui.movement.edit = false`", Value: "--edit", ConflictingFlags: []string{"--no-edit"}},
-						{Name: "no-edit", Description: "The inverse of `--edit`\n\nTakes precedence over config in `ui.movement.edit`; i.e. will negate `ui.movement.edit = true`", Value: "--no-edit", ConflictingFlags: []string{"--edit"}},
+						{Name: "edit", Description: "Instead of creating a new working-copy commit on top of the target commit (like `jj new`), edit the target commit directly (like `jj edit`)\n\nTakes precedence over config in `ui.movement.edit`; i.e. will negate `ui.movement.edit = false`", Value: "-e", ConflictingFlags: []string{"-n"}},
+						{Name: "no-edit", Description: "The inverse of `--edit`\n\nTakes precedence over config in `ui.movement.edit`; i.e. will negate `ui.movement.edit = true`", Value: "-n", ConflictingFlags: []string{"-e"}},
 						{Name: "conflict", Description: "Jump to the next conflicted descendant", Value: "--conflict"},
 					},
 				},
@@ -952,8 +988,8 @@ func loadCategories() []Category {
 						{Name: "OFFSET", Description: "How many revisions to move backward. Moves to the parent by default\n\nDefault value: `1`"},
 					},
 					Flags: []Flag{
-						{Name: "edit", Description: "Edit the parent directly, instead of moving the working-copy commit\n\nTakes precedence over config in `ui.movement.edit`; i.e. will negate `ui.movement.edit = false`", Value: "--edit", ConflictingFlags: []string{"--no-edit"}},
-						{Name: "no-edit", Description: "The inverse of `--edit`\n\nTakes precedence over config in `ui.movement.edit`; i.e. will negate `ui.movement.edit = true`", Value: "--no-edit", ConflictingFlags: []string{"--edit"}},
+						{Name: "edit", Description: "Edit the parent directly, instead of moving the working-copy commit\n\nTakes precedence over config in `ui.movement.edit`; i.e. will negate `ui.movement.edit = false`", Value: "-e", ConflictingFlags: []string{"-n"}},
+						{Name: "no-edit", Description: "The inverse of `--edit`\n\nTakes precedence over config in `ui.movement.edit`; i.e. will negate `ui.movement.edit = true`", Value: "-n", ConflictingFlags: []string{"-e"}},
 						{Name: "conflict", Description: "Jump to the previous conflicted ancestor", Value: "--conflict"},
 					},
 				},
@@ -988,10 +1024,11 @@ func loadCategories() []Category {
 						{Name: "revision", Description: "The revisions to change", Value: "-r", RequiresInput: true, InputType: "REVSETS"},
 						{Name: "jobs", Description: "How many processes should run in parallel\n\nOverrides the `run.jobs` config setting. Defaults to 1 if neither is set.", Value: "-j", RequiresInput: true, InputType: "JOBS"},
 						{Name: "root", Description: "Run the command from the working-copy root in each commit instead of from the subdirectory `jj run` was invoked from", Value: "--root"},
+						{Name: "exec", Description: "A no-op option to match the interface of `git rebase -x`", Value: "-x", ShortOnly: true},
 						{Name: "clean", Description: "Delete each working copy before running the command\n\nBy default `jj run` reuses working copies between invocations so build artifacts are preserved. With `--clean`, every commit starts from a freshly checked-out tree.", Value: "--clean"},
-						{Name: "restore-descendants", Description: "Preserve the content (not the diff) when rebasing descendants", Value: "--restore-descendants"},
+						{Name: "restore-descendants", Description: "Preserve the content (not the diff) when rebasing descendants", Value: "--restore-descendants", ConflictingFlags: []string{"--ignore-changes"}},
 						{Name: "passthrough", Description: "Pass through stdout and stderr directly to the terminal\n\nThe command's stdout and stderr are connected directly to the terminal (instead of being captured), so programs that behave differently on a TTY (e.g. colored output, progress bars) work as expected. Stdin is not inherited. Only one job is allowed since parallel jobs would interleave their output.", Value: "--passthrough"},
-						{Name: "ignore-changes", Description: "Run the command without rewriting any commits.\n\nEach revision is checked out and the command is executed, but changes made to the working copy are discarded. Useful for read-only checks (tests, linters).\n\nThis option permits running on immutable commits without passing `--ignore-immutable`.", Value: "--ignore-changes"},
+						{Name: "ignore-changes", Description: "Run the command without rewriting any commits.\n\nEach revision is checked out and the command is executed, but changes made to the working copy are discarded. Useful for read-only checks (tests, linters).\n\nThis option permits running on immutable commits without passing `--ignore-immutable`.", Value: "--ignore-changes", ConflictingFlags: []string{"--restore-descendants"}},
 						{Name: "ignore-errors", Description: "Continue with remaining revisions when a command's exit code indicates failure\n\nAny changes made by a failed command will not be saved, but changes from successful commands are still applied atomically at the end.\n\nThe exit code from any failed command will not impact the exit code of `jj run` itself.", Value: "--ignore-errors"},
 					},
 				},
@@ -1009,8 +1046,8 @@ func loadCategories() []Category {
 							Description: "Update the patterns that are present in the working copy\n\nFor example, if all you need is the `README.md` and the `lib/` directory, use `jj sparse set --clear --add README.md --add lib`. If you no longer need the `lib` directory, use `jj sparse set --remove lib`.",
 							Flags: []Flag{
 								{Name: "add", Description: "Patterns to add to the working copy", Value: "--add", RequiresInput: true, InputType: "ADD"},
-								{Name: "remove", Description: "Patterns to remove from the working copy", Value: "--remove", RequiresInput: true, InputType: "REMOVE"},
-								{Name: "clear", Description: "Include no files in the working copy (combine with --add)", Value: "--clear"},
+								{Name: "remove", Description: "Patterns to remove from the working copy", Value: "--remove", RequiresInput: true, ConflictingFlags: []string{"--clear"}, InputType: "REMOVE"},
+								{Name: "clear", Description: "Include no files in the working copy (combine with --add)", Value: "--clear", ConflictingFlags: []string{"--remove"}},
 							},
 						},
 						{
@@ -1123,19 +1160,263 @@ func loadCategories() []Category {
 					},
 				},
 				{
+					Name:        "bench",
+					Description: "Commands for benchmarking internal operations",
+					SubCmds: []SubCommand{
+						{
+							Summary: "Find the common ancestor(s) of a set of commits", Name: "common-ancestors",
+							Description: "Find the common ancestor(s) of a set of commits",
+							Args: []Arg{
+								{Name: "REVISION1", Description: "The first revision", Required: true},
+								{Name: "REVISION2", Description: "The second revision", Required: true},
+							},
+							Flags: []Flag{
+								{Name: "save-baseline", Description: "Name of baseline to save results", Value: "-s", RequiresInput: true, InputType: "SAVE_BASELINE"},
+								{Name: "baseline", Description: "Name of baseline to compare with", Value: "-b", RequiresInput: true, InputType: "BASELINE"},
+								{Name: "sample-size", Description: "Sample size for the benchmarks, which must be at least 10", Value: "--sample-size", RequiresInput: true, InputType: "SAMPLE_SIZE"},
+							},
+						},
+						{
+							Summary: "Checks if the first commit is an ancestor of the second commit", Name: "is-ancestor",
+							Description: "Checks if the first commit is an ancestor of the second commit",
+							Args: []Arg{
+								{Name: "ANCESTOR", Description: "The first commit", Required: true},
+								{Name: "DESCENDANT", Description: "The second commit", Required: true},
+							},
+							Flags: []Flag{
+								{Name: "save-baseline", Description: "Name of baseline to save results", Value: "-s", RequiresInput: true, InputType: "SAVE_BASELINE"},
+								{Name: "baseline", Description: "Name of baseline to compare with", Value: "-b", RequiresInput: true, InputType: "BASELINE"},
+								{Name: "sample-size", Description: "Sample size for the benchmarks, which must be at least 10", Value: "--sample-size", RequiresInput: true, InputType: "SAMPLE_SIZE"},
+							},
+						},
+						{
+							Summary: "Resolve a commit ID prefix", Name: "resolve-prefix",
+							Description: "Resolve a commit ID prefix",
+							Args: []Arg{
+								{Name: "PREFIX", Description: "The commit ID prefix to resolve", Required: true},
+							},
+							Flags: []Flag{
+								{Name: "save-baseline", Description: "Name of baseline to save results", Value: "-s", RequiresInput: true, InputType: "SAVE_BASELINE"},
+								{Name: "baseline", Description: "Name of baseline to compare with", Value: "-b", RequiresInput: true, InputType: "BASELINE"},
+								{Name: "sample-size", Description: "Sample size for the benchmarks, which must be at least 10", Value: "--sample-size", RequiresInput: true, InputType: "SAMPLE_SIZE"},
+							},
+						},
+						{
+							Summary: "Walk the revisions in the revset", Name: "revset",
+							Description: "Walk the revisions in the revset",
+							Args: []Arg{
+								{Name: "REVISIONS", Description: "Revisions to walk", Variadic: true},
+							},
+							Flags: []Flag{
+								{Name: "file", Description: "Read revsets from file", Value: "-f", RequiresInput: true, InputType: "FILE"},
+								{Name: "save-baseline", Description: "Name of baseline to save results", Value: "-s", RequiresInput: true, InputType: "SAVE_BASELINE"},
+								{Name: "baseline", Description: "Name of baseline to compare with", Value: "-b", RequiresInput: true, InputType: "BASELINE"},
+								{Name: "sample-size", Description: "Sample size for the benchmarks, which must be at least 10", Value: "--sample-size", RequiresInput: true, InputType: "SAMPLE_SIZE"},
+							},
+						},
+					},
+				},
+				{
+					Name:        "debug",
+					Description: "Low-level commands not intended for users",
+					SubCmds: []SubCommand{
+						{
+							Summary: "Show information about file copies detected", Name: "copy-detection",
+							Description: "Show information about file copies detected",
+							Args: []Arg{
+								{Name: "REVISION", Description: "Show file copies detected in changed files in this revision, compared to its parent(s)"},
+							},
+							Flags: []Flag{},
+						},
+						{
+							Summary: "Parse fileset expression", Name: "fileset",
+							Description: "Parse fileset expression",
+							Args: []Arg{
+								{Name: "PATH", Description: "Fileset expression to parse", Required: true},
+							},
+							Flags: []Flag{},
+						},
+						{
+							Summary: "Show commit index stats", Name: "index",
+							Description: "Show commit index stats",
+							Flags:       []Flag{},
+						},
+						{
+							Summary: "Build changed-path index", Name: "index-changed-paths",
+							Description: "Build changed-path index",
+							Flags: []Flag{
+								{Name: "limit", Description: "Limit number of revisions to index", Value: "-n", RequiresInput: true, InputType: "LIMIT"},
+							},
+						},
+						{
+							Summary: "Create a new repo in the given directory using the proof-of-concept simple backend", Name: "init-simple",
+							Description: "Create a new repo in the given directory using the proof-of-concept simple backend",
+							Args: []Arg{
+								{Name: "DESTINATION", Description: "The destination directory"},
+							},
+							Flags: []Flag{},
+						},
+						{
+							Summary: "Show information about the local working copy state", Name: "local-working-copy",
+							Description: "Show information about the local working copy state",
+							Flags:       []Flag{},
+						},
+						{
+							Summary: "Show information about a commit", Name: "object commit",
+							Description: "Show information about a commit",
+							Args: []Arg{
+								{Name: "ID", Description: "The commit ID to show", Required: true},
+							},
+							Flags: []Flag{},
+						},
+						{
+							Summary: "Show information about a file", Name: "object file",
+							Description: "Show information about a file",
+							Args: []Arg{
+								{Name: "PATH", Description: "The path of the file", Required: true},
+								{Name: "ID", Description: "The file ID to show"},
+							},
+							Flags: []Flag{
+								{Name: "revision", Description: "The revision", Value: "-r", RequiresInput: true, InputType: "REVISION"},
+							},
+						},
+						{
+							Summary: "Show information about an operation", Name: "object operation",
+							Description: "Show information about an operation",
+							Args: []Arg{
+								{Name: "ID", Description: "The operation ID to show", Required: true},
+							},
+							Flags: []Flag{},
+						},
+						{
+							Summary: "Show information about a symlink", Name: "object symlink",
+							Description: "Show information about a symlink",
+							Args: []Arg{
+								{Name: "PATH", Description: "The path of the symlink", Required: true},
+								{Name: "ID", Description: "The symlink ID to show"},
+							},
+							Flags: []Flag{
+								{Name: "revision", Description: "The revision", Value: "-r", RequiresInput: true, InputType: "REVISION"},
+							},
+						},
+						{
+							Summary: "Show information about a tree", Name: "object tree",
+							Description: "Show information about a tree",
+							Args: []Arg{
+								{Name: "DIR", Description: "The directory of the tree", Required: true},
+								{Name: "ID", Description: "The tree ID to show"},
+							},
+							Flags: []Flag{
+								{Name: "revision", Description: "The revision", Value: "-r", RequiresInput: true, InputType: "REVISION"},
+							},
+						},
+						{
+							Summary: "Show information about a view", Name: "object view",
+							Description: "Show information about a view",
+							Args: []Arg{
+								{Name: "ID", Description: "The view ID to show"},
+							},
+							Flags: []Flag{
+								{Name: "op", Description: "The operation", Value: "--op", RequiresInput: true, InputType: "OP"},
+							},
+						},
+						{
+							Summary: "Rebuild commit index", Name: "reindex",
+							Description: "Rebuild commit index",
+							Flags:       []Flag{},
+						},
+						{
+							Summary: "Evaluate revset to full commit IDs", Name: "revset",
+							Description: "Evaluate revset to full commit IDs",
+							Args: []Arg{
+								{Name: "REVISION", Description: "The revset to evaluate", Required: true},
+							},
+							Flags: []Flag{
+								{Name: "no-resolve", Description: "Do not resolve and evaluate expression", Value: "--no-resolve"},
+								{Name: "no-optimize", Description: "Do not rewrite expression to optimized form", Value: "--no-optimize"},
+							},
+						},
+						{
+							Summary: "[DEPRECATED] Trigger a snapshot in the op log", Name: "snapshot",
+							Description: "[DEPRECATED] Trigger a snapshot in the op log",
+							Flags:       []Flag{},
+						},
+						{
+							Summary: "Show stats of stacked table", Name: "stacked-table",
+							Description: "Show stats of stacked table",
+							Args: []Arg{
+								{Name: "DIR", Description: "Path to table store directory", Required: true},
+							},
+							Flags: []Flag{
+								{Name: "key-size", Description: "Key size in bytes", Value: "-n", RequiresInput: true, InputType: "KEY_SIZE"},
+							},
+						},
+						{
+							Summary: "Parse a template", Name: "template",
+							Description: "Parse a template",
+							Args: []Arg{
+								{Name: "TEMPLATE", Description: "The template to parse", Required: true},
+							},
+							Flags: []Flag{},
+						},
+						{
+							Summary: "List the recursive entries of a tree", Name: "tree",
+							Description: "List the recursive entries of a tree",
+							Args: []Arg{
+								{Name: "PATHS", Description: "Paths to list", Variadic: true},
+							},
+							Flags: []Flag{
+								{Name: "revision", Description: "The revision", Value: "-r", RequiresInput: true, ConflictingFlags: []string{"--id"}, InputType: "REVSET"},
+								{Name: "id", Description: "The tree ID", Value: "--id", RequiresInput: true, ConflictingFlags: []string{"-r"}, InputType: "ID"},
+								{Name: "dir", Description: "The directory", Value: "--dir", RequiresInput: true, InputType: "DIR"},
+							},
+						},
+						{
+							Summary: "Check whether `watchman` is enabled and whether it's correctly installed", Name: "watchman status",
+							Description: "Check whether `watchman` is enabled and whether it's correctly installed",
+							Flags:       []Flag{},
+						},
+						{
+							Summary: "Query the watchman clock", Name: "watchman query-clock",
+							Description: "Query the watchman clock",
+							Flags:       []Flag{},
+						},
+						{
+							Summary: "Query changed files from watchman", Name: "watchman query-changed-files",
+							Description: "Query changed files from watchman",
+							Flags:       []Flag{},
+						},
+						{
+							Summary: "Reset the watchman clock", Name: "watchman reset-clock",
+							Description: "Reset the watchman clock",
+							Flags:       []Flag{},
+						},
+						{
+							Summary: "Show information about the working copy state", Name: "working-copy",
+							Description: "Show information about the working copy state",
+							Flags:       []Flag{},
+						},
+					},
+				},
+				{
+					Name:        "version",
+					Description: "Display version information",
+					Flags:       []Flag{},
+				},
+				{
 					Name:        "help",
 					Description: "Print this message or the help of the given subcommand(s)",
 					Args: []Arg{
 						{Name: "COMMAND", Description: "Print help for the subcommand(s)", Variadic: true},
 					},
 					SubCmds: []SubCommand{
-						{Summary: "", Name: "bookmarks", Value: "-k bookmarks", Description: "Print this message or the help of the given subcommand(s)"},
-						{Summary: "", Name: "config", Value: "-k config", Description: "Print this message or the help of the given subcommand(s)"},
-						{Summary: "", Name: "filesets", Value: "-k filesets", Description: "Print this message or the help of the given subcommand(s)"},
-						{Summary: "", Name: "glossary", Value: "-k glossary", Description: "Print this message or the help of the given subcommand(s)"},
-						{Summary: "", Name: "revsets", Value: "-k revsets", Description: "Print this message or the help of the given subcommand(s)"},
-						{Summary: "", Name: "templates", Value: "-k templates", Description: "Print this message or the help of the given subcommand(s)"},
-						{Summary: "", Name: "tutorial", Value: "-k tutorial", Description: "Print this message or the help of the given subcommand(s)"},
+						{Summary: "Named pointers to revisions (similar to Git's branches)", Name: "bookmarks", Value: "-k bookmarks", Description: "Named pointers to revisions (similar to Git's branches)"},
+						{Summary: "How and where to set configuration options", Name: "config", Value: "-k config", Description: "How and where to set configuration options"},
+						{Summary: "A functional language for selecting a set of files", Name: "filesets", Value: "-k filesets", Description: "A functional language for selecting a set of files"},
+						{Summary: "Definitions of various terms", Name: "glossary", Value: "-k glossary", Description: "Definitions of various terms"},
+						{Summary: "A functional language for selecting a set of revision", Name: "revsets", Value: "-k revsets", Description: "A functional language for selecting a set of revision"},
+						{Summary: "A functional language to customize command output", Name: "templates", Value: "-k templates", Description: "A functional language to customize command output"},
+						{Summary: "Show a tutorial to get started with jj", Name: "tutorial", Value: "-k tutorial", Description: "Show a tutorial to get started with jj"},
 					},
 					Flags: []Flag{},
 				},
@@ -1156,9 +1437,13 @@ func loadCategories() []Category {
 								{Name: "DESTINATION", Description: "Specifies the target directory for the Jujutsu repository clone. If not provided, defaults to a directory named after the last component of the source URL. The full directory path will be created if it doesn't exist"},
 							},
 							Flags: []Flag{
+								{Name: "remote", Description: "Name of the newly created remote\n\nDefault value: `origin`", Value: "--remote", RequiresInput: true, InputType: "REMOTE_NAME"},
 								{Name: "depth", Description: "Create a shallow clone of the given depth", Value: "--depth", RequiresInput: true, InputType: "DEPTH"},
-								{Name: "colocate", Description: "Colocate the Jujutsu repo with the git repo\n\nSpecifies that the `jj` repo should also be a valid `git` repo, allowing the use of both `jj` and `git` commands in the same directory.\n\nThe repository will contain a `.git` dir in the top-level. Regular Git tools will be able to operate on the repo.\n\n**This is the default**, and this option has no effect, unless the [git.colocate config] is set to `false`.\n\n[git.colocate config]: https://docs.jj-vcs.dev/latest/config/#default-colocation", Value: "--colocate"},
-								{Name: "tag", Description: "Fetch only some of the tags (can be repeated)\n\nBy default, the specified pattern matches tag names with glob syntax, but only `*` is expanded. Other wildcard characters such as `?` are *not* supported. Patterns can be repeated or combined with [logical operators] to specify multiple tags, but only union and negative intersection are supported.\n\n[logical operators]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "--tag", RequiresInput: true, InputType: "TAG"},
+								{Name: "branch", Description: "Name of the branch to fetch and use as the parent of the working-copy change (can be repeated)\n\nIf not present, all branches are fetched and the repository's default branch is used as parent of the working-copy change.\n\nBy default, the specified pattern matches branch names with glob syntax, but only `*` is expanded. Other wildcard characters such as `?` are *not* supported. Patterns can be repeated or combined with [logical operators] to specify multiple branches, but only union and negative intersection are supported. If there are multiple matching branches, the first exact branch name is used as the working-copy parent.\n\nExamples: `push-*`, `(push-* | foo/*) ~ foo/unwanted`\n\n[logical operators]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "-b", RequiresInput: true, InputType: "BRANCH"},
+								{Name: "colocate", Description: "Colocate the Jujutsu repo with the git repo\n\nSpecifies that the `jj` repo should also be a valid `git` repo, allowing the use of both `jj` and `git` commands in the same directory.\n\nThe repository will contain a `.git` dir in the top-level. Regular Git tools will be able to operate on the repo.\n\n**This is the default**, and this option has no effect, unless the [git.colocate config] is set to `false`.\n\n[git.colocate config]: https://docs.jj-vcs.dev/latest/config/#default-colocation", Value: "--colocate", ConflictingFlags: []string{"--no-colocate"}},
+								{Name: "no-colocate", Description: "Disable colocation of the Jujutsu repo with the git repo\n\nPrevent Git tools that are unaware of `jj` and regular Git commands from operating on the repo. The Git repository that stores most of the repo data will be hidden inside a sub-directory of the `.jj` directory.\n\nSee [colocation docs] for some minor advantages of non-colocated workspaces.\n\n[colocation docs]: https://docs.jj-vcs.dev/latest/git-compatibility/#colocated-jujutsugit-repos", Value: "--no-colocate", ConflictingFlags: []string{"--colocate"}},
+								{Name: "object-hash", Description: "Object hash algorithm for the local Git repository.\n\n*Must* match the remote's hash algorithm, otherwise the operation will fail. Most existing repositories today still use the classic SHA-1 format, which is also the default if not configured otherwise by the [git.object-hash config].\n\nSee also Git's [hash-function-transition] document for an in-depth explanation of the migration towards stronger hash functions.\n\n[git.object-hash config]: https://docs.jj-vcs.dev/latest/config/#default-object-hash-format [hash-function-transition]: https://git-scm.com/docs/hash-function-transition\n\nPossible values: `sha1`, `sha256`", Value: "--object-hash", RequiresInput: true, InputType: "OBJECT_HASH"},
+								{Name: "tag", Description: "Fetch only some of the tags (can be repeated)\n\nBy default, the specified pattern matches tag names with glob syntax, but only `*` is expanded. Other wildcard characters such as `?` are *not* supported. Patterns can be repeated or combined with [logical operators] to specify multiple tags, but only union and negative intersection are supported.\n\n[logical operators]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns", Value: "-t", RequiresInput: true, InputType: "TAG"},
 							},
 						},
 						{
@@ -1168,10 +1453,31 @@ func loadCategories() []Category {
 								{Name: "DESTINATION", Description: "The destination directory where the `jj` repo will be created. If the directory does not exist, it will be created. If no directory is given, the current directory is used.\n\nBy default the `git` repo is under `$destination/.jj`\n\nDefault value: `.`"},
 							},
 							Flags: []Flag{
+								{Name: "object-hash", Description: "Object hash algorithm for the newly created Git repository.\n\nCorresponds to `git init`'s `--object-format` option. If not given, the [git.object-hash config] determines the default value.\n\nNote that the object hash cannot currently be changed for an existing repo, and not all code forges support SHA-256 repositories yet. See also Git's [hash-function-transition] document for an in-depth explanation of the migration towards stronger hash functions.\n\n[git.object-hash config]: https://docs.jj-vcs.dev/latest/config/#default-object-hash-format [hash-function-transition]: https://git-scm.com/docs/hash-function-transition\n\nPossible values: `sha1`, `sha256`", Value: "--object-hash", RequiresInput: true, ConflictingFlags: []string{"--git-repo"}, InputType: "OBJECT_HASH"},
 								{Name: "colocate", Description: "Colocate the Jujutsu repo with the git repo\n\nSpecifies that the `jj` repo should also be a valid `git` repo, allowing the use of both `jj` and `git` commands in the same directory.\n\nThe repository will contain a `.git` dir in the top-level. Regular Git tools will be able to operate on the repo.\n\n**This is the default**, and this option has no effect, unless the [git.colocate config] is set to `false`.\n\nThis option is mutually exclusive with `--git-repo`.\n\n[git.colocate config]: https://docs.jj-vcs.dev/latest/config/#default-colocation", Value: "--colocate", ConflictingFlags: []string{"--no-colocate", "--git-repo"}},
 								{Name: "no-colocate", Description: "Disable colocation of the Jujutsu repo with the git repo\n\nPrevent Git tools that are unaware of `jj` and regular Git commands from operating on the repo. The Git repository that stores most of the repo data will be hidden inside a sub-directory of the `.jj` directory.\n\nSee [colocation docs] for some minor advantages of non-colocated workspaces.\n\n[colocation docs]: https://docs.jj-vcs.dev/latest/git-compatibility/#colocated-jujutsugit-repos", Value: "--no-colocate", ConflictingFlags: []string{"--colocate", "--git-repo"}},
-								{Name: "git-repo", Description: "Specifies a path to an **existing** git repository to be used as the backing git repo for the newly created `jj` repo.\n\nIf the specified `--git-repo` path happens to be the same as the `jj` repo path (both .jj and .git directories are in the same working directory), then both `jj` and `git` commands will work on the same repo. This is called a colocated workspace.\n\nThis option is mutually exclusive with `--colocate`, and so if passed, turns colocation off.", Value: "--git-repo", RequiresInput: true, ConflictingFlags: []string{"--colocate", "--no-colocate"}, InputType: "GIT_REPO"},
+								{Name: "git-repo", Description: "Specifies a path to an **existing** git repository to be used as the backing git repo for the newly created `jj` repo.\n\nIf the specified `--git-repo` path happens to be the same as the `jj` repo path (both .jj and .git directories are in the same working directory), then both `jj` and `git` commands will work on the same repo. This is called a colocated workspace.\n\nThis option is mutually exclusive with `--colocate`, and so if passed, turns colocation off.", Value: "--git-repo", RequiresInput: true, ConflictingFlags: []string{"--colocate", "--no-colocate", "--object-hash"}, InputType: "GIT_REPO"},
 							},
+						},
+						{
+							Summary: "Show the underlying Git directory of a repository using the Git backend", Name: "root",
+							Description: "Show the underlying Git directory of a repository using the Git backend",
+							Flags:       []Flag{},
+						},
+						{
+							Summary: "Convert into a colocated Jujutsu/Git repository", Name: "colocation enable",
+							Description: "Convert into a colocated Jujutsu/Git repository\n\nThis moves the underlying Git repository that is found inside the .jj directory to the root of the Jujutsu workspace. This allows you to use Git commands directly in the Jujutsu workspace.",
+							Flags:       []Flag{},
+						},
+						{
+							Summary: "Convert into a non-colocated Jujutsu/Git repository", Name: "colocation disable",
+							Description: "Convert into a non-colocated Jujutsu/Git repository\n\nThis moves the Git repository that is at the root of the Jujutsu workspace into the .jj directory. Once this is done you will no longer be able to use Git commands directly in the Jujutsu workspace.",
+							Flags:       []Flag{},
+						},
+						{
+							Summary: "Show the current colocation status", Name: "colocation status",
+							Description: "Show the current colocation status",
+							Flags:       []Flag{},
 						},
 					},
 				},
@@ -1189,7 +1495,9 @@ func loadCategories() []Category {
 						{
 							Summary: "Show the workspace root directory", Name: "root",
 							Description: "Show the workspace root directory",
-							Flags:       []Flag{},
+							Flags: []Flag{
+								{Name: "name", Description: "Name of the workspace (defaults to current)", Value: "--name", RequiresInput: true, InputType: "NAME"},
+							},
 						},
 						{
 							Summary: "Add a workspace", Name: "add",
@@ -1248,7 +1556,9 @@ func loadCategories() []Category {
 								{Name: "NAME", Description: "An optional name of a specific config option to look up"},
 							},
 							Flags: []Flag{
-								{Name: "include-defaults", Description: "Whether to explicitly include built-in default values in the list", Value: "--include-defaults"},
+								{Name: "template", Description: "Render each variable using the given template\n\nThe following keywords are available in the template expression:\n\n* `name: String`: Config name, in [TOML's \"dotted key\" format]. * `value: ConfigValue`: Value to be formatted in TOML syntax. * `overridden: Boolean`: True if the value is shadowed by other. * `source: String`: Source of the value. * `path: Option<FsPath>`: Path to the config file.\n\nCan be overridden by the `templates.config_list` setting. To see a detailed config list, use the `builtin_config_list_detailed` template.\n\nSee [`jj help -k templates`] for more information.\n\n[TOML's \"dotted key\" format]: https://toml.io/en/v1.0.0#keys\n\n[`jj help -k templates`]: https://docs.jj-vcs.dev/latest/templates/", Value: "-T", RequiresInput: true, InputType: "TEMPLATE"},
+								{Name: "include-defaults", Description: "Whether to explicitly include built-in default values in the list", Value: "--include-defaults", ConflictingFlags: []string{"--user", "--repo", "--workspace"}},
+								{Name: "include-overridden", Description: "Allow printing overridden values", Value: "--include-overridden"},
 								{Name: "user", Description: "Target the user-level config", Value: "--user", ConflictingFlags: []string{"--repo", "--workspace"}},
 								{Name: "repo", Description: "Target the repo-level config", Value: "--repo", ConflictingFlags: []string{"--user", "--workspace"}},
 								{Name: "workspace", Description: "Target the workspace-level config", Value: "--workspace", ConflictingFlags: []string{"--user", "--repo"}},

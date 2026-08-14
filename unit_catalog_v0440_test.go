@@ -72,8 +72,8 @@ func TestCatalogHasJJv044CommandSurface(t *testing.T) {
 	if f := findFlag(pushFlags, "--allow-conflicts"); f == nil {
 		t.Error("git push --allow-conflicts missing")
 	}
-	if f := findFlag(pushFlags, "--tag"); f == nil || !f.RequiresInput {
-		t.Errorf("git push --tag missing or not RequiresInput: %+v", f)
+	if f := findFlag(pushFlags, "-t"); f == nil || !f.RequiresInput {
+		t.Errorf("git push -t (--tag) missing or not RequiresInput: %+v", f)
 	}
 	if f := findFlag(pushFlags, "--all"); f == nil {
 		t.Error("git push --all missing")
@@ -82,8 +82,8 @@ func TestCatalogHasJJv044CommandSurface(t *testing.T) {
 	// jj git clone --tag, and --fetch-tags must not exist.
 	focusCommand(t, &m, "git", "clone")
 	cloneFlags := m.currentFlags()
-	if f := findFlag(cloneFlags, "--tag"); f == nil || !f.RequiresInput {
-		t.Errorf("git clone --tag missing or not RequiresInput: %+v", f)
+	if f := findFlag(cloneFlags, "-t"); f == nil || !f.RequiresInput {
+		t.Errorf("git clone -t (--tag) missing or not RequiresInput: %+v", f)
 	}
 	if f := findFlag(cloneFlags, "--fetch-tags"); f != nil {
 		t.Error("git clone --fetch-tags should not be offered (removed in jj 0.44.0)")

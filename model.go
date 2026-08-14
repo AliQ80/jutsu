@@ -1951,17 +1951,18 @@ func (m mainModel) isInteractiveInvocation() bool {
 	// when their non-interactive inputs are absent.
 	switch cmd.Name {
 	case "describe", "commit":
-		// No message → jj opens $EDITOR for one.
-		return m.selectedFlagValue("-m") == ""
+		// No message → jj opens $EDITOR for one. --stdin supplies the
+		// description without an editor, so it is direct.
+		return m.selectedFlagValue("-m") == "" && !m.isFlagSelected("--stdin")
 	case "squash":
 		// No -m and no --use-destination-message → jj may open $EDITOR to
 		// combine the source and destination descriptions. -k (--keep-emptied)
 		// keeps the source revision alive, so jj never needs to combine
 		// descriptions and never prompts, regardless of -m.
-		return m.selectedFlagValue("-m") == "" && !m.isFlagSelected("--use-destination-message") && !m.isFlagSelected("-k")
+		return m.selectedFlagValue("-m") == "" && !m.isFlagSelected("-u") && !m.isFlagSelected("-k")
 	case "resolve":
-		// Bare resolve runs the merge tool; --list only prints conflicts.
-		return !m.isFlagSelected("--list")
+		// Bare resolve runs the merge tool; -l (--list) only prints conflicts.
+		return !m.isFlagSelected("-l")
 	case "split":
 		// Paths select the changes non-interactively, but without -m jj may
 		// still open $EDITOR asking for a description.
@@ -2378,8 +2379,12 @@ func (m mainModel) docsContent() string {
 	return buildDocsBlock(cmd.Name, cmd.Name, cmd.Alias, cmd.Description, cmd.Args, cmd.Flags, cmd.RequiredUsage, cmd.SubCmds)
 }
 
-// flagLongForm returns the canonical long spelling ("--insert-after").
+// flagLongForm returns the canonical long spelling ("--insert-after"). A
+// ShortOnly flag has no long spelling, so its Value is the only form.
 func flagLongForm(f Flag) string {
+	if f.ShortOnly {
+		return f.Value
+	}
 	if strings.HasPrefix(f.Value, "--") {
 		return f.Value
 	}
@@ -2387,41 +2392,39 @@ func flagLongForm(f Flag) string {
 }
 
 // flagBarForm returns the spelling shown in the command bar and copied to the
-// clipboard: the shortest full-word form. The alias wins only when it beats
-// the long name ("--after" over "--insert-after") — some aliases are longer
-// ("--destination" for "--onto") and lose. NoBarAlias opts a flag out of this
-// entirely, so its alias still appears in flagDocsLabel but never in the bar.
+// clipboard: the primary execution spelling Value, deterministically. Per the
+// catalog's alternate-spelling model, every alternate form (Alias, Alternates)
+// is documentation-only metadata — it appears in flagDocsLabel, never in the
+// built command or the bar.
 func flagBarForm(f Flag) string {
-	long := flagLongForm(f)
-	if !f.NoBarAlias && f.Alias != "" && len(f.Alias)+2 < len(long) {
-		return "--" + f.Alias
-	}
-	return long
+	return f.Value
 }
 
-// flagExecForm returns the spelling used in the executed command: the
-// shortest of all — the short flag when one exists ("-A"), else whatever
-// flagBarForm picked.
+// flagExecForm returns the spelling used in the executed command: the primary
+// execution spelling Value, deterministically — never an alternate form.
 func flagExecForm(f Flag) string {
-	bar := flagBarForm(f)
-	if f.Value != "" && len(f.Value) < len(bar) {
-		return f.Value
-	}
-	return bar
+	return f.Value
 }
 
 // flagDocsLabel renders a flag as jj --help shows it:
-// "-m, --message <MESSAGE>" or "-A, --insert-after <REVSETS> [aliases: --after]".
+// "-m, --message <MESSAGE>" or "-A, --insert-after <REVSETS> [aliases: --after, -d]".
+// Every accepted spelling (Alias and Alternates) is displayed here and only here.
+// A ShortOnly flag ("-x" on run) shows just its Value — no "--"+Name is invented.
 func flagDocsLabel(f Flag) string {
 	label := f.Value
-	if len(f.Value) == 2 && f.Value[0] == '-' && f.Value[1] != '-' {
+	if !f.ShortOnly && len(f.Value) == 2 && f.Value[0] == '-' && f.Value[1] != '-' {
 		label = f.Value + ", --" + f.Name
 	}
 	if f.InputType != "" {
 		label += " <" + f.InputType + ">"
 	}
+	aliases := make([]string, 0, len(f.Alternates)+1)
 	if f.Alias != "" {
-		label += " [aliases: --" + f.Alias + "]"
+		aliases = append(aliases, "--"+f.Alias)
+	}
+	aliases = append(aliases, f.Alternates...)
+	if len(aliases) > 0 {
+		label += " [aliases: " + strings.Join(aliases, ", ") + "]"
 	}
 	return label
 }

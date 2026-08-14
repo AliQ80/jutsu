@@ -2,8 +2,10 @@ package main
 
 import "testing"
 
-// Covers the three flag spellings (long / bar / exec) and the docs label
-// across the interesting alias combinations.
+// Covers the flag spellings (long / bar / exec) and the docs label across
+// the interesting alias and alternate-spelling combinations. Value is the
+// primary deterministic execution spelling: bar and exec both emit it, and
+// every alternate form (Alias, Alternates) is docs-only.
 func TestFlagForms(t *testing.T) {
 	tests := []struct {
 		name string
@@ -17,7 +19,7 @@ func TestFlagForms(t *testing.T) {
 			name: "short value with shorter alias",
 			f:    Flag{Name: "insert-after", Value: "-A", Alias: "after", InputType: "REVSETS"},
 			long: "--insert-after",
-			bar:  "--after",
+			bar:  "-A",
 			exec: "-A",
 			docs: "-A, --insert-after <REVSETS> [aliases: --after]",
 		},
@@ -25,7 +27,7 @@ func TestFlagForms(t *testing.T) {
 			name: "short value with longer alias",
 			f:    Flag{Name: "onto", Value: "-o", Alias: "destination", InputType: "REVSETS"},
 			long: "--onto",
-			bar:  "--onto",
+			bar:  "-o",
 			exec: "-o",
 			docs: "-o, --onto <REVSETS> [aliases: --destination]",
 		},
@@ -33,15 +35,15 @@ func TestFlagForms(t *testing.T) {
 			name: "long-only value with shorter alias",
 			f:    Flag{Name: "operation", Value: "--operation", Alias: "op", InputType: "OPERATION"},
 			long: "--operation",
-			bar:  "--op",
-			exec: "--op",
+			bar:  "--operation",
+			exec: "--operation",
 			docs: "--operation <OPERATION> [aliases: --op]",
 		},
 		{
 			name: "short value without alias",
 			f:    Flag{Name: "message", Value: "-m", InputType: "MESSAGE"},
 			long: "--message",
-			bar:  "--message",
+			bar:  "-m",
 			exec: "-m",
 			docs: "-m, --message <MESSAGE>",
 		},
@@ -52,6 +54,30 @@ func TestFlagForms(t *testing.T) {
 			bar:  "--no-edit",
 			exec: "--no-edit",
 			docs: "--no-edit",
+		},
+		{
+			name: "alternate short spelling is docs-only",
+			f:    Flag{Name: "onto", Value: "-o", Alias: "destination", Alternates: []string{"-d"}, InputType: "REVSETS"},
+			long: "--onto",
+			bar:  "-o",
+			exec: "-o",
+			docs: "-o, --onto <REVSETS> [aliases: --destination, -d]",
+		},
+		{
+			name: "multiple alternates including long form",
+			f:    Flag{Name: "root", Value: "--root", Alternates: []string{"-d"}, InputType: "PATH"},
+			long: "--root",
+			bar:  "--root",
+			exec: "--root",
+			docs: "--root <PATH> [aliases: -d]",
+		},
+		{
+			name: "short-only value without long spelling",
+			f:    Flag{Name: "exec", Value: "-x", ShortOnly: true},
+			long: "-x",
+			bar:  "-x",
+			exec: "-x",
+			docs: "-x",
 		},
 	}
 

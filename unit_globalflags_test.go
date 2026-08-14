@@ -36,7 +36,9 @@ func TestBuildCommandStringsGlobalFlagPrecedesSubcommand(t *testing.T) {
 	if want := "jj -R ../other-repo log"; short != want {
 		t.Errorf("short = %q, want %q", short, want)
 	}
-	if want := "jj --repository ../other-repo log"; long != want {
+	// The bar form emits the primary execution spelling (Value) too —
+	// alternate spellings are docs-only, so -R stays -R in the long form.
+	if want := "jj -R ../other-repo log"; long != want {
 		t.Errorf("long = %q, want %q", long, want)
 	}
 }
