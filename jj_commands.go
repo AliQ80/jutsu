@@ -588,12 +588,28 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Summary: "List Git remotes", Name: "remote list",
+							Summary: "Update repo with changes made in the underlying Git repo", Name: "import",
+							Description: "Update repo with changes made in the underlying Git repo\n\nCommits that are no longer reachable from any branch in the Git repo will be considered abandoned in the Git repo, and will be abandoned in the jj repo to match the Git repo. Set `git.abandon-unreachable-commits` to `false` to disable this behavior.\n\nIf a working-copy commit gets abandoned, it will be given a new, empty commit. This is true in general; it is not specific to this command.\n\nBy default, this command does nothing in colocated workspaces because the import happens automatically. Use `--ignore-working-copy` to forcibly import changes.",
+							Flags:       []Flag{},
+						},
+						{
+							Summary: "Update the underlying Git repo with changes made in the repo", Name: "export",
+							Description: "Update the underlying Git repo with changes made in the repo\n\nBy default, this command does nothing in colocated workspaces because the export happens automatically. Use `--ignore-working-copy` to forcibly export changes.",
+							Flags:       []Flag{},
+						},
+					},
+				},
+				{
+					Name:        "git remote",
+					Description: "Manage Git remotes\n\nThe Git repo will be a bare git repo stored inside the `.jj/` directory.",
+					SubCmds: []SubCommand{
+						{
+							Summary: "List Git remotes", Name: "list",
 							Description: "List Git remotes",
 							Flags:       []Flag{},
 						},
 						{
-							Summary: "Add a Git remote", Name: "remote add",
+							Summary: "Add a Git remote", Name: "add",
 							Description: "Add a Git remote",
 							Args: []Arg{
 								{Name: "REMOTE", Description: "The remote's name", Required: true},
@@ -604,7 +620,7 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Summary: "Remove a Git remote and forget its bookmarks", Name: "remote remove",
+							Summary: "Remove a Git remote and forget its bookmarks", Name: "remove",
 							Description: "Remove a Git remote and forget its bookmarks",
 							Args: []Arg{
 								{Name: "REMOTE", Description: "The remote's name", Required: true},
@@ -612,7 +628,7 @@ func loadCategories() []Category {
 							Flags: []Flag{},
 						},
 						{
-							Summary: "Rename a Git remote", Name: "remote rename",
+							Summary: "Rename a Git remote", Name: "rename",
 							Description: "Rename a Git remote",
 							Args: []Arg{
 								{Name: "OLD", Description: "The name of an existing remote", Required: true},
@@ -621,7 +637,7 @@ func loadCategories() []Category {
 							Flags: []Flag{},
 						},
 						{
-							Summary: "Set the URL of a Git remote", Name: "remote set-url",
+							Summary: "Set the URL of a Git remote", Name: "set-url",
 							Description: "Set the URL of a Git remote",
 							Args: []Arg{
 								{Name: "REMOTE", Description: "The remote's name", Required: true},
@@ -631,16 +647,6 @@ func loadCategories() []Category {
 								{Name: "push", Description: "The URL or path to push to\n\nLocal path will be resolved to absolute form.", Value: "--push", RequiresInput: true, InputType: "PUSH"},
 								{Name: "fetch", Description: "The URL or path to fetch from\n\nLocal path will be resolved to absolute form.", Value: "--fetch", RequiresInput: true, InputType: "FETCH"},
 							},
-						},
-						{
-							Summary: "Update repo with changes made in the underlying Git repo", Name: "import",
-							Description: "Update repo with changes made in the underlying Git repo\n\nCommits that are no longer reachable from any branch in the Git repo will be considered abandoned in the Git repo, and will be abandoned in the jj repo to match the Git repo. Set `git.abandon-unreachable-commits` to `false` to disable this behavior.\n\nIf a working-copy commit gets abandoned, it will be given a new, empty commit. This is true in general; it is not specific to this command.\n\nBy default, this command does nothing in colocated workspaces because the import happens automatically. Use `--ignore-working-copy` to forcibly import changes.",
-							Flags:       []Flag{},
-						},
-						{
-							Summary: "Update the underlying Git repo with changes made in the repo", Name: "export",
-							Description: "Update the underlying Git repo with changes made in the repo\n\nBy default, this command does nothing in colocated workspaces because the export happens automatically. Use `--ignore-working-copy` to forcibly export changes.",
-							Flags:       []Flag{},
 						},
 					},
 				},
@@ -1464,18 +1470,24 @@ func loadCategories() []Category {
 							Description: "Show the underlying Git directory of a repository using the Git backend",
 							Flags:       []Flag{},
 						},
+					},
+				},
+				{
+					Name:        "git colocation",
+					Description: "Manage Jujutsu repository colocation with Git",
+					SubCmds: []SubCommand{
 						{
-							Summary: "Convert into a colocated Jujutsu/Git repository", Name: "colocation enable",
+							Summary: "Convert into a colocated Jujutsu/Git repository", Name: "enable",
 							Description: "Convert into a colocated Jujutsu/Git repository\n\nThis moves the underlying Git repository that is found inside the .jj directory to the root of the Jujutsu workspace. This allows you to use Git commands directly in the Jujutsu workspace.",
 							Flags:       []Flag{},
 						},
 						{
-							Summary: "Convert into a non-colocated Jujutsu/Git repository", Name: "colocation disable",
+							Summary: "Convert into a non-colocated Jujutsu/Git repository", Name: "disable",
 							Description: "Convert into a non-colocated Jujutsu/Git repository\n\nThis moves the Git repository that is at the root of the Jujutsu workspace into the .jj directory. Once this is done you will no longer be able to use Git commands directly in the Jujutsu workspace.",
 							Flags:       []Flag{},
 						},
 						{
-							Summary: "Show the current colocation status", Name: "colocation status",
+							Summary: "Show the current colocation status", Name: "status",
 							Description: "Show the current colocation status",
 							Flags:       []Flag{},
 						},

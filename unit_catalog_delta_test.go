@@ -58,9 +58,9 @@ func categoryIndex(t *testing.T, cats []Category, name string) int {
 
 // TestCatalogDeltaCategoryPlacement checks that the newly added command trees
 // land in their specified categories with exact positions: bench/debug in
-// Tools, version in Tools immediately before help, git colocation under
-// Setup's git command with root immediately after init, and git remote
-// set-url under Sync's git command.
+// Tools, version in Tools immediately before help, git colocation as a
+// first-class command under Setup with root immediately after init, and git
+// remote as a first-class command under Sync.
 func TestCatalogDeltaCategoryPlacement(t *testing.T) {
 	cats := loadCategories()
 
@@ -90,21 +90,49 @@ func TestCatalogDeltaCategoryPlacement(t *testing.T) {
 	if setupGit == nil {
 		t.Fatal("Setup git command missing")
 	}
-	for _, sub := range []string{"colocation enable", "colocation disable", "colocation status", "root"} {
+	for _, sub := range []string{"clone", "init", "root"} {
 		if findSubCmd(setupGit.SubCmds, sub) == nil {
 			t.Errorf("Setup git %s subcommand missing", sub)
 		}
 	}
+	if findSubCmd(setupGit.SubCmds, "colocation enable") != nil {
+		t.Error("Setup git must not retain flattened colocation subcommands")
+	}
 	if initIdx, rootIdx := indexOfSubCmd(setupGit.SubCmds, "init"), indexOfSubCmd(setupGit.SubCmds, "root"); initIdx < 0 || rootIdx != initIdx+1 {
 		t.Errorf("Setup git root must be immediately after init (init=%d, root=%d)", initIdx, rootIdx)
+	}
+
+	setupColocation := findCommand(cats, "Setup", "git colocation")
+	if setupColocation == nil {
+		t.Fatal("Setup git colocation command missing")
+	}
+	for _, sub := range []string{"enable", "disable", "status"} {
+		if findSubCmd(setupColocation.SubCmds, sub) == nil {
+			t.Errorf("Setup git colocation %s subcommand missing", sub)
+		}
 	}
 
 	syncGit := findCommand(cats, "Sync", "git")
 	if syncGit == nil {
 		t.Fatal("Sync git command missing")
 	}
-	if findSubCmd(syncGit.SubCmds, "remote set-url") == nil {
-		t.Error("Sync git remote set-url subcommand missing")
+	for _, sub := range []string{"fetch", "push", "import", "export"} {
+		if findSubCmd(syncGit.SubCmds, sub) == nil {
+			t.Errorf("Sync git %s subcommand missing", sub)
+		}
+	}
+	if findSubCmd(syncGit.SubCmds, "remote set-url") != nil {
+		t.Error("Sync git must not retain flattened remote subcommands")
+	}
+
+	syncRemote := findCommand(cats, "Sync", "git remote")
+	if syncRemote == nil {
+		t.Fatal("Sync git remote command missing")
+	}
+	for _, sub := range []string{"list", "add", "remove", "rename", "set-url"} {
+		if findSubCmd(syncRemote.SubCmds, sub) == nil {
+			t.Errorf("Sync git remote %s subcommand missing", sub)
+		}
 	}
 }
 
@@ -330,12 +358,12 @@ func TestCatalogDeltaNewFlags(t *testing.T) {
 		t.Error("git init --git-repo and --object-hash must conflict")
 	}
 
-	focusCommand(t, &m, "git", "remote add")
+	focusCommand(t, &m, "git remote", "add")
 	if f := findFlag(m.currentFlags(), "--push-url"); f == nil || !f.RequiresInput {
 		t.Error("git remote add --push-url missing or not RequiresInput")
 	}
 
-	focusCommand(t, &m, "git", "remote set-url")
+	focusCommand(t, &m, "git remote", "set-url")
 	if f := findFlag(m.currentFlags(), "--push"); f == nil || !f.RequiresInput {
 		t.Error("git remote set-url --push missing or not RequiresInput")
 	}
@@ -537,5 +565,38 @@ func TestCatalogDeltaInteractiveMarkers(t *testing.T) {
 				t.Errorf("isInteractiveInvocation() = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestCatalogDeltaPromotedGitGroups builds representative invocations for the
+// promoted git remote / git colocation command groups and asserts the group
+// names are emitted exactly once in the composed command.
+func TestCatalogDeltaPromotedGitGroups(t *testing.T) {
+	m := newModel()
+	focusCommand(t, &m, "git remote", "add")
+	setArg(&m, "REMOTE", "origin")
+	setArg(&m, "URL", "git@example.com:me/repo.git")
+	short, long := m.buildCommandStrings()
+	if want := "jj git remote add origin git@example.com:me/repo.git"; short != want {
+		t.Errorf("git remote add = %q, want %q", short, want)
+	}
+	if short != long {
+		t.Errorf("git remote add short/long mismatch: %q vs %q", short, long)
+	}
+	if got := strings.Count(short, "git remote"); got != 1 {
+		t.Errorf("git remote group emitted %d times in %q, want exactly once", got, short)
+	}
+
+	m = newModel()
+	focusCommand(t, &m, "git colocation", "enable")
+	short, long = m.buildCommandStrings()
+	if want := "jj git colocation enable"; short != want {
+		t.Errorf("git colocation enable = %q, want %q", short, want)
+	}
+	if short != long {
+		t.Errorf("git colocation enable short/long mismatch: %q vs %q", short, long)
+	}
+	if got := strings.Count(short, "git colocation"); got != 1 {
+		t.Errorf("git colocation group emitted %d times in %q, want exactly once", got, short)
 	}
 }
