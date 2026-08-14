@@ -733,8 +733,6 @@ func (m mainModel) renderHelpBar(width int) string {
 		}
 	default: // composer panes 0-3
 		entries = []entry{
-			{"↑↓", "navigate"},
-			{"←→", "pane"},
 			{"d/D", "docs"},
 			{"o/O", "output"},
 			{"g", "global"},
