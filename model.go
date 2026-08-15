@@ -687,10 +687,14 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		case "?":
-			// Open the about modal (version + GitHub link). Blocked inside
+			// Open the about modal (version + docs link). Blocked inside
 			// the inputs pane, where "?" is a literal character being typed.
 			// No enlarged-view guard needed: "? "is harmless in those views.
+			// Freeze the backdrop before marking the modal open — same
+			// ordering as the other modal paths — so background updates
+			// can't redraw the frame behind it.
 			if m.focusPane != focusInputs {
+				m.freezeBackdrop()
 				m.aboutModalOpen = true
 				return m, nil
 			}
@@ -886,6 +890,7 @@ func (m mainModel) handleAboutModalKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd
 	switch msg.String() {
 	case "esc":
 		m.aboutModalOpen = false
+		m.backdrop = nil
 		return m, nil
 	case "q":
 		return m, tea.Quit

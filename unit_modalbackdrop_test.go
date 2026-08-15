@@ -118,6 +118,65 @@ func TestGlobalFlagsModalFreezesBackdropAndBlocksInput(t *testing.T) {
 	}
 }
 
+// Opening the about modal via "?" must freeze the backdrop through the real
+// key-routing path, keep it stable against live mutations while open, and
+// release it on esc — same lifecycle as the global-options modal. The live
+// mutations (catIdx move + in-place flag toggle) are the same hazards the
+// deep-copy snapshot exists for, so they must not leak into the frozen frame.
+func TestAboutModalFreezesBackdropAndReleasesOnClose(t *testing.T) {
+	m := newModel()
+	m.width, m.height = 120, 40
+	m.focusPane = focusCategories
+	m.catIdx, m.cmdIdx, m.flagIdx = 0, 0, 0
+	preCatIdx := m.catIdx
+
+	next, _ := m.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
+	opened := next.(mainModel)
+
+	if !opened.aboutModalOpen {
+		t.Fatal(`"?" did not open the about modal`)
+	}
+	if opened.backdrop == nil {
+		t.Fatal(`"?" opened the about modal without freezing a backdrop`)
+	}
+	if opened.backdrop.catIdx != preCatIdx {
+		t.Errorf("backdrop.catIdx = %d, want pre-modal value %d", opened.backdrop.catIdx, preCatIdx)
+	}
+
+	// Mutating representative live state while the modal is open must not
+	// alter what the backdrop renders: toggle a flag in place (the deep-copy
+	// hazard) and move the category cursor.
+	wantFrozen := opened.categories[0].Commands[0].Flags[0].Selected
+	opened.toggleFlag()
+	if opened.categories[0].Commands[0].Flags[0].Selected == wantFrozen {
+		t.Fatal("test setup: toggleFlag() did not actually change the live flag")
+	}
+	opened.catIdx = 1
+	if opened.backdrop.catIdx != preCatIdx {
+		t.Errorf("backdrop.catIdx changed to %d after live mutation; want frozen %d", opened.backdrop.catIdx, preCatIdx)
+	}
+	if opened.backdrop.categories[0].Commands[0].Flags[0].Selected != wantFrozen {
+		t.Errorf("backdrop flag.Selected changed to %v after live toggleFlag(); want frozen %v",
+			opened.backdrop.categories[0].Commands[0].Flags[0].Selected, wantFrozen)
+	}
+
+	// The rendered modal must still show the original backdrop frame.
+	view := opened.View()
+	if !strings.Contains(view.Content, "CATEGORIES") {
+		t.Error("about modal view lost the backdrop frame (expected \"CATEGORIES\" header)")
+	}
+
+	// esc releases the snapshot so the live frame renders again.
+	closed, _ := opened.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	afterClose := closed.(mainModel)
+	if afterClose.aboutModalOpen {
+		t.Fatal("esc did not close the about modal")
+	}
+	if afterClose.backdrop != nil {
+		t.Error("backdrop was not cleared after the about modal closed")
+	}
+}
+
 // View() must overlay the modal on the reflowed backdrop rather than a blank
 // screen: the backdrop's own content (drawn from the frozen composer state)
 // should be present in the rendered frame around the modal box.

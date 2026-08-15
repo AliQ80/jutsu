@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // withJutsuVersion temporarily overrides the package-level jutsuVersion
@@ -99,7 +100,7 @@ func TestQInsideAboutModalQuits(t *testing.T) {
 	// nil directly because the underlying message type is unexported.
 }
 
-// renderAboutModal must surface both the version line and the GitHub link.
+// renderAboutModal must surface both the version line and the docs link.
 // This guards against the static content regressing (e.g. someone renaming
 // jutsuVersion and forgetting the about popup). The modal renders the version
 // verbatim (no "v" prefix) — goreleaser stamps the tag with its "v", so a
@@ -113,13 +114,59 @@ func TestRenderAboutModalContainsVersionAndLink(t *testing.T) {
 	if !strings.Contains(got, jutsuVersion) {
 		t.Errorf("renderAboutModal() missing %q substring; got:\n%s", jutsuVersion, got)
 	}
-	if !strings.Contains(got, "github.com/AliQ80/jutsu") {
-		t.Errorf("renderAboutModal() missing GitHub link; got:\n%s", got)
+	// The docs URL must appear as one unbroken substring — a wrap or clip
+	// would split it across lines and fail this contains check.
+	if !strings.Contains(got, "https://aliq80.github.io/jutsu/") {
+		t.Errorf("renderAboutModal() missing docs URL; got:\n%s", got)
+	}
+	if strings.Contains(got, "github.com/AliQ80/jutsu") {
+		t.Errorf("renderAboutModal() still shows the repository link; got:\n%s", got)
 	}
 	// The footer was removed — esc-only-close is documented in
 	// handleAboutModalKeys; surfacing it inside the modal was redundant.
 	if strings.Contains(got, "close") {
 		t.Errorf("renderAboutModal() should not include an esc-close footer; got:\n%s", got)
+	}
+}
+
+// The title line must be sized against the wider docs URL so the modal's
+// content lines stay inside the box: the URL (31 chars) sets the content
+// width, the title is centered within it, and no line wraps past it.
+func TestRenderAboutModalTitleSizedToDocsURL(t *testing.T) {
+	m := newModel()
+	got := stripANSI(m.renderAboutModal())
+
+	lines := strings.Split(got, "\n")
+	var titleW, urlW int
+	foundTitle, foundURL := false, false
+	for _, line := range lines {
+		if strings.Contains(line, "https://aliq80.github.io/jutsu/") {
+			urlW = lipgloss.Width(line)
+			foundURL = true
+		}
+		if strings.Contains(line, "Jutsu") && !strings.Contains(line, "https://") {
+			titleW = lipgloss.Width(line)
+			foundTitle = true
+		}
+	}
+	if !foundTitle || !foundURL {
+		t.Fatalf("renderAboutModal() missing title or docs URL; got:\n%s", got)
+	}
+	// Title centered across the same width as the URL line (the widest
+	// content line) — the longer link sets the modal's content width.
+	if titleW != urlW {
+		t.Errorf("title line width = %d, docs URL line width = %d; want equal", titleW, urlW)
+	}
+	// The URL line must be the widest line in the box — nothing wraps past
+	// it (and the unbroken-URL check above rules out clipping).
+	maxW := 0
+	for _, line := range lines {
+		if w := lipgloss.Width(line); w > maxW {
+			maxW = w
+		}
+	}
+	if maxW != urlW {
+		t.Errorf("a line is wider than the docs URL line (%d > %d); the modal wraps or clips", maxW, urlW)
 	}
 }
 

@@ -894,19 +894,25 @@ const (
 // renderAboutModal renders the read-only popup that shows the running Jutsu
 // version (build-stamped via the jutsuVersion ldflag, or resolved at startup
 // from the local jj repo when the ldflag is absent — see displayVersion) and
-// a link to the repo. Opened via `?`, closed via `esc` — see
+// a link to the published docs. Opened via `?`, closed via `esc` — see
 // handleAboutModalKeys.
 func (m mainModel) renderAboutModal() string {
-	// Title is centered across the modal's inner content width (the github
-	// URL is the widest line at 22 chars — pin the title to that width).
-	const innerW = 22
-	title := lipgloss.PlaceHorizontal(innerW, lipgloss.Center, headerStyle.Render("Jutsu"))
+	// Title is centered across the modal's inner content width. The docs
+	// URL is the widest line (31 chars) — size the title against the actual
+	// content lines so a longer URL or version tag can never wrap or clip.
+	const docsURL = "https://aliq80.github.io/jutsu/"
 	lines := []string{
-		title,
 		"",
 		"jutsu     " + m.displayVersion(),
-		"github.com/AliQ80/jutsu",
+		docsURL,
 	}
+	innerW := 0
+	for _, line := range lines {
+		if w := lipgloss.Width(line); w > innerW {
+			innerW = w
+		}
+	}
+	lines[0] = lipgloss.PlaceHorizontal(innerW, lipgloss.Center, headerStyle.Render("Jutsu"))
 	return modalBoxStyle.Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
 }
 
