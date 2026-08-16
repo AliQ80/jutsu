@@ -203,8 +203,10 @@ var (
 	helpDescStyle = lipgloss.NewStyle().
 			Foreground(colorSubtext1)
 
+	// No Background: the full help-bar row and its left padding inherit the
+	// terminal's default background. Only the individual key chips
+	// (helpKeyStyle) paint a surface background.
 	helpBarStyle = lipgloss.NewStyle().
-			Background(colorMantle).
 			PaddingLeft(1)
 
 	errorStyle = lipgloss.NewStyle().
