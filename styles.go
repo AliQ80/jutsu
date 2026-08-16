@@ -212,10 +212,11 @@ var (
 			Bold(true)
 
 	// Remote-prompt modal styles (SSH host-key approval / credential handoff).
+	// No Background: the modal inherits the terminal's default background so
+	// it blends with the user's theme instead of forcing the fixed base color.
 	modalBoxStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(colorPeach).
-			Background(colorBase).
 			Padding(1, 3)
 
 	modalFrameStyle = lipgloss.NewStyle().
