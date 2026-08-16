@@ -779,8 +779,8 @@ func (m mainModel) renderHelpBar(width int) string {
 	cwdBadge := cwdStyle.Render("📂 " + m.cwd)
 	badge := m.renderVersionBadge()
 	rightBar := cwdBadge + "   " + badge
-	// width-1 because helpBarStyle has PaddingLeft(1).
-	gap := (width - 1) - lipgloss.Width(leftBar) - lipgloss.Width(rightBar)
+	// width-2 because helpBarStyle has PaddingLeft(1) and PaddingRight(1).
+	gap := (width - 2) - lipgloss.Width(leftBar) - lipgloss.Width(rightBar)
 	if gap < 1 {
 		gap = 1
 	}
