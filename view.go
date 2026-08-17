@@ -695,25 +695,23 @@ func (m mainModel) renderHelpBar(width int) string {
 	switch m.focusPane {
 	case focusOutput:
 		entries = []entry{
-			{"↑↓", "scroll"},
-			{"←→", "pan"},
 			{"O", "enlarge"},
 			{"c", "copy"},
-			{"esc", "back"},
 			{"tab", "finalize"},
+			{"esc", "back"},
 			{"g", "global"},
 			{"?", "about"},
 			{"q", "quit"},
 		}
 	case focusDocs:
 		entries = []entry{
-			{"↑↓", "scroll"},
 			{"D", "enlarge"},
 			{"c", "copy"},
 			{"tab", "finalize"},
 			{"esc", "back"},
 			{"g", "global"},
 			{"?", "about"},
+			{"q", "quit"},
 		}
 	case focusCmdBar:
 		entries = []entry{
@@ -726,7 +724,6 @@ func (m mainModel) renderHelpBar(width int) string {
 		}
 	case focusInputs:
 		entries = []entry{
-			{"↑↓", "navigate"},
 			{"enter", "next"},
 			{"tab", "finalize"},
 			{"esc", "back"},
@@ -735,19 +732,15 @@ func (m mainModel) renderHelpBar(width int) string {
 		entries = []entry{
 			{"d/D", "docs"},
 			{"o/O", "output"},
-			{"g", "global"},
 			{"tab", "finalize"},
+			{"g", "global"},
 			{"?", "about"},
 			{"q", "quit"},
 		}
-		if m.lastCmd != nil {
-			contextual = append(contextual, entry{"r", "recall"})
-		}
-		if m.focusPane == focusFlags {
-			contextual = append(contextual, entry{"spc", "toggle"})
-		}
 	}
 
+	// Contextual hints follow the base list after a separator, in the stable
+	// order: i inputs, r recall, spc toggle.
 	// "i" is a global key (see Update) — advertise it from every pane it works
 	// from. getActiveCombined covers positional args as well as command-flag
 	// and global-flag inputs, so a command whose only input is an arg still
@@ -755,6 +748,12 @@ func (m mainModel) renderHelpBar(width int) string {
 	if m.focusPane != focusInputs && !m.outputEnlarged && !m.docsEnlarged &&
 		len(m.getActiveCombined()) > 0 {
 		contextual = append(contextual, entry{"i", "inputs"})
+	}
+	if m.lastCmd != nil && m.focusPane <= focusFlags {
+		contextual = append(contextual, entry{"r", "recall"})
+	}
+	if m.focusPane == focusFlags {
+		contextual = append(contextual, entry{"spc", "toggle"})
 	}
 
 	render := func(e entry) string {

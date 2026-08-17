@@ -1,6 +1,8 @@
 package main
 
 import (
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -94,5 +96,159 @@ func TestHelpBarNarrowWidth(t *testing.T) {
 	}
 	if !strings.Contains(plain, "about") {
 		t.Fatal("narrow help bar lost its content")
+	}
+}
+
+func TestHelpBarOutputPaneHints(t *testing.T) {
+	m := newModel()
+	m.focusPane = focusOutput
+
+	got := stripANSI(m.renderHelpBar(120))
+
+	for _, removed := range []string{"scroll", "pan"} {
+		if strings.Contains(got, removed) {
+			t.Fatalf("output help bar still shows %q hint", removed)
+		}
+	}
+	for _, kept := range []string{"enlarge", "copy", "back", "finalize", "global", "about", "quit"} {
+		if !strings.Contains(got, kept) {
+			t.Fatalf("output help bar lost %q hint", kept)
+		}
+	}
+}
+
+func TestHelpBarDocsPaneHints(t *testing.T) {
+	m := newModel()
+	m.focusPane = focusDocs
+
+	got := stripANSI(m.renderHelpBar(120))
+
+	if strings.Contains(got, "scroll") {
+		t.Fatal("docs help bar still shows the scroll hint")
+	}
+	for _, kept := range []string{"enlarge", "copy", "finalize", "back", "global", "about"} {
+		if !strings.Contains(got, kept) {
+			t.Fatalf("docs help bar lost %q hint", kept)
+		}
+	}
+}
+
+func TestHelpBarInputsPaneHints(t *testing.T) {
+	m := newModel()
+	m.focusPane = focusInputs
+
+	got := stripANSI(m.renderHelpBar(120))
+
+	if strings.Contains(got, "navigate") {
+		t.Fatal("inputs help bar still shows the navigate hint")
+	}
+	for _, kept := range []string{"next", "finalize", "back"} {
+		if !strings.Contains(got, kept) {
+			t.Fatalf("inputs help bar lost %q hint", kept)
+		}
+	}
+}
+
+// helpBarHints renders the help bar and returns its ordered "key desc" hint
+// labels, ignoring ANSI styling and spacing. The right-side badges are cut off
+// at the cwd marker, and the contextual group after the " | " separator is
+// appended after the base hints, so the returned slice is the exact visible
+// hint sequence.
+func helpBarHints(t *testing.T, m mainModel) []string {
+	t.Helper()
+	plain := stripANSI(m.renderHelpBar(120))
+	if i := strings.Index(plain, "📂"); i >= 0 {
+		plain = plain[:i]
+	}
+	re := regexp.MustCompile(`(\S+)\s+(\S+)`)
+	var hints []string
+	for _, part := range strings.Split(plain, " | ") {
+		for _, m := range re.FindAllStringSubmatch(part, -1) {
+			hints = append(hints, m[1]+" "+m[2])
+		}
+	}
+	return hints
+}
+
+func TestHelpBarComposerHintOrder(t *testing.T) {
+	m := newModel()
+	m.focusPane = focusCategories
+
+	got := helpBarHints(t, m)
+	want := []string{"d/D docs", "o/O output", "tab finalize", "g global", "? about", "q quit", "i inputs"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("composer help bar hints = %v, want %v", got, want)
+	}
+}
+
+func TestHelpBarOutputHintOrder(t *testing.T) {
+	m := newModel()
+	m.focusPane = focusOutput
+
+	got := helpBarHints(t, m)
+	want := []string{"O enlarge", "c copy", "tab finalize", "esc back", "g global", "? about", "q quit", "i inputs"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("output help bar hints = %v, want %v", got, want)
+	}
+}
+
+func TestHelpBarDocsHintOrder(t *testing.T) {
+	m := newModel()
+	m.focusPane = focusDocs
+
+	got := helpBarHints(t, m)
+	want := []string{"D enlarge", "c copy", "tab finalize", "esc back", "g global", "? about", "q quit", "i inputs"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("docs help bar hints = %v, want %v", got, want)
+	}
+}
+
+func TestHelpBarCmdBarHintOrder(t *testing.T) {
+	m := newModel()
+	m.focusPane = focusCmdBar
+
+	got := helpBarHints(t, m)
+	want := []string{"enter execute", "c copy", "esc back", "g global", "? about", "q quit", "i inputs"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("command-bar help bar hints = %v, want %v", got, want)
+	}
+}
+
+func TestHelpBarInputsHintOrder(t *testing.T) {
+	m := newModel()
+	m.focusPane = focusInputs
+
+	got := helpBarHints(t, m)
+	want := []string{"enter next", "tab finalize", "esc back"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("inputs help bar hints = %v, want %v", got, want)
+	}
+}
+
+func TestHelpBarContextualHintOrder(t *testing.T) {
+	m := newModel()
+	m.focusPane = focusFlags
+	m.lastCmd = &commandSnapshot{}
+
+	got := helpBarHints(t, m)
+	want := []string{
+		"d/D docs", "o/O output", "tab finalize", "g global", "? about", "q quit",
+		"i inputs", "r recall", "spc toggle",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("help bar hints = %v, want %v", got, want)
+	}
+
+	// The contextual group is set off by a visible separator between the
+	// last base hint and the first contextual hint.
+	plain := stripANSI(m.renderHelpBar(120))
+	sep := strings.Index(plain, " | ")
+	if sep < 0 {
+		t.Fatal("contextual hints not separated from base hints")
+	}
+	base := strings.Join(strings.Fields(plain[:sep]), " ")
+	ctx := strings.Join(strings.Fields(plain[sep:]), " ")
+	if !strings.HasSuffix(base, "q quit") || !strings.HasPrefix(ctx, "| i inputs") {
+		t.Fatalf("separator not between base and contextual hints: %q", plain)
 	}
 }
