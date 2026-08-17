@@ -546,6 +546,12 @@ func (m mainModel) renderRightPane(width, height int) string {
 		cStyle = inactiveContentBorderStyle.Copy()
 	}
 
+	// Keep this local viewport in lockstep with layoutViewports().
+	outputW, outputH := m.outputViewportDims(width, height)
+	m.output.SetWidth(outputW)
+	m.output.SetHeight(outputH)
+	m.output.SetXOffset(m.output.XOffset()) // re-clamp after width change
+
 	var outputContent string
 	if m.running {
 		outputContent = m.spinner.View() + runningStyle.Render(" Executing command...")
@@ -553,18 +559,13 @@ func (m mainModel) renderRightPane(width, height int) string {
 		outputContent = m.output.View()
 	}
 
-	contentHeight := height - 4
-	if contentHeight < 1 {
-		contentHeight = 1
-	}
-
 	// Ensure content fills the height
 	lines := strings.Split(outputContent, "\n")
-	for len(lines) < contentHeight {
+	for len(lines) < outputH {
 		lines = append(lines, "")
 	}
-	if len(lines) > contentHeight {
-		lines = lines[:contentHeight]
+	if len(lines) > outputH {
+		lines = lines[:outputH]
 	}
 
 	content := strings.Join(lines, "\n")
@@ -573,8 +574,12 @@ func (m mainModel) renderRightPane(width, height int) string {
 	if m.running {
 		total, visible = 0, 0 // metrics are stale mid-exec; show a blank column instead
 	}
-	scrollbar := renderScrollbar(contentHeight, total, visible, m.output.YOffset(), scrollbarThumbStyle)
-	content = lipgloss.JoinHorizontal(lipgloss.Top, content, blankColumn(contentHeight), scrollbar)
+	vertical := renderScrollbar(outputH, total, visible, m.output.YOffset(), scrollbarThumbStyle)
+	content = lipgloss.JoinHorizontal(lipgloss.Top, content, blankColumn(outputH), vertical)
+	if m.outputWidth() > outputW {
+		horizontal := renderHorizontalScrollbar(outputW, m.outputWidth(), outputW, m.output.XOffset(), scrollbarThumbStyle)
+		content += "\n" + lipgloss.JoinHorizontal(lipgloss.Top, horizontal, " ", " ")
+	}
 
 	title := "OUTPUT"
 	if m.outputEnlargedActive() {
@@ -824,6 +829,33 @@ func renderScrollbar(height, total, visible, yOffset int, thumb lipgloss.Style) 
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+// renderHorizontalScrollbar is renderScrollbar's transposed counterpart. It
+// appears only when the content is wider than its visible area.
+func renderHorizontalScrollbar(width, total, visible, xOffset int, thumb lipgloss.Style) string {
+	if width < 1 {
+		return ""
+	}
+	if total <= visible {
+		return strings.Repeat(" ", width)
+	}
+
+	thumbSize := min(width, max(1, width*visible/total))
+	thumbStart := 0
+	if maxOffset := total - visible; maxOffset > 0 {
+		thumbStart = xOffset * (width - thumbSize) / maxOffset
+	}
+
+	var b strings.Builder
+	for i := 0; i < width; i++ {
+		if i >= thumbStart && i < thumbStart+thumbSize {
+			b.WriteString(thumb.Render("▬"))
+		} else {
+			b.WriteString(scrollbarTrackStyle.Render("─"))
+		}
+	}
+	return b.String()
 }
 
 // truncateItem truncates a string to fit within maxWidth, accounting for borders and padding

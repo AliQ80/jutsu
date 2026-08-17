@@ -41,7 +41,6 @@ type mainModel struct {
 
 	output          viewport.Model
 	outputLines     []string
-	xOffset         int
 	outputEnlarged  bool
 	docs            viewport.Model
 	docsEnlarged    bool
@@ -362,10 +361,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			lines = append(lines, "✓ Command completed successfully (no output)")
 		}
 
-		m.outputLines = lines
-		m.xOffset = 0
-		m.applyXOffset()
-		m.output.GotoTop()
+		m.setOutputLines(lines)
 		m.resetCurrentFlags()
 		return m, nil
 
@@ -389,10 +385,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.running = false
 			lines := commandEchoLines(msg.pushCmd)
 			lines = append(lines, errorStyle.Render("✗ could not update known_hosts: "+msg.err.Error()))
-			m.outputLines = lines
-			m.xOffset = 0
-			m.applyXOffset()
-			m.output.GotoTop()
+			m.setOutputLines(lines)
 			return m, nil
 		}
 		// Host now trusted — silently retry the original push.
@@ -422,10 +415,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			lines = append(lines, "✓ Command completed (output shown in the terminal)")
 		}
 
-		m.outputLines = lines
-		m.xOffset = 0
-		m.applyXOffset()
-		m.output.GotoTop()
+		m.setOutputLines(lines)
 		m.resetCurrentFlags()
 		return m, nil
 
@@ -859,16 +849,9 @@ func (m mainModel) handleOutputKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.output.SetYOffset(newOffset)
 	case "right", "l":
-		m.xOffset += 4
-		m.applyXOffset()
+		m.output.ScrollRight(4)
 	case "left", "h":
-		if m.xOffset > 0 {
-			m.xOffset -= 4
-			if m.xOffset < 0 {
-				m.xOffset = 0
-			}
-			m.applyXOffset()
-		}
+		m.output.ScrollLeft(4)
 	case "c":
 		text := stripANSI(strings.Join(m.outputLines, "\n"))
 		return m, copyToClipboard(text)
@@ -915,8 +898,7 @@ func (m mainModel) handleHostKeyModalKeys(msg tea.KeyPressMsg) (tea.Model, tea.C
 		// Surface the original failure so the user sees why nothing happened.
 		lines := commandEchoLines(m.hostKeyPrompt.pushCmd)
 		lines = append(lines, "Host key not trusted — push canceled.")
-		m.outputLines = lines
-		m.output.GotoTop()
+		m.setOutputLines(lines)
 		return m, nil
 	}
 	return m, nil
@@ -938,8 +920,7 @@ func (m mainModel) handleAuthModalKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 		m.backdrop = nil
 		lines := commandEchoLines(m.authModalCmd)
 		lines = append(lines, "Canceled.")
-		m.outputLines = lines
-		m.output.GotoTop()
+		m.setOutputLines(lines)
 		return m, nil
 	}
 	return m, nil
@@ -1069,41 +1050,38 @@ func (m mainModel) handleGlobalFlagsModalClick(msg tea.MouseClickMsg) (tea.Model
 	return m, nil
 }
 
-func (m *mainModel) applyXOffset() {
-	shifted := make([]string, len(m.outputLines))
-	for i, line := range m.outputLines {
-		shifted[i] = ansiSkip(line, m.xOffset)
+// displayLines expands tabs to four spaces, matching lipgloss's default tab
+// rendering (Style.maybeConvertTabs), so viewport width measurement and the
+// rendered width agree and tab-indented lines cannot wrap into extra rows.
+func displayLines(lines []string) []string {
+	out := make([]string, len(lines))
+	for i, line := range lines {
+		out[i] = strings.ReplaceAll(line, "\t", "    ")
 	}
-	m.output.SetContentLines(shifted)
+	return out
 }
 
-// ansiSkip skips n visible characters in s while preserving ANSI escape sequences intact.
-func ansiSkip(s string, skip int) string {
-	var out strings.Builder
-	runes := []rune(s)
-	i, skipped := 0, 0
-	for i < len(runes) {
-		if runes[i] == '\x1b' && i+1 < len(runes) && runes[i+1] == '[' {
-			// Scan to end of CSI sequence (ends at a letter a-zA-Z)
-			j := i + 2
-			for j < len(runes) && !((runes[j] >= 'A' && runes[j] <= 'Z') || (runes[j] >= 'a' && runes[j] <= 'z')) {
-				j++
-			}
-			if j < len(runes) {
-				j++
-			}
-			out.WriteString(string(runes[i:j]))
-			i = j
-		} else {
-			if skipped >= skip {
-				out.WriteRune(runes[i])
-			} else {
-				skipped++
-			}
-			i++
-		}
+// setOutputLines installs new command output into the output pane. Raw lines
+// are kept for clipboard copying; a tab-normalized display projection goes to
+// the viewport so measured and rendered widths agree. Horizontal position
+// resets to the origin and the view scrolls to the top.
+func (m *mainModel) setOutputLines(lines []string) {
+	m.outputLines = lines
+	m.output.SetContentLines(displayLines(lines))
+	m.output.SetXOffset(0)
+	m.output.GotoTop()
+}
+
+func (m mainModel) outputWidth() int {
+	width := 0
+	for _, line := range displayLines(m.outputLines) {
+		width = max(width, lipgloss.Width(line))
 	}
-	return out.String()
+	return width
+}
+
+func (m mainModel) maxXOffset() int {
+	return max(0, m.outputWidth()-m.output.Width())
 }
 
 // clampScroll advances the scroll offset only when the cursor hits a viewport edge.
@@ -1677,8 +1655,10 @@ func (m mainModel) paneRows() (composerH, inputsTop, bottom int) {
 func (m *mainModel) layoutViewports() {
 	if m.outputEnlargedActive() {
 		height := m.height - 6 // 5 cmdBar + 1 helpBar
-		m.output.SetWidth(m.width - 4 - scrollbarW - scrollbarGapW)
-		m.output.SetHeight(height - 4)
+		outputW, outputH := m.outputViewportDims(m.width, height)
+		m.output.SetWidth(outputW)
+		m.output.SetHeight(outputH)
+		m.output.SetXOffset(m.output.XOffset()) // re-clamp after width change
 		return
 	}
 
@@ -1698,11 +1678,10 @@ func (m *mainModel) layoutViewports() {
 	combined := m.getActiveCombined()
 	composerH, inputsTop, outputHeight := m.paneRows()
 
-	paneContentWidth := rightWidth - 4 - scrollbarW - scrollbarGapW
-	paneContentHeight := outputHeight - 4 // title box (3) + content bottom border (1)
-
-	m.output.SetWidth(paneContentWidth)
-	m.output.SetHeight(paneContentHeight)
+	outputW, outputH := m.outputViewportDims(rightWidth, outputHeight)
+	m.output.SetWidth(outputW)
+	m.output.SetHeight(outputH)
+	m.output.SetXOffset(m.output.XOffset()) // re-clamp after width change
 
 	m.paneH = composerH
 
@@ -1726,6 +1705,23 @@ func (m *mainModel) layoutViewports() {
 		ti.SetWidth(avail)
 		m.setInput(item, ti)
 	}
+}
+
+// outputViewportDims returns the output viewport dimensions inside a pane. A
+// horizontal scrollbar consumes the bottom row only while output overflows.
+func (m mainModel) outputViewportDims(width, height int) (w, h int) {
+	w = width - 4 - scrollbarW - scrollbarGapW
+	h = height - 4 // title box (3) + content bottom border (1)
+	if w < 1 {
+		w = 1
+	}
+	if h < 1 {
+		h = 1
+	}
+	if m.outputWidth() > w && h > 1 {
+		h--
+	}
+	return
 }
 
 func (m mainModel) currentDescription() string {
