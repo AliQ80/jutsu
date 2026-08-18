@@ -568,7 +568,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.focusPane = focusSubcmds
 				}
 			default:
-				if len(m.currentFlags()) > 0 {
+				if m.enterFlagsPane() {
 					m.focusPane = focusFlags
 				}
 			}
@@ -744,7 +744,7 @@ func (m mainModel) handleComposerKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 			if next == focusSubcmds && len(m.currentSubCommands()) == 0 {
 				next++
 			}
-			if next == focusFlags && len(m.currentFlags()) == 0 {
+			if next == focusFlags && !m.enterFlagsPane() {
 				next = m.focusPane // nowhere to go, stay put
 			}
 			m.focusPane = next
@@ -1126,6 +1126,81 @@ func (m *mainModel) reclampAllScrolls() {
 	}
 }
 
+// navigableFlagIndices returns the ascending indices of non-mandatory flags
+// in flags — the only positions the FLAGS cursor may land on. Mandatory flags
+// stay in the list as locked rows but are never focusable.
+func navigableFlagIndices(flags []Flag) []int {
+	idxs := make([]int, 0, len(flags))
+	for i := range flags {
+		if !flags[i].Mandatory {
+			idxs = append(idxs, i)
+		}
+	}
+	return idxs
+}
+
+func absInt(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+// nearestNavigable returns the navigable index closest to target.
+func nearestNavigable(idxs []int, target int) int {
+	best := idxs[0]
+	for _, i := range idxs[1:] {
+		if absInt(i-target) < absInt(best-target) {
+			best = i
+		}
+	}
+	return best
+}
+
+// moveFlagIdx returns the flag index reached by moving dir (+1 down, -1 up)
+// through the navigable (non-mandatory) flags, wrapping at the ends. A stale
+// non-navigable flagIdx is first snapped to the nearest navigable index.
+func moveFlagIdx(flags []Flag, flagIdx, dir int) int {
+	idxs := navigableFlagIndices(flags)
+	if len(idxs) == 0 {
+		return flagIdx
+	}
+	pos := -1
+	for i, x := range idxs {
+		if x == flagIdx {
+			pos = i
+			break
+		}
+	}
+	if pos < 0 {
+		pos = 0
+		for i, x := range idxs {
+			if absInt(x-flagIdx) < absInt(idxs[pos]-flagIdx) {
+				pos = i
+			}
+		}
+	}
+	return idxs[(pos+dir+len(idxs))%len(idxs)]
+}
+
+// hasNavigableFlags reports whether the current command has at least one
+// non-mandatory flag, i.e. whether the FLAGS pane can receive focus.
+func (m *mainModel) hasNavigableFlags() bool {
+	return len(navigableFlagIndices(m.currentFlags())) > 0
+}
+
+// enterFlagsPane attempts to focus the FLAGS pane. It returns true and
+// normalizes flagIdx to a navigable index when a non-mandatory flag exists;
+// otherwise it returns false and leaves focus unchanged.
+func (m *mainModel) enterFlagsPane() bool {
+	idxs := navigableFlagIndices(m.currentFlags())
+	if len(idxs) == 0 {
+		return false
+	}
+	m.flagIdx = nearestNavigable(idxs, m.flagIdx)
+	return true
+}
+
 func (m *mainModel) navigateDown() {
 	ch := m.paneH - 4
 	switch m.focusPane {
@@ -1151,7 +1226,7 @@ func (m *mainModel) navigateDown() {
 		m.subScroll = clampScroll(m.subScroll, m.subIdx, ch)
 	case focusFlags:
 		flags := m.currentFlags()
-		m.flagIdx = (m.flagIdx + 1) % len(flags)
+		m.flagIdx = moveFlagIdx(flags, m.flagIdx, +1)
 		// flagScroll indexes command flags only; pinned globals shrink the window.
 		m.flagScroll = clampScroll(m.flagScroll, m.flagIdx, ch-m.stickyGlobalCount())
 	}
@@ -1182,7 +1257,7 @@ func (m *mainModel) navigateUp() {
 		m.subScroll = clampScroll(m.subScroll, m.subIdx, ch)
 	case focusFlags:
 		flags := m.currentFlags()
-		m.flagIdx = (m.flagIdx - 1 + len(flags)) % len(flags)
+		m.flagIdx = moveFlagIdx(flags, m.flagIdx, -1)
 		// flagScroll indexes command flags only; pinned globals shrink the window.
 		m.flagScroll = clampScroll(m.flagScroll, m.flagIdx, ch-m.stickyGlobalCount())
 	}
@@ -1329,6 +1404,7 @@ func (m *mainModel) restoreLastCmd() {
 	m.focusPane = snap.composerPane
 	m.flagIdx = snap.flagIdx
 	m.clampIndices()
+	m.clampFocusPane()
 	m.layoutViewports()
 	m.reclampAllScrolls()
 	m.refreshDocs()
@@ -1416,8 +1492,11 @@ func (m *mainModel) clampIndices() {
 	flags := m.currentFlags()
 	if m.flagIdx >= len(flags) {
 		m.flagIdx = max(0, len(flags)-1)
-		m.flagScroll = clampScroll(m.flagScroll, m.flagIdx, ch)
 	}
+	if idxs := navigableFlagIndices(flags); len(idxs) > 0 {
+		m.flagIdx = nearestNavigable(idxs, m.flagIdx)
+	}
+	m.flagScroll = clampScroll(m.flagScroll, m.flagIdx, ch)
 }
 
 func (m mainModel) currentCommands() []Command {
@@ -1712,7 +1791,7 @@ func (m mainModel) outputViewportDims(width, height int) (w, h int) {
 // clampFocusPane resets focus to focusCommands if the current pane has no items.
 // Called after navigating between commands/categories.
 func (m *mainModel) clampFocusPane() {
-	if m.focusPane == focusFlags && len(m.currentFlags()) == 0 {
+	if m.focusPane == focusFlags && !m.hasNavigableFlags() {
 		m.focusPane = focusCommands
 	}
 	if m.focusPane == focusSubcmds && len(m.currentSubCommands()) == 0 {
