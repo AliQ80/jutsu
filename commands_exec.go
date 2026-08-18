@@ -31,7 +31,7 @@ func fetchJJVersion() tea.Cmd {
 			return jjVersionMsg("")
 		}
 		// output is e.g. "jj 0.42.0\n" — take first line only
-		line := strings.SplitN(strings.TrimSpace(string(out)), "\n", 2)[0]
+		line, _, _ := strings.Cut(strings.TrimSpace(string(out)), "\n")
 		return jjVersionMsg(line)
 	}
 }
@@ -60,7 +60,8 @@ func fetchLatestTag() tea.Cmd {
 		if line == "" {
 			return latestTagMsg("")
 		}
-		return latestTagMsg(strings.SplitN(line, " ", 2)[0])
+		tag, _, _ := strings.Cut(line, " ")
+		return latestTagMsg(tag)
 	}
 }
 
@@ -212,7 +213,7 @@ func selectedRemoteName(cmdStr string) string {
 func remoteURL(list, name string) string {
 	remotes := map[string]string{}
 	var order []string
-	for _, line := range strings.Split(list, "\n") {
+	for line := range strings.SplitSeq(list, "\n") {
 		f := strings.Fields(line)
 		if len(f) >= 2 {
 			remotes[f[0]] = f[1]
@@ -249,8 +250,8 @@ func parseSSHHost(remote string) (host, port string) {
 	if at := strings.LastIndex(remote, "@"); at >= 0 {
 		remote = remote[at+1:]
 	}
-	if colon := strings.Index(remote, ":"); colon >= 0 {
-		return remote[:colon], ""
+	if host, _, ok := strings.Cut(remote, ":"); ok {
+		return host, ""
 	}
 	return remote, ""
 }

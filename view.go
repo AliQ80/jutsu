@@ -86,9 +86,7 @@ func (m mainModel) renderContentFrame() string {
 
 	if m.docsEnlargedActive() {
 		height := m.height - 6 // 5 cmdBar + 1 helpBar
-		if height < 6 {
-			height = 6
-		}
+		height = max(height, 6)
 		docsPane := m.renderDescriptionBar(m.width, height)
 		cmdBar := m.renderCommandBar(m.width)
 		helpBar := m.renderHelpBar(m.width)
@@ -195,8 +193,7 @@ func dimBackdrop(s string) string {
 }
 
 func updateForegroundState(seq string, foregroundSet bool) bool {
-	parts := strings.Split(seq[2:len(seq)-1], ";")
-	for _, part := range parts {
+	for part := range strings.SplitSeq(seq[2:len(seq)-1], ";") {
 		if part == "" {
 			foregroundSet = false
 			continue
@@ -403,9 +400,7 @@ func (m mainModel) renderPane(paneIdx int, title string, width, height int) stri
 	}
 
 	contentHeight := height - 4 // 3 for title box, 1 for bottom border
-	if contentHeight < 1 {
-		contentHeight = 1
-	}
+	contentHeight = max(contentHeight, 1)
 
 	// Scroll offset is maintained in the model so the cursor moves freely
 	// within the visible window and the list only scrolls at the edges.
@@ -506,11 +501,11 @@ func (m mainModel) renderPane(paneIdx int, title string, width, height int) stri
 
 	var tStyle, cStyle lipgloss.Style
 	if m.focusPane == paneIdx {
-		tStyle = activeTitleBorderStyle.Copy()
-		cStyle = activeContentBorderStyle.Copy()
+		tStyle = activeTitleBorderStyle
+		cStyle = activeContentBorderStyle
 	} else {
-		tStyle = inactiveTitleBorderStyle.Copy()
-		cStyle = inactiveContentBorderStyle.Copy()
+		tStyle = inactiveTitleBorderStyle
+		cStyle = inactiveContentBorderStyle
 	}
 	if paneIdx == focusFlags && m.validationFlash && m.requiredFlagGroupUnsatisfied() {
 		tStyle = tStyle.BorderForeground(colorRed)
@@ -539,11 +534,11 @@ func (m mainModel) renderPane(paneIdx int, title string, width, height int) stri
 func (m mainModel) renderRightPane(width, height int) string {
 	var tStyle, cStyle lipgloss.Style
 	if m.focusPane == focusOutput {
-		tStyle = activeTitleBorderStyle.Copy()
-		cStyle = activeContentBorderStyle.Copy()
+		tStyle = activeTitleBorderStyle
+		cStyle = activeContentBorderStyle
 	} else {
-		tStyle = inactiveTitleBorderStyle.Copy()
-		cStyle = inactiveContentBorderStyle.Copy()
+		tStyle = inactiveTitleBorderStyle
+		cStyle = inactiveContentBorderStyle
 	}
 
 	// Keep this local viewport in lockstep with layoutViewports().
@@ -594,11 +589,11 @@ func (m mainModel) renderRightPane(width, height int) string {
 func (m mainModel) renderDescriptionBar(width, height int) string {
 	var tStyle, cStyle lipgloss.Style
 	if m.focusPane == focusDocs {
-		tStyle = activeTitleBorderStyle.Copy()
-		cStyle = activeContentBorderStyle.Copy()
+		tStyle = activeTitleBorderStyle
+		cStyle = activeContentBorderStyle
 	} else {
-		tStyle = inactiveTitleBorderStyle.Copy()
-		cStyle = inactiveContentBorderStyle.Copy()
+		tStyle = inactiveTitleBorderStyle
+		cStyle = inactiveContentBorderStyle
 	}
 
 	title := "DOCS"
@@ -652,9 +647,9 @@ func (m mainModel) renderCommandBar(width int) string {
 		}
 	}
 
-	style := commandBarInactiveStyle.Copy().Width(width).Height(5)
+	style := commandBarInactiveStyle.Width(width).Height(5)
 	if m.focusPane == focusCmdBar {
-		style = commandBarActiveStyle.Copy().Width(width).Height(5)
+		style = commandBarActiveStyle.Width(width).Height(5)
 	}
 
 	return style.Render(content.String())
@@ -785,9 +780,7 @@ func (m mainModel) renderHelpBar(width int) string {
 	rightBar := cwdBadge + "   " + badge
 	// width-2 because helpBarStyle has PaddingLeft(1) and PaddingRight(1).
 	gap := (width - 2) - lipgloss.Width(leftBar) - lipgloss.Width(rightBar)
-	if gap < 1 {
-		gap = 1
-	}
+	gap = max(gap, 1)
 	return helpBarStyle.Width(width).Render(leftBar + strings.Repeat(" ", gap) + rightBar)
 }
 
@@ -848,7 +841,7 @@ func renderHorizontalScrollbar(width, total, visible, xOffset int, thumb lipglos
 	}
 
 	var b strings.Builder
-	for i := 0; i < width; i++ {
+	for i := range width {
 		if i >= thumbStart && i < thumbStart+thumbSize {
 			b.WriteString(thumb.Render("▬"))
 		} else {
@@ -972,7 +965,7 @@ func (m mainModel) renderHostKeyModal() string {
 		"Verify this fingerprint, then trust it to continue:",
 		"",
 	}
-	for _, fp := range strings.Split(strings.TrimRight(p.fingerprint, "\n"), "\n") {
+	for fp := range strings.SplitSeq(strings.TrimRight(p.fingerprint, "\n"), "\n") {
 		lines = append(lines, fingerprintStyle.Render("  "+fp))
 	}
 	hint := helpKeyStyle.Render("y") + " " + helpDescStyle.Render("trust") +

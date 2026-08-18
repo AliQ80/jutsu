@@ -843,10 +843,7 @@ func (m mainModel) handleOutputKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "pgdown":
 		m.output.SetYOffset(m.output.YOffset() + m.output.Height()/2)
 	case "pgup":
-		newOffset := m.output.YOffset() - m.output.Height()/2
-		if newOffset < 0 {
-			newOffset = 0
-		}
+		newOffset := max(0, m.output.YOffset()-m.output.Height()/2)
 		m.output.SetYOffset(newOffset)
 	case "right", "l":
 		m.output.ScrollRight(4)
@@ -1634,20 +1631,14 @@ func docsContentDims(width, barHeight int) (w, h int) {
 // active inputs, so it never resizes during navigation or flag toggling. The
 // docs bar absorbs all the slack instead of leaving a gap.
 func (m mainModel) paneRows() (composerH, inputsTop, bottom int) {
-	bottom = m.height - 6 // 5 cmdBar + 1 helpBar
-	if bottom < 6 {
-		bottom = 6
-	}
+	bottom = max(6, m.height-6) // 5 cmdBar + 1 helpBar
 
 	inputsTop = bottom
 	if n := len(m.getActiveCombined()); n > 0 {
 		inputsTop = bottom - (n + 2) // + border
 	}
 
-	composerBudget := bottom - m.maxInputsHt
-	if composerBudget < 6 {
-		composerBudget = 6
-	}
+	composerBudget := max(6, bottom-m.maxInputsHt)
 	composerH = composerBudget / 2
 	return
 }
@@ -1663,10 +1654,7 @@ func (m *mainModel) layoutViewports() {
 	}
 
 	if m.docsEnlargedActive() {
-		height := m.height - 6 // 5 cmdBar + 1 helpBar
-		if height < 6 {
-			height = 6
-		}
+		height := max(6, m.height-6) // 5 cmdBar + 1 helpBar
 		docsW, docsH := docsContentDims(m.width, height)
 		m.docs.SetWidth(docsW)
 		m.docs.SetHeight(docsH)
@@ -1698,10 +1686,7 @@ func (m *mainModel) layoutViewports() {
 		ti := m.getInput(item)
 		// ponytail: -1 margin works around a bubbles textinput off-by-one; see
 		// CLAUDE.md "Known fragile points".
-		avail := boxContentWidth - inputPromptWidth(item.Label) - lipgloss.Width(ti.Prompt) - 1
-		if avail < 1 {
-			avail = 1
-		}
+		avail := max(1, boxContentWidth-inputPromptWidth(item.Label)-lipgloss.Width(ti.Prompt)-1)
 		ti.SetWidth(avail)
 		m.setInput(item, ti)
 	}
@@ -1724,54 +1709,6 @@ func (m mainModel) outputViewportDims(width, height int) (w, h int) {
 	return
 }
 
-func (m mainModel) currentDescription() string {
-	cmds := m.currentCommands()
-	if len(cmds) == 0 || m.cmdIdx >= len(cmds) {
-		return ""
-	}
-	cmd := cmds[m.cmdIdx]
-	switch m.focusPane {
-	case focusSubcmds:
-		if m.subIdx < len(cmd.SubCmds) {
-			return cmd.SubCmds[m.subIdx].Description
-		}
-	case focusFlags:
-		flags := m.currentFlags()
-		if m.flagIdx < len(flags) {
-			return flags[m.flagIdx].Description
-		}
-	}
-	return cmd.Description
-}
-
-func (m mainModel) currentName() string {
-	switch m.focusPane {
-	case focusCategories:
-		if m.catIdx < len(m.categories) {
-			return m.categories[m.catIdx].Name
-		}
-	case focusCommands:
-		cmds := m.currentCommands()
-		if m.cmdIdx < len(cmds) {
-			return cmds[m.cmdIdx].Name
-		}
-	case focusSubcmds:
-		cmds := m.currentCommands()
-		if len(cmds) > 0 && m.cmdIdx < len(cmds) {
-			cmd := cmds[m.cmdIdx]
-			if m.subIdx < len(cmd.SubCmds) {
-				return cmd.SubCmds[m.subIdx].Name
-			}
-		}
-	case focusFlags:
-		flags := m.currentFlags()
-		if m.flagIdx < len(flags) {
-			return flags[m.flagIdx].Name
-		}
-	}
-	return ""
-}
-
 // clampFocusPane resets focus to focusCommands if the current pane has no items.
 // Called after navigating between commands/categories.
 func (m *mainModel) clampFocusPane() {
@@ -1786,17 +1723,7 @@ func (m *mainModel) clampFocusPane() {
 // flagsConflict reports whether flags a and b cannot be selected together.
 // Checks both directions so only one side needs to declare the conflict.
 func flagsConflict(a, b Flag) bool {
-	for _, v := range a.ConflictingFlags {
-		if v == b.Value {
-			return true
-		}
-	}
-	for _, v := range b.ConflictingFlags {
-		if v == a.Value {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(a.ConflictingFlags, b.Value) || slices.Contains(b.ConflictingFlags, a.Value)
 }
 
 // isConflicted reports whether any currently-selected flag in flags conflicts with f.
@@ -1816,13 +1743,6 @@ func isRequiredGroupFlag(m mainModel, f Flag) bool {
 		return false
 	}
 	return slices.Contains(m.currentRequiredFlagGroup(), f.Value)
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 func (m mainModel) hasEmptyRequiredFlagInput() bool {
@@ -1853,10 +1773,7 @@ func (m mainModel) selectedGlobalCount() int {
 // contentHeight (m.paneH - 4, both fed by composerBudget/2). Single source of
 // truth shared by the view and the scroll math.
 func (m mainModel) stickyGlobalCount() int {
-	ch := m.paneH - 4
-	if ch < 1 {
-		ch = 1
-	}
+	ch := max(1, m.paneH-4)
 	return min(m.selectedGlobalCount(), max(0, ch-1))
 }
 
@@ -2438,29 +2355,41 @@ func buildDocsBlock(name, usagePath, alias, desc string, args []Arg, flags []Fla
 	// required-flag/group syntax (e.g. "<--onto|--insert-after|--insert-before>")
 	// is sourced verbatim from `jj util markdown-help` by gen-descriptions,
 	// since Jutsu's own Mandatory flag doesn't reliably mean "jj requires this".
-	usage := "jj " + usagePath + " [OPTIONS]"
+	var usage strings.Builder
+	usage.WriteString("jj ")
+	usage.WriteString(usagePath)
+	usage.WriteString(" [OPTIONS]")
 	if requiredUsage != "" {
-		usage += " " + requiredUsage
+		usage.WriteString(" ")
+		usage.WriteString(requiredUsage)
 	}
 	// A command that dispatches to subcommands and has no Args of its own
 	// (e.g. config, bookmark, git) always takes a required COMMAND
 	// positional in real jj usage. "help" is excluded since it already
 	// models this itself via a variadic, optional Args entry.
 	if len(subCmds) > 0 && len(args) == 0 {
-		usage += " <COMMAND>"
+		usage.WriteString(" <COMMAND>")
 	}
 	for _, a := range args {
 		if a.Required {
 			if a.Variadic {
-				usage += " <" + a.Name + ">..."
+				usage.WriteString(" <")
+				usage.WriteString(a.Name)
+				usage.WriteString(">...")
 			} else {
-				usage += " <" + a.Name + ">"
+				usage.WriteString(" <")
+				usage.WriteString(a.Name)
+				usage.WriteString(">")
 			}
 		} else {
 			if a.Variadic {
-				usage += " [" + a.Name + "]..."
+				usage.WriteString(" [")
+				usage.WriteString(a.Name)
+				usage.WriteString("]...")
 			} else {
-				usage += " [" + a.Name + "]"
+				usage.WriteString(" [")
+				usage.WriteString(a.Name)
+				usage.WriteString("]")
 			}
 		}
 	}
@@ -2468,44 +2397,59 @@ func buildDocsBlock(name, usagePath, alias, desc string, args []Arg, flags []Fla
 	// Section order matches `jj --help`: Name → Alias → Description → Usage → Subcommands → Arguments → Options
 	b.WriteString(headerStyle.Render(name))
 	if alias != "" {
-		b.WriteString("\n\n" + headerStyle.Render("Alias") + "\n  " + alias)
+		b.WriteString("\n\n")
+		b.WriteString(headerStyle.Render("Alias"))
+		b.WriteString("\n  ")
+		b.WriteString(alias)
 	}
 	if desc != "" {
-		b.WriteString("\n\n" + desc)
+		b.WriteString("\n\n")
+		b.WriteString(desc)
 	}
-	b.WriteString("\n\n" + headerStyle.Render("Usage") + "\n  " + usage)
+	b.WriteString("\n\n")
+	b.WriteString(headerStyle.Render("Usage"))
+	b.WriteString("\n  ")
+	b.WriteString(usage.String())
 	if len(subCmds) > 0 {
-		b.WriteString("\n\n" + headerStyle.Render("Subcommands"))
+		b.WriteString("\n\n")
+		b.WriteString(headerStyle.Render("Subcommands"))
 		for _, s := range subCmds {
 			line := boldStyle.Render(s.Name)
 			if s.Summary != "" {
 				line += " — " + s.Summary
 			}
-			b.WriteString("\n  " + line)
+			b.WriteString("\n  ")
+			b.WriteString(line)
 		}
 	}
 	if len(args) > 0 {
-		b.WriteString("\n\n" + headerStyle.Render("Arguments"))
+		b.WriteString("\n\n")
+		b.WriteString(headerStyle.Render("Arguments"))
 		for _, a := range args {
 			argLabel := a.Name
 			if a.Variadic {
 				argLabel += "..."
 			}
-			b.WriteString("\n  " + boldStyle.Render(argLabel))
+			b.WriteString("\n  ")
+			b.WriteString(boldStyle.Render(argLabel))
 			if a.Description != "" {
-				b.WriteString("\n" + indentBlock(a.Description))
+				b.WriteString("\n")
+				b.WriteString(indentBlock(a.Description))
 			}
 		}
 	}
 	if len(flags) > 0 {
-		b.WriteString("\n\n" + headerStyle.Render("Options"))
+		b.WriteString("\n\n")
+		b.WriteString(headerStyle.Render("Options"))
 		for i, f := range flags {
 			if i > 0 {
 				b.WriteString("\n")
 			}
-			b.WriteString("\n  " + flagNameStyle.Render(flagDocsLabel(f)))
+			b.WriteString("\n  ")
+			b.WriteString(flagNameStyle.Render(flagDocsLabel(f)))
 			if f.Description != "" {
-				b.WriteString("\n" + indentBlock(f.Description))
+				b.WriteString("\n")
+				b.WriteString(indentBlock(f.Description))
 			}
 		}
 	}
@@ -2582,11 +2526,13 @@ func wordWrap(s string, width int) string {
 		for wi, w := range words {
 			wlen := len([]rune(w))
 			if wi == 0 {
-				out.WriteString(indent + w)
+				out.WriteString(indent)
+				out.WriteString(w)
 				col = wlen
 			} else if col+1+wlen > avail {
 				out.WriteByte('\n')
-				out.WriteString(indent + w)
+				out.WriteString(indent)
+				out.WriteString(w)
 				col = wlen
 			} else {
 				out.WriteByte(' ')

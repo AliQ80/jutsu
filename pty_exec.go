@@ -133,12 +133,10 @@ func (c *ptyExecCommand) Run() error {
 	// terminal's stdin, which we don't own and can't close, so it is not
 	// waited on — see the comment above the goroutine for why that's safe.
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		w := io.MultiWriter(c.stdout, &boundedWriter{buf: &c.captured, max: maxCapturedOutput})
 		_, _ = io.Copy(w, ptmx)
-	}()
+	})
 
 	// terminal → pty (keystrokes to the subprocess), read through a
 	// cancelreader — the same mechanism Bubble Tea's own input loop uses
@@ -156,11 +154,9 @@ func (c *ptyExecCommand) Run() error {
 	if crErr == nil {
 		stdinReader = cr
 	}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_, _ = io.Copy(ptmx, stdinReader)
-	}()
+	})
 
 	err = cmd.Wait()
 	_ = ptmx.Close()
