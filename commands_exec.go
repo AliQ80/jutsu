@@ -165,8 +165,6 @@ func isAuthFailure(out string) bool {
 	return false
 }
 
-// --- Host-key resolution ----------------------------------------------------
-
 type hostKeyFetchedMsg struct {
 	host         string // host[:port] display label
 	fingerprint  string // human `ssh-keygen -lf` output (one line per key type)
@@ -193,8 +191,7 @@ func remoteHostFor(cmdStr string) (host, port string) {
 	return parseSSHHost(remoteURL(string(out), remote))
 }
 
-// selectedRemoteName extracts the value of a --remote flag from cmdStr, or ""
-// when none is given (jj then defaults to origin / the sole remote).
+// selectedRemoteName extracts --remote flag value or empty.
 func selectedRemoteName(cmdStr string) string {
 	fields := strings.Fields(cmdStr)
 	for i, f := range fields {
@@ -208,8 +205,7 @@ func selectedRemoteName(cmdStr string) string {
 	return ""
 }
 
-// remoteURL picks a remote's URL from `jj git remote list` output (lines of
-// "name url"). It prefers the named remote, then "origin", then the only remote.
+// remoteURL selects URL from `jj git remote list`, preferring named remote, then origin, then sole remote.
 func remoteURL(list, name string) string {
 	remotes := map[string]string{}
 	var order []string
@@ -232,8 +228,7 @@ func remoteURL(list, name string) string {
 	return ""
 }
 
-// parseSSHHost extracts host and port from a git remote URL, returning ("", "")
-// for non-SSH schemes (https/git), which don't do host-key verification.
+// parseSSHHost parses host and port from SSH remote URL; returns empty for non-SSH schemes.
 func parseSSHHost(remote string) (host, port string) {
 	remote = strings.TrimSpace(remote)
 	if remote == "" {
@@ -256,11 +251,7 @@ func parseSSHHost(remote string) (host, port string) {
 	return remote, ""
 }
 
-// fetchHostKey resolves the remote's SSH host, scans its public keys
-// (ssh-keyscan) and computes their fingerprints (ssh-keygen -lf) so the modal
-// can show what the user is trusting. Any failure (non-SSH remote, missing
-// tools, unreachable host) returns a non-nil err so the caller falls back to
-// the guided-terminal modal. Runs the blocking work off the Update loop.
+// fetchHostKey scans SSH host keys and fingerprints; on failure returns error to fallback to terminal modal. Runs off the Update loop.
 func fetchHostKey(pushCmd string) tea.Cmd {
 	return func() tea.Msg {
 		fail := func(err error) tea.Msg {
@@ -297,8 +288,7 @@ func fetchHostKey(pushCmd string) tea.Cmd {
 	}
 }
 
-// addKnownHost appends the scanned key lines to ~/.ssh/known_hosts (creating it
-// 0600 if absent), then reports back so the caller can silently retry pushCmd.
+// addKnownHost appends scanned keys to ~/.ssh/known_hosts (0600) and signals retry.
 func addKnownHost(keyscanLines, pushCmd string) tea.Cmd {
 	return func() tea.Msg {
 		home, err := os.UserHomeDir()

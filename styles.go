@@ -169,7 +169,7 @@ var (
 	flagRequiredStyle = lipgloss.NewStyle().
 				Foreground(colorYellow)
 
-	// Cursor landed on a required-group flag, same pattern as selected/conflicted/mandatory.
+	// Cursor on a required-group flag: filled yellow, same focus pattern as the other states.
 	flagRequiredFocusedStyle = lipgloss.NewStyle().
 					Foreground(colorCrust).
 					Background(colorYellow).
@@ -178,9 +178,6 @@ var (
 	commandTextStyle = lipgloss.NewStyle().
 				Foreground(colorGreen).
 				Bold(true)
-
-	commandTextLongStyle = lipgloss.NewStyle().
-				Foreground(colorSubtext)
 
 	outputStyle = lipgloss.NewStyle().
 			Foreground(colorText)
@@ -228,11 +225,9 @@ var (
 			PaddingLeft(1).
 			PaddingRight(1)
 
-	// fingerprintStyle highlights the SHA256 fingerprint the user is verifying.
 	fingerprintStyle = lipgloss.NewStyle().
 				Foreground(colorSapphire)
 
-	// hostAccentStyle emphasizes the remote host name in the modal body.
 	hostAccentStyle = lipgloss.NewStyle().
 			Foreground(colorPeach).
 			Bold(true)

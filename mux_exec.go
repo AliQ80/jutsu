@@ -39,15 +39,9 @@ import (
 // capturedTrailingOutput() has to go hunting for in the pty path.
 
 // Both backends open the terminal empty so the user's own shell starts in it
-// and sources their startup files — that, rather than any variable forwarding,
-// is how the handoff gets $EDITOR, $PATH and the rest.
-//
-// ponytail: a variable set only in Jutsu's own process (`EDITOR=foo jutsu`) is
-// therefore lost — the pane's shell sets its own from the user's rc, where the
-// pty path would have inherited Jutsu's. Honouring it would mean re-exporting
-// chosen variables after the rc runs, i.e. maintaining a list that only ever
-// encodes one machine's setup. The shell's configuration is the right authority
-// for a terminal the user is about to type into.
+// and sources its startup files — that, rather than variable forwarding, is
+// how the handoff gets $EDITOR, $PATH and the rest. The shell's configuration
+// is the right authority for a terminal the user is about to type into.
 
 // muxSentinel is printed by the wrapper script once the command has exited. It
 // marks the end of the command's own output in the scraped transcript, and
@@ -102,9 +96,8 @@ type execFallbackMsg struct {
 
 // executeHandoff runs a command that needs a real terminal, preferring a
 // sibling pane/tab in whatever multiplexer we're inside over suspending the
-// TUI. plain marks a plain line-based command (a credential prompt) rather
-// than an alt-screen tool; see executeInteractive for what it means on the
-// fallback path.
+// TUI. plain is as described on mux.open; see executeInteractive for what it
+// means on the fallback path.
 func executeHandoff(cmdStr string, plain bool) tea.Cmd {
 	if cmd := executeInMux(cmdStr, plain); cmd != nil {
 		return cmd

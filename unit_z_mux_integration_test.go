@@ -5,16 +5,7 @@ import (
 	"testing"
 )
 
-// TestLiveMuxRoundTrip drives the real open/run/wait/read/dispose cycle against
-// whichever multiplexer is running — the only way to check the parts that are
-// herdr's or tmux's behaviour rather than ours (id plumbing, how a scraped
-// transcript actually comes back, whether a signal races a wait). It creates
-// and destroys real panes and tabs/windows and briefly steals focus, so it is
-// opt-in:
-//
-//	JUTSU_LIVE_MUX=1 go test -run TestLiveMuxRoundTrip -v .
-//
-// Worth re-running from inside each multiplexer after upgrading either.
+// Drives the real open/run/wait/read/dispose cycle to verify multiplexer behaviour.
 func TestLiveMuxRoundTrip(t *testing.T) {
 	if os.Getenv("JUTSU_LIVE_MUX") != "1" {
 		t.Skip("set JUTSU_LIVE_MUX=1 to run against the live multiplexer")
@@ -47,8 +38,8 @@ func TestLiveMuxRoundTrip(t *testing.T) {
 		t.Errorf("output = %q", res.output)
 	}
 
-	// Failure path: exit status must surface, and `exit` must not take the
-	// wrapper script down with it (it would hang the wait forever).
+	// Failure path: `exit` must not take the wrapper script down with it (it
+	// would hang the wait forever).
 	res = run(t, "echo oops >&2; exit 3", true)
 	t.Logf("fail path: err=%v output=%q", res.err, res.output)
 	if res.err == nil || res.err.Error() != "exit status 3" {

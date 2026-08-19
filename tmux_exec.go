@@ -74,9 +74,7 @@ func openTmuxTerminal(script string, plain bool) (*muxTerm, error) {
 		return nil, err
 	}
 
-	// No command argument: tmux starts the user's default-shell, which sources
-	// their startup files (see the note at the top of this file). Neither of
-	// these takes -d, so both focus the new terminal.
+	// No command: tmux starts the user's default shell (sources startup files) and, lacking -d, both new-window and split-window focus the new pane.
 	args := []string{"new-window", "-n", "jutsu", "-c", wd, "-P", "-F", "#{pane_id}"}
 	if plain {
 		args = []string{"split-window", "-v", "-l", "30%", "-t", self, "-c", wd,

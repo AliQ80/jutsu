@@ -71,10 +71,9 @@ func (m mainModel) View() tea.View {
 
 // renderContentFrame selects between the output-enlarged, docs-enlarged, and
 // ordinary composer+output layouts based on m's enlarged-pane state. It's the
-// single source of truth for that selection, used both by the live View()
-// and by renderOnBackdrop() when reflowing the frozen pre-modal frame — so a
-// modal opened while a pane is enlarged shows that same enlarged layout
-// behind it instead of silently falling back to the ordinary frame.
+// single source of truth for that selection, used by both the live View() and
+// renderOnBackdrop(), so a modal opened while a pane is enlarged shows that
+// same enlarged layout behind it.
 func (m mainModel) renderContentFrame() string {
 	if m.outputEnlargedActive() {
 		height := m.height - 6 // 5 cmdBar + 1 helpBar
@@ -85,7 +84,7 @@ func (m mainModel) renderContentFrame() string {
 	}
 
 	if m.docsEnlargedActive() {
-		height := m.height - 6 // 5 cmdBar + 1 helpBar
+		height := m.height - 6
 		height = max(height, 6)
 		docsPane := m.renderDescriptionBar(m.width, height)
 		cmdBar := m.renderCommandBar(m.width)
@@ -96,9 +95,7 @@ func (m mainModel) renderContentFrame() string {
 	return m.renderMainFrame()
 }
 
-// renderMainFrame renders the ordinary (non-enlarged, non-modal) composer +
-// output + command bar + help bar frame. It's one of renderContentFrame's
-// layout choices, used for both the live view and the modal backdrop.
+// renderMainFrame renders the ordinary composer + output + command bar + help bar frame.
 func (m mainModel) renderMainFrame() string {
 	leftWidth, rightWidth := m.getLayoutWidths()
 
@@ -255,7 +252,7 @@ func overlay(bg, fg string, x, y int) string {
 	for i, fgLine := range fgLines {
 		row := y + i
 		if row < 0 || row >= len(bgLines) {
-			continue // this fg row falls above or below the visible bg entirely
+			continue
 		}
 
 		fgW := lipgloss.Width(fgLine)
@@ -265,7 +262,7 @@ func overlay(bg, fg string, x, y int) string {
 		// wider than the terminal centered with a negative offset).
 		if col < 0 {
 			if -col >= fgW {
-				continue // fully off the left edge
+				continue
 			}
 			fgLine = ansi.Cut(fgLine, -col, fgW)
 			fgW = lipgloss.Width(fgLine)
@@ -275,7 +272,7 @@ func overlay(bg, fg string, x, y int) string {
 		bgLine := bgLines[row]
 		bgW := lipgloss.Width(bgLine)
 		if col >= bgW {
-			continue // starts at/past the right edge, nothing to composite
+			continue
 		}
 
 		// Clip the right edge for an oversized modal or one that runs past
@@ -354,9 +351,8 @@ func (m mainModel) renderPane(paneIdx int, title string, width, height int) stri
 		selectedIdx = m.subIdx
 	case focusFlags:
 		// Selected global options render as pinned display-only rows above
-		// the command's own flags; the cursor never lands on them. When more
-		// are selected than stickyN allows, the last pinned row summarizes
-		// the remainder so none silently vanish.
+		// the command's own flags. When more are selected than stickyN
+		// allows, the last pinned row summarizes the remainder.
 		var globalNames []string
 		for _, gf := range m.globalFlags {
 			if gf.Selected {
@@ -459,7 +455,6 @@ func (m mainModel) renderPane(paneIdx int, title string, width, height int) stri
 						}
 					}
 				} else {
-					// Categories, Commands, Subcommands
 					if isFocused {
 						content.WriteString(selectedItemStyle.Render(truncateItem(items[itemIdx], width)))
 					} else {
@@ -468,7 +463,6 @@ func (m mainModel) renderPane(paneIdx int, title string, width, height int) stri
 				}
 			} else {
 				if paneIdx == focusFlags && itemIdx < stickyN {
-					// Pinned display-only global row.
 					content.WriteString(flagGlobalStyle.Render(truncateItem(items[itemIdx], width)))
 				} else if fi := itemIdx - stickyN; paneIdx == focusFlags && fi < len(m.currentFlags()) {
 					flags := m.currentFlags()
@@ -491,7 +485,6 @@ func (m mainModel) renderPane(paneIdx int, title string, width, height int) stri
 		}
 	}
 
-	// Ensure content fills the height by padding with empty lines
 	contentStr := content.String()
 	lines := strings.Split(contentStr, "\n")
 	for len(lines) < contentHeight {
@@ -554,7 +547,6 @@ func (m mainModel) renderRightPane(width, height int) string {
 		outputContent = m.output.View()
 	}
 
-	// Ensure content fills the height
 	lines := strings.Split(outputContent, "\n")
 	for len(lines) < outputH {
 		lines = append(lines, "")
@@ -602,7 +594,7 @@ func (m mainModel) renderDescriptionBar(width, height int) string {
 	}
 	titleBox := tStyle.Width(width).Align(lipgloss.Center).Render(headerStyle.Render(title))
 
-	// Set dimensions on a local copy so View() renders at the right size.
+	// Size the local docs viewport for this render.
 	docsW, docsH := docsContentDims(width, height)
 	m.docs.SetWidth(docsW)
 	m.docs.SetHeight(docsH)
@@ -675,7 +667,6 @@ func (m mainModel) renderVersionBadge() string {
 	iMaj, iMin, iPatch := parseVersion(m.jjVersion)
 	cMaj, cMin, cPatch := parseVersion(compatJJVersion)
 
-	// Extract bare installed version number for the parenthetical.
 	installed := "v" + strings.TrimPrefix(m.jjVersion, "jj ")
 
 	switch {
@@ -851,7 +842,6 @@ func renderHorizontalScrollbar(width, total, visible, xOffset int, thumb lipglos
 	return b.String()
 }
 
-// truncateItem truncates a string to fit within maxWidth, accounting for borders and padding
 func truncateItem(s string, maxWidth int) string {
 	// maxWidth accounts for border(2) + padding(2)
 	available := maxWidth - 4
@@ -915,11 +905,8 @@ const (
 	globalDocsH = 18
 )
 
-// renderAboutModal renders the read-only popup that shows the running Jutsu
-// version (build-stamped via the jutsuVersion ldflag, or resolved at startup
-// from the local jj repo when the ldflag is absent — see displayVersion) and
-// a link to the published docs. Opened via `?`, closed via `esc` — see
-// handleAboutModalKeys.
+// renderAboutModal renders the read-only popup showing the running Jutsu
+// version (see displayVersion) and a link to the published docs.
 func (m mainModel) renderAboutModal() string {
 	// Title is centered across the modal's inner content width. The docs
 	// URL is the widest line (31 chars) — size the title against the actual
@@ -940,13 +927,9 @@ func (m mainModel) renderAboutModal() string {
 	return modalBoxStyle.Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
 }
 
-// displayVersion returns the version string to show in the about modal.
-// Release builds have jutsuVersion set to the stamped tag (e.g. "v1.2.3") and
-// the latestTag fallback is a no-op. Source builds (`go run .`, `go build`)
-// leave jutsuVersion as "dev"; if a runtime fetch of the latest jj tag
-// succeeded, that tag overrides "dev" here. Either way the package-level
-// jutsuVersion var is never mutated — it's a build-time constant for release
-// builds, and the override is a pure render-time substitution.
+// displayVersion returns the version string to show in the about modal: the
+// stamped release tag, or the runtime-fetched latest jj tag overriding "dev"
+// for source builds. jutsuVersion itself is never mutated.
 func (m mainModel) displayVersion() string {
 	if jutsuVersion == "dev" && m.latestTag != "" {
 		return m.latestTag

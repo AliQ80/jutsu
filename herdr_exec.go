@@ -11,19 +11,13 @@ import (
 // The herdr backend of the multiplexer handoff. See mux_exec.go for the shared
 // driver and what the six steps are.
 //
-// herdr opens an empty terminal — running the user's own shell — and then types
-// the wrapper script's path into it, which is why the shell's echo of that line
-// has to be trimmed back out of the transcript. The tmux backend works the same
-// way, for the same reason: only a real shell brings the user's environment.
 
 const (
 	// ponytail: a command printing more than this loses its head. Raise it if
 	// a real `jj` invocation ever overflows.
 	herdrReadLines = "1000"
 
-	// ponytail: an editor session can legitimately last hours; on timeout we
-	// leave the pane open and say so rather than kill something the user is
-	// still typing into.
+	// ponytail: an editor session can legitimately last hours; on timeout we report it rather than kill the session.
 	herdrWaitTimeoutMs = "7200000"
 )
 

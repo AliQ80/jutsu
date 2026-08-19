@@ -9,9 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// overlay() must splice fg into bg at the given coordinates without
-// disturbing surrounding rows/columns — the whole point of showing the app
-// frame behind a modal instead of a blank one.
+// the whole point of showing the app frame behind a modal instead of a blank one.
 func TestOverlaySplicesWithoutDisturbingSurroundingContent(t *testing.T) {
 	bg := "AAAAAAAAAA\nBBBBBBBBBB\nCCCCCCCCCC"
 	fg := "XX\nYY"
@@ -23,8 +21,7 @@ func TestOverlaySplicesWithoutDisturbingSurroundingContent(t *testing.T) {
 	}
 }
 
-// Rows the overlay doesn't cover (above/below fg's height, or out of bg's
-// bounds) must be left completely untouched.
+
 func TestOverlayLeavesUncoveredRowsAlone(t *testing.T) {
 	bg := "111\n222\n333"
 	fg := "Z"
@@ -44,9 +41,7 @@ func TestOverlayLeavesUncoveredRowsAlone(t *testing.T) {
 	}
 }
 
-// freezeBackdrop must capture state as it was *before* the caller flips a
-// *ModalOpen flag — the modal-open bit itself, and any conditional field the
-// caller sets first, must not leak into the snapshot.
+// must not leak the modal-open flag into the snapshot.
 func TestFreezeBackdropCapturesPreModalState(t *testing.T) {
 	m := newModel()
 	m.width, m.height = 120, 40
@@ -75,10 +70,7 @@ func TestFreezeBackdropCapturesPreModalState(t *testing.T) {
 	}
 }
 
-// Opening the global-options modal via "g" must freeze the backdrop and
-// block composer input from reaching the underlying model while it's open —
-// asserted through the real key-routing path, not by calling the handler
-// directly.
+// asserted through the real key-routing path, not by calling the handler directly.
 func TestGlobalFlagsModalFreezesBackdropAndBlocksInput(t *testing.T) {
 	m := newModel()
 	m.width, m.height = 120, 40
@@ -118,11 +110,7 @@ func TestGlobalFlagsModalFreezesBackdropAndBlocksInput(t *testing.T) {
 	}
 }
 
-// Opening the about modal via "?" must freeze the backdrop through the real
-// key-routing path, keep it stable against live mutations while open, and
-// release it on esc — same lifecycle as the global-options modal. The live
-// mutations (catIdx move + in-place flag toggle) are the same hazards the
-// deep-copy snapshot exists for, so they must not leak into the frozen frame.
+// freeze via real key-routing path and ensure live mutations don't leak into the frozen frame.
 func TestAboutModalFreezesBackdropAndReleasesOnClose(t *testing.T) {
 	m := newModel()
 	m.width, m.height = 120, 40
@@ -177,9 +165,7 @@ func TestAboutModalFreezesBackdropAndReleasesOnClose(t *testing.T) {
 	}
 }
 
-// View() must overlay the modal on the reflowed backdrop rather than a blank
-// screen: the backdrop's own content (drawn from the frozen composer state)
-// should be present in the rendered frame around the modal box.
+// must overlay on the reflowed backdrop rather than a blank screen.
 func TestModalViewRendersOverBackdropFrame(t *testing.T) {
 	m := newModel()
 	m.width, m.height = 120, 40
@@ -199,10 +185,7 @@ func TestModalViewRendersOverBackdropFrame(t *testing.T) {
 	}
 }
 
-// Toggling a flag deep in the category tree (Category -> Command -> Flags)
-// after freezing must not be visible through the frozen backdrop. Before the
-// deep-copy fix, categories/Commands/Flags all shared their backing arrays
-// with the live model, so this mutation leaked straight through.
+// before the deep-copy fix, shared backing arrays caused mutations to leak through the frozen backdrop.
 func TestFreezeBackdropIsolatesCategoryFlagMutation(t *testing.T) {
 	m := newModel()
 	m.width, m.height = 120, 40
@@ -228,10 +211,7 @@ func TestFreezeBackdropIsolatesCategoryFlagMutation(t *testing.T) {
 	}
 }
 
-// Toggling a global flag (via the global-options modal's "space" key) while
-// the modal is open must not retroactively change the frozen backdrop's copy
-// of globalFlags — same sharing hazard as category flags, but through
-// m.globalFlags directly instead of nested category structs.
+// same sharing hazard as category flags, but through m.globalFlags directly.
 func TestGlobalFlagToggleWhileModalOpenDoesNotMutateBackdrop(t *testing.T) {
 	m := newModel()
 	m.width, m.height = 120, 40
@@ -256,9 +236,7 @@ func TestGlobalFlagToggleWhileModalOpenDoesNotMutateBackdrop(t *testing.T) {
 	}
 }
 
-// setInput reassigns entries in the live inputs map; since maps are
-// reference types, a shallow `snap := *m` would share the exact same map
-// object with the backdrop. Confirm the frozen copy is a distinct map.
+// maps are reference types; a shallow copy would share the map, so test confirms frozen copy is distinct.
 func TestFreezeBackdropIsolatesInputMapMutation(t *testing.T) {
 	m := newModel()
 	m.width, m.height = 120, 40
@@ -291,9 +269,7 @@ func TestFreezeBackdropIsolatesInputMapMutation(t *testing.T) {
 	}
 }
 
-// An async execResultMsg arriving while a modal is open (e.g. a long-running
-// command finishing in the background) reassigns m.outputLines wholesale.
-// The frozen backdrop's copy must not observe that change.
+// async execResultMsg reassigns m.outputLines; backdrop must not observe the change.
 func TestAsyncOutputUpdateDoesNotMutateFrozenBackdrop(t *testing.T) {
 	m := newModel()
 	m.width, m.height = 120, 40
@@ -308,10 +284,7 @@ func TestAsyncOutputUpdateDoesNotMutateFrozenBackdrop(t *testing.T) {
 	}
 }
 
-// Resizing the terminal while a modal is open must reflow the backdrop's
-// rendered frame at the new dimensions without mutating the frozen snapshot
-// itself — otherwise a second resize (or a close-then-reopen at a different
-// size) would compound stale width/height into the stored backdrop.
+// otherwise a second resize would compound stale dimensions into the stored backdrop.
 func TestRenderOnBackdropReflowsWithoutMutatingSnapshot(t *testing.T) {
 	m := newModel()
 	m.width, m.height = 120, 40
@@ -334,8 +307,7 @@ func TestRenderOnBackdropReflowsWithoutMutatingSnapshot(t *testing.T) {
 	}
 }
 
-// Mouse events outside the modal must remain isolated from the backdrop, while
-// events inside the global-options modal control its checklist/docs panes.
+// must remain isolated from the backdrop.
 func TestModalMouseEventsStayInsideModal(t *testing.T) {
 	m := newModel()
 	m.width, m.height = 120, 40
@@ -416,9 +388,7 @@ func TestModalMouseEventsStayInsideModal(t *testing.T) {
 	}
 }
 
-// overlay() must clip rather than panic or corrupt output when fg starts at
-// a negative coordinate (a modal centered wider than the terminal, or a
-// caller's off-by-one).
+// must clip rather than panic or corrupt output when fg starts at a negative coordinate.
 func TestOverlayClipsNegativeCoordinates(t *testing.T) {
 	bg := "0123456789\nABCDEFGHIJ"
 
@@ -442,8 +412,7 @@ func TestOverlayClipsNegativeCoordinates(t *testing.T) {
 	}
 }
 
-// overlay() must clip an oversized modal (wider than bg) instead of running
-// off the end of the line or panicking on the ansi.Cut bounds.
+// must clip an oversized modal instead of running off the line or panicking.
 func TestOverlayClipsOversizedModal(t *testing.T) {
 	bg := "12345"
 	fg := "ABCDEFGHIJ" // wider than bg
@@ -463,9 +432,7 @@ func TestOverlayClipsOversizedModal(t *testing.T) {
 	}
 }
 
-// overlay() must not split a double-width Unicode cell in half at either
-// edge of the clip — ansi.Cut is grapheme-width aware, and this exercises
-// that overlay actually uses it at the boundaries it computes itself.
+// must not split a double-width Unicode cell at clip edges.
 func TestOverlayHandlesWideUnicodeAtClipBoundary(t *testing.T) {
 	bg := "口口口口口" // 5 double-width CJK chars = 10 cells wide
 	fg := "口口"    // 2 double-width chars = 4 cells wide
@@ -485,8 +452,7 @@ func TestOverlayHandlesWideUnicodeAtClipBoundary(t *testing.T) {
 	}
 }
 
-// overlay() must preserve ANSI SGR styling in fg lines rather than mangling
-// escape sequences when splicing them into a plain bg line.
+// must preserve ANSI SGR styling in fg lines rather than mangling escape sequences.
 func TestOverlayPreservesANSIStyledContent(t *testing.T) {
 	bg := "          "
 	styled := lipgloss.NewStyle().Foreground(colorRed).Render("hi")
@@ -497,11 +463,7 @@ func TestOverlayPreservesANSIStyledContent(t *testing.T) {
 	}
 }
 
-// Opening a modal while the output pane is enlarged must preserve that
-// enlarged layout in the backdrop shown behind the modal — not silently fall
-// back to the ordinary composer+output frame. renderContentFrame() is the
-// shared layout selector behind both View() and renderOnBackdrop(); this
-// exercises it through the real backdrop-reflow path.
+// must preserve the enlarged layout in the backdrop, not fall back to the ordinary composer+output frame.
 func TestModalBackdropPreservesOutputEnlargedLayout(t *testing.T) {
 	m := newModel()
 	m.width, m.height = 120, 40
@@ -527,7 +489,6 @@ func TestModalBackdropPreservesOutputEnlargedLayout(t *testing.T) {
 	}
 }
 
-// Same as above for the docs-enlarged layout.
 func TestModalBackdropPreservesDocsEnlargedLayout(t *testing.T) {
 	m := newModel()
 	m.width, m.height = 120, 40
@@ -553,9 +514,7 @@ func TestModalBackdropPreservesDocsEnlargedLayout(t *testing.T) {
 	}
 }
 
-// dimBackdrop must preserve the frame's ANSI styling while transforming its
-// truecolor values toward the base palette, so the app remains recognizable
-// rather than becoming monochrome.
+// so the app remains recognizable rather than becoming monochrome.
 func TestDimBackdropPreservesAndMutesOriginalColor(t *testing.T) {
 	original := lipgloss.NewStyle().Foreground(colorRed).Render("hello")
 	got := dimBackdrop(original)

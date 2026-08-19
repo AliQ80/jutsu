@@ -81,20 +81,16 @@ type mainModel struct {
 	backdrop *mainModel
 }
 
-// freezeBackdrop snapshots the current visual state for later use as the
-// modal backdrop. Call this before flipping a *ModalOpen flag, not after —
-// the snapshot must reflect the screen as it looked right before the modal
-// took over.
+// freezeBackdrop snapshots the current visual state for the modal backdrop.
+// Call this before flipping a *ModalOpen flag, not after, so the snapshot
+// shows the screen as it looked right before the modal took over.
 //
-// A plain `snap := *m` struct copy is not enough: mainModel's slices/maps
-// (categories, globalFlags, inputs, argInputs, outputLines) are reference
-// types, so a shallow copy shares their backing arrays/maps with the live
-// model. Flag.Selected is mutated in place through those shared backing
-// arrays (see toggleFlagAt, restoreLastCmd), and inputs/argInputs are
-// mutated by reassigning map entries (see setInput) — both of which would
-// silently rewrite the "frozen" backdrop out from under the modal. Each of
-// those fields is deep-copied below so the snapshot is genuinely immutable
-// from the live model's perspective.
+// A plain `snap := *m` copy would share the reference-type fields
+// (categories, globalFlags, inputs, argInputs, outputLines) with the live
+// model: Flag.Selected is mutated through those backing arrays (toggleFlagAt,
+// restoreLastCmd) and inputs/argInputs entries are reassigned (setInput), so
+// the "frozen" backdrop could be silently rewritten. Each field is therefore
+// deep-copied below.
 func (m *mainModel) freezeBackdrop() {
 	snap := *m
 	snap.backdrop = nil // a frozen backdrop never carries its own backdrop
@@ -225,10 +221,9 @@ func cloneTextInputs(in map[string]textinput.Model) map[string]textinput.Model {
 	return out
 }
 
-// InputItem is a unified entry for the input pane — either a positional arg or a flag input.
 type InputItem struct {
-	Name  string // lookup key: argInputs[Name] when IsArg, inputs[Name] otherwise
-	Label string // display label shown in the input pane
+	Name  string
+	Label string
 	IsArg bool
 }
 
@@ -348,7 +343,6 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		lines := commandEchoLines(msg.cmdStr)
 		if msg.err != nil {
-			// Always show errors
 			errorMsg := msg.err.Error()
 			if msg.output != "" {
 				errorMsg = msg.output + "\n" + errorMsg
@@ -357,7 +351,6 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else if strings.TrimSpace(msg.output) != "" {
 			lines = append(lines, strings.Split(strings.TrimRight(msg.output, "\n"), "\n")...)
 		} else {
-			// Command succeeded with no output
 			lines = append(lines, "✓ Command completed successfully (no output)")
 		}
 
@@ -447,7 +440,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.outputEnlargedActive() {
-			height := m.height - 6 // 5 cmdBar + 1 helpBar
+			height := m.height - 6
 			if msg.Y < height {
 				if msg.Button == tea.MouseWheelUp && m.output.YOffset() > 0 {
 					m.output.SetYOffset(m.output.YOffset() - 1)
@@ -459,7 +452,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if m.docsEnlargedActive() {
-			height := m.height - 6 // 5 cmdBar + 1 helpBar
+			height := m.height - 6
 			if msg.Y < height {
 				if msg.Button == tea.MouseWheelUp && m.docs.YOffset() > 0 {
 					m.docs.SetYOffset(m.docs.YOffset() - 1)
@@ -499,7 +492,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.outputEnlargedActive() {
-			height := m.height - 6 // 5 cmdBar + 1 helpBar
+			height := m.height - 6
 			if msg.Y >= height && msg.Y < height+5 {
 				m.outputEnlarged = false
 				m.layoutViewports()
@@ -514,7 +507,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if m.docsEnlargedActive() {
-			height := m.height - 6 // 5 cmdBar + 1 helpBar
+			height := m.height - 6
 			if msg.Y >= height && msg.Y < height+5 {
 				m.docsEnlarged = false
 				m.layoutViewports()
@@ -664,25 +657,21 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case "i":
-			// Jump into the inputs box from any pane — including the output,
-			// docs and command bar, and from any composer pane, since the
-			// global-options modal can land focus on Categories with a pending
-			// global input. ("i", not enter — enter means exactly one thing
-			// app-wide: execute.) Blocked inside the inputs box itself, where
-			// "i" is a character to type, and in the enlarged views, which
-			// don't draw the box — same guard as d/o.
+			// Jump into the inputs box from any pane — including Categories,
+			// where the global-options modal can leave a pending global input.
+			// Blocked inside the inputs box itself, where "i" is a character
+			// to type, and in the enlarged views, which don't draw the box —
+			// same guard as d/o. Enter stays reserved for execute.
 			if m.focusPane != focusInputs && !m.outputEnlarged && !m.docsEnlarged {
 				if cmd := m.focusInput(0); cmd != nil {
 					return m, cmd
 				}
 			}
 		case "?":
-			// Open the about modal (version + docs link). Blocked inside
-			// the inputs pane, where "?" is a literal character being typed.
-			// No enlarged-view guard needed: "? "is harmless in those views.
+			// Open the about modal (version + docs link). Blocked in the
+			// inputs pane, where "?" is a literal character being typed.
 			// Freeze the backdrop before marking the modal open — same
-			// ordering as the other modal paths — so background updates
-			// can't redraw the frame behind it.
+			// ordering as the other modal paths.
 			if m.focusPane != focusInputs {
 				m.freezeBackdrop()
 				m.aboutModalOpen = true
@@ -745,7 +734,7 @@ func (m mainModel) handleComposerKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 				next++
 			}
 			if next == focusFlags && !m.enterFlagsPane() {
-				next = m.focusPane // nowhere to go, stay put
+				next = m.focusPane
 			}
 			m.focusPane = next
 			m.clampIndices()
@@ -923,13 +912,11 @@ func (m mainModel) handleAuthModalKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 	return m, nil
 }
 
-// handleGlobalFlagsModalKeys drives the global-options modal (opened with
-// "g" from any composer/output/docs/cmdbar pane). Same spatial model as the
-// main composer: ←→/h/l pick a column (checklist or docs), ↑↓/j/k move
-// within it — navigating flags on the left, scrolling docs on the right.
-// Space toggles the highlighted flag; esc (or g again) closes. Flags that
-// take a value are edited in the regular input bar after closing — the
-// modal itself has no editing mode.
+// handleGlobalFlagsModalKeys drives the global-options modal ("g"), same
+// spatial model as the main composer: ←→/h/l pick the checklist or docs
+// column, ↑↓/j/k move within it, space toggles the highlighted flag, esc
+// (or g) closes. Value-editing happens in the input bar after closing (see
+// getActiveInputs).
 func (m mainModel) handleGlobalFlagsModalKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c", "q":
@@ -1058,10 +1045,9 @@ func displayLines(lines []string) []string {
 	return out
 }
 
-// setOutputLines installs new command output into the output pane. Raw lines
-// are kept for clipboard copying; a tab-normalized display projection goes to
-// the viewport so measured and rendered widths agree. Horizontal position
-// resets to the origin and the view scrolls to the top.
+// setOutputLines installs command output into the output pane: raw lines are
+// kept for clipboard copying, while the viewport gets a tab-normalized display
+// projection so measured and rendered widths agree. Scroll resets to the top.
 func (m *mainModel) setOutputLines(lines []string) {
 	m.outputLines = lines
 	m.output.SetContentLines(displayLines(lines))
@@ -1103,9 +1089,6 @@ func (m *mainModel) reclampAllScrolls() {
 	m.cmdScroll = clampScroll(m.cmdScroll, m.cmdIdx, ch)
 	m.subScroll = clampScroll(m.subScroll, m.subIdx, ch)
 
-	// Selected global flags are pinned rows above the scrolling command
-	// flags, so flagScroll and flagIdx both index the command flags only;
-	// the scroll window is shrunk by however many rows the pins occupy.
 	flags := m.currentFlags()
 	flagCh := ch - m.stickyGlobalCount()
 
@@ -1146,7 +1129,6 @@ func absInt(x int) int {
 	return x
 }
 
-// nearestNavigable returns the navigable index closest to target.
 func nearestNavigable(idxs []int, target int) int {
 	best := idxs[0]
 	for _, i := range idxs[1:] {
@@ -1157,9 +1139,9 @@ func nearestNavigable(idxs []int, target int) int {
 	return best
 }
 
-// moveFlagIdx returns the flag index reached by moving dir (+1 down, -1 up)
-// through the navigable (non-mandatory) flags, wrapping at the ends. A stale
-// non-navigable flagIdx is first snapped to the nearest navigable index.
+// moveFlagIdx returns the flag index dir steps away through the navigable
+// (non-mandatory) flags, wrapping at the ends; a stale flagIdx is first
+// snapped to the nearest navigable index.
 func moveFlagIdx(flags []Flag, flagIdx, dir int) int {
 	idxs := navigableFlagIndices(flags)
 	if len(idxs) == 0 {
@@ -1183,15 +1165,10 @@ func moveFlagIdx(flags []Flag, flagIdx, dir int) int {
 	return idxs[(pos+dir+len(idxs))%len(idxs)]
 }
 
-// hasNavigableFlags reports whether the current command has at least one
-// non-mandatory flag, i.e. whether the FLAGS pane can receive focus.
 func (m *mainModel) hasNavigableFlags() bool {
 	return len(navigableFlagIndices(m.currentFlags())) > 0
 }
 
-// enterFlagsPane attempts to focus the FLAGS pane. It returns true and
-// normalizes flagIdx to a navigable index when a non-mandatory flag exists;
-// otherwise it returns false and leaves focus unchanged.
 func (m *mainModel) enterFlagsPane() bool {
 	idxs := navigableFlagIndices(m.currentFlags())
 	if len(idxs) == 0 {
@@ -1227,7 +1204,6 @@ func (m *mainModel) navigateDown() {
 	case focusFlags:
 		flags := m.currentFlags()
 		m.flagIdx = moveFlagIdx(flags, m.flagIdx, +1)
-		// flagScroll indexes command flags only; pinned globals shrink the window.
 		m.flagScroll = clampScroll(m.flagScroll, m.flagIdx, ch-m.stickyGlobalCount())
 	}
 }
@@ -1258,15 +1234,13 @@ func (m *mainModel) navigateUp() {
 	case focusFlags:
 		flags := m.currentFlags()
 		m.flagIdx = moveFlagIdx(flags, m.flagIdx, -1)
-		// flagScroll indexes command flags only; pinned globals shrink the window.
 		m.flagScroll = clampScroll(m.flagScroll, m.flagIdx, ch-m.stickyGlobalCount())
 	}
 }
 
-// resetFlags deselects every non-mandatory flag in flags and blanks the input
-// of any RequiresInput flag. Shared by resetCurrentFlags for command/
-// subcommand flags and for m.globalFlags, so global options reset on exactly
-// the same triggers as command flags (navigation away, post-execution).
+// resetFlags deselects non-mandatory flags and blanks RequiresInput values.
+// Shared by command/subcommand flags and m.globalFlags, so global options
+// reset on the same triggers (navigation away, post-execution).
 func resetFlags(flags []Flag, inputs map[string]textinput.Model) {
 	for i := range flags {
 		if !flags[i].Mandatory {
@@ -1412,21 +1386,17 @@ func (m *mainModel) restoreLastCmd() {
 }
 
 func (m *mainModel) toggleFlag() {
-	// Validate indices
 	if len(m.categories) == 0 || m.catIdx >= len(m.categories) {
 		return
 	}
 
-	// Get pointer to current category
 	cat := &m.categories[m.catIdx]
 	if len(cat.Commands) == 0 || m.cmdIdx >= len(cat.Commands) {
 		return
 	}
 
-	// Get pointer to current command
 	cmd := &cat.Commands[m.cmdIdx]
 
-	// Handle subcommands vs direct flags
 	if len(cmd.SubCmds) > 0 {
 		if m.subIdx >= len(cmd.SubCmds) {
 			return
@@ -1647,19 +1617,14 @@ func (m mainModel) selectedGlobalFlagParts() (short, long []string) {
 	return
 }
 
-// outputEnlargedActive reports whether the output pane should render in its
-// enlarged, full-width/full-height form. Enlarge is cleared explicitly by
-// every path that leaves the output pane (see handleOutputKeys and the mouse
-// handlers), so checking both the flag and current focus here is a
-// belt-and-suspenders guard against a stale flag reappearing on refocus.
+// outputEnlargedActive reports whether the output pane should render enlarged.
+// The flag is cleared on every path out of the pane, so also checking current
+// focus guards against a stale flag reappearing on refocus; docsEnlargedActive
+// mirrors this for the docs pane.
 func (m mainModel) outputEnlargedActive() bool {
 	return m.outputEnlarged && m.focusPane == focusOutput
 }
 
-// docsEnlargedActive reports whether the docs pane should render in its
-// enlarged form, filling the composer-panes/input-pane region while the
-// output pane stays at its normal size. Mirrors outputEnlargedActive()'s
-// belt-and-suspenders guard against a stale flag reappearing on refocus.
 func (m mainModel) docsEnlargedActive() bool {
 	return m.docsEnlarged && m.focusPane == focusDocs
 }
@@ -1699,16 +1664,15 @@ func docsContentDims(width, barHeight int) (w, h int) {
 	return
 }
 
-// paneRows returns the left column's row boundaries: the composer occupies
-// [0, composerH), the description/docs bar [composerH, inputsTop), the inputs
-// box [inputsTop, bottom), and the command bar starts at bottom. View(),
-// layoutViewports() and mouse hit-testing all read from here so the drawn
-// layout and the clickable layout can't drift apart — they did, and clicks on
-// the inputs box landed on the docs pane.
+// paneRows returns the left column's row boundaries: composer [0, composerH),
+// docs bar [composerH, inputsTop), inputs box [inputsTop, bottom), command
+// bar at bottom. View(), layoutViewports() and mouse hit-testing all read
+// from here so the drawn and clickable layouts can't drift apart (they once
+// did, and clicks on the inputs box landed on the docs pane).
 //
-// composerH is a pure function of bottom/maxInputsHt — it never looks at the
-// active inputs, so it never resizes during navigation or flag toggling. The
-// docs bar absorbs all the slack instead of leaving a gap.
+// composerH is a pure function of bottom/maxInputsHt — never of the active
+// inputs — so it never resizes during navigation or flag toggling; the docs
+// bar absorbs the slack instead of leaving a gap.
 func (m mainModel) paneRows() (composerH, inputsTop, bottom int) {
 	bottom = max(6, m.height-6) // 5 cmdBar + 1 helpBar
 
@@ -1724,7 +1688,7 @@ func (m mainModel) paneRows() (composerH, inputsTop, bottom int) {
 
 func (m *mainModel) layoutViewports() {
 	if m.outputEnlargedActive() {
-		height := m.height - 6 // 5 cmdBar + 1 helpBar
+		height := m.height - 6
 		outputW, outputH := m.outputViewportDims(m.width, height)
 		m.output.SetWidth(outputW)
 		m.output.SetHeight(outputH)
@@ -1733,7 +1697,7 @@ func (m *mainModel) layoutViewports() {
 	}
 
 	if m.docsEnlargedActive() {
-		height := max(6, m.height-6) // 5 cmdBar + 1 helpBar
+		height := max(6, m.height-6)
 		docsW, docsH := docsContentDims(m.width, height)
 		m.docs.SetWidth(docsW)
 		m.docs.SetHeight(docsH)
@@ -1788,8 +1752,6 @@ func (m mainModel) outputViewportDims(width, height int) (w, h int) {
 	return
 }
 
-// clampFocusPane resets focus to focusCommands if the current pane has no items.
-// Called after navigating between commands/categories.
 func (m *mainModel) clampFocusPane() {
 	if m.focusPane == focusFlags && !m.hasNavigableFlags() {
 		m.focusPane = focusCommands
@@ -1799,13 +1761,12 @@ func (m *mainModel) clampFocusPane() {
 	}
 }
 
-// flagsConflict reports whether flags a and b cannot be selected together.
-// Checks both directions so only one side needs to declare the conflict.
+// flagsConflict reports whether a and b cannot be selected together, checking
+// both directions so a one-sided declaration still works.
 func flagsConflict(a, b Flag) bool {
 	return slices.Contains(a.ConflictingFlags, b.Value) || slices.Contains(b.ConflictingFlags, a.Value)
 }
 
-// isConflicted reports whether any currently-selected flag in flags conflicts with f.
 func isConflicted(f Flag, flags []Flag) bool {
 	for _, other := range flags {
 		if other.Selected && flagsConflict(f, other) {
@@ -1833,8 +1794,7 @@ func (m mainModel) hasEmptyRequiredFlagInput() bool {
 	return false
 }
 
-// selectedGlobalCount returns how many global flags are currently selected —
-// the number of display-only rows prefixed to the FLAGS pane.
+// selectedGlobalCount returns how many global flags are currently selected.
 func (m mainModel) selectedGlobalCount() int {
 	n := 0
 	for _, f := range m.globalFlags {
@@ -1846,11 +1806,11 @@ func (m mainModel) selectedGlobalCount() int {
 }
 
 // stickyGlobalCount returns how many rows the pinned global-flag header
-// actually occupies in the FLAGS pane: the selected count, capped so at least
-// one command-flag row always survives (the last pinned row then becomes a
-// "◆ +N more" summary — see renderPane). ch mirrors renderPane's own
-// contentHeight (m.paneH - 4, both fed by composerBudget/2). Single source of
-// truth shared by the view and the scroll math.
+// occupies in the FLAGS pane: the selected count, capped so at least one
+// command-flag row always survives (the last pinned row becomes a "◆ +N more"
+// summary — see renderPane). flagScroll and flagIdx index command flags only,
+// so every scroll window is shrunk by this count. Single source of truth for
+// the view and the scroll math.
 func (m mainModel) stickyGlobalCount() int {
 	ch := max(1, m.paneH-4)
 	return min(m.selectedGlobalCount(), max(0, ch-1))
@@ -1896,8 +1856,6 @@ func (m mainModel) hasIncompleteInputs() bool {
 	return m.hasEmptyRequiredFlagInput() || m.hasEmptyRequiredGlobalInput() || m.hasEmptyRequiredArg() || m.requiredFlagGroupUnsatisfied()
 }
 
-// selectedFlagValue returns the trimmed input value of the flag with the given
-// Value string, or "" if the flag is not selected (or has no input).
 func (m mainModel) selectedFlagValue(value string) string {
 	for _, f := range m.currentFlags() {
 		if f.Value == value && f.Selected {
@@ -1907,8 +1865,6 @@ func (m mainModel) selectedFlagValue(value string) string {
 	return ""
 }
 
-// isFlagSelected reports whether the flag with the given Value string is
-// currently selected on the composed command.
 func (m mainModel) isFlagSelected(value string) bool {
 	for _, f := range m.currentFlags() {
 		if f.Value == value && f.Selected {
@@ -1992,7 +1948,6 @@ func commandEchoLines(cmdStr string) []string {
 	return []string{cmdLine, ""}
 }
 
-// stripANSI removes ANSI CSI escape sequences from s, returning plain text.
 func stripANSI(s string) string {
 	var out strings.Builder
 	runes := []rune(s)
@@ -2034,12 +1989,10 @@ func initMandatoryFlagInputs(flags []Flag, inputs map[string]textinput.Model) {
 	}
 }
 
-// maxInputsHeight scans every command/subcommand once to find the most args +
-// mandatory-input flags any single one has pre-selected at startup, so the
-// composer layout can reserve a floor height that absorbs pure-navigation
-// jitter without resizing. Deliberately toggling extra optional inputs with
-// space can still grow the inputs box past this floor — same as before this
-// function existed.
+// maxInputsHeight finds the most pre-selected inputs (args + mandatory-input
+// flags) any single command/subcommand has at startup, so the composer layout
+// reserves a floor height that absorbs pure-navigation jitter without
+// resizing. Toggling extra optional inputs with space can still grow past it.
 func maxInputsHeight(cats []Category) int {
 	maxN := 0
 	consider := func(args []Arg, flags []Flag) {
@@ -2128,14 +2081,12 @@ func (m mainModel) getRequiredArgs() []Arg {
 	return req
 }
 
-// getActiveCombined returns positional args and selected flag inputs ordered by two keys:
-// required items before optional items, and within each tier, flags before args — so a
-// mandatory flag always precedes an optional arg, and a selected optional flag always
-// precedes an optional arg too (args are always shown, so they read as the trailing,
-// lowest-priority fields). It lazy-initializes arg textinputs as needed (safe from a value
-// receiver because maps are reference types). Optional args are included so the user can
-// supply a value, but hasIncompleteInputs() only validates required ones — leaving an
-// optional arg blank is fine and lets jj apply its own default.
+// getActiveCombined returns positional args and selected flag inputs, ordered
+// required-before-optional and, within each tier, flags-before-args, so a
+// mandatory flag always precedes an optional arg and args read as the trailing,
+// lowest-priority fields. Optional args are included so the user can supply a
+// value, but only required ones are validated. Arg inputs are lazy-initialized
+// here (safe from a value receiver: maps are reference types).
 func (m mainModel) getActiveCombined() []InputItem {
 	var requiredFlags, requiredArgs, optionalFlags, optionalArgs []InputItem
 
@@ -2177,9 +2128,8 @@ func (m mainModel) getActiveCombined() []InputItem {
 	return items
 }
 
-// focusInput moves focus into the inputs box at row idx, blurring whichever
-// field was focused before. idx is clamped, so callers can hand it a raw row
-// number. Returns nil (and changes nothing) when there is nothing to fill in.
+// focusInput moves focus to inputs-box row idx (clamped). Blurs the previously
+// focused field; nil when there is nothing to fill in.
 func (m *mainModel) focusInput(idx int) tea.Cmd {
 	combined := m.getActiveCombined()
 	if len(combined) == 0 {
@@ -2317,7 +2267,6 @@ func (m mainModel) handleDocsKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// refreshDocs rebuilds the docs viewport content from the currently focused item.
 func (m *mainModel) refreshDocs() {
 	m.setDocsContent(m.docsContent())
 }
@@ -2336,9 +2285,9 @@ func (m *mainModel) refreshGlobalDocs() {
 }
 
 // setDocsContent wraps and applies pre-computed docs text at the viewport's
-// current width. Split out from refreshDocs so callers that must resize the
-// viewport (e.g. entering enlarge) before the focus pane changes can capture
-// docsContent() against the old focus, then apply it once the new width is set.
+// current width. Split from refreshDocs so callers that must resize the
+// viewport before a focus change (e.g. entering enlarge) can capture
+// docsContent() against the old focus and apply it at the new width.
 func (m *mainModel) setDocsContent(content string) {
 	m.docs.SetYOffset(0)
 	width := m.docs.Width()
@@ -2348,7 +2297,6 @@ func (m *mainModel) setDocsContent(content string) {
 	m.docs.SetContent(wordWrap(content, width))
 }
 
-// docsContent returns the full documentation text for the focused item.
 func (m mainModel) docsContent() string {
 	cmds := m.currentCommands()
 	if len(cmds) == 0 || m.cmdIdx >= len(cmds) {
@@ -2376,8 +2324,8 @@ func (m mainModel) docsContent() string {
 	return buildDocsBlock(cmd.Name, cmd.Name, cmd.Alias, cmd.Description, cmd.Args, cmd.Flags, cmd.RequiredUsage, cmd.SubCmds)
 }
 
-// flagLongForm returns the canonical long spelling ("--insert-after"). A
-// ShortOnly flag has no long spelling, so its Value is the only form.
+// flagLongForm returns the canonical long spelling; a ShortOnly flag has only
+// its Value.
 func flagLongForm(f Flag) string {
 	if f.ShortOnly {
 		return f.Value
@@ -2388,17 +2336,14 @@ func flagLongForm(f Flag) string {
 	return "--" + f.Name
 }
 
-// flagBarForm returns the spelling shown in the command bar and copied to the
-// clipboard: the primary execution spelling Value, deterministically. Per the
-// catalog's alternate-spelling model, every alternate form (Alias, Alternates)
-// is documentation-only metadata — it appears in flagDocsLabel, never in the
+// flagBarForm and flagExecForm both return f.Value — the single execution
+// spelling, deterministically. Alternate spellings (Alias, Alternates) are
+// documentation-only metadata; they appear in flagDocsLabel, never in the
 // built command or the bar.
 func flagBarForm(f Flag) string {
 	return f.Value
 }
 
-// flagExecForm returns the spelling used in the executed command: the primary
-// execution spelling Value, deterministically — never an alternate form.
 func flagExecForm(f Flag) string {
 	return f.Value
 }

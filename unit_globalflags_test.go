@@ -24,8 +24,7 @@ func selectGlobalFlag(t *testing.T, m *mainModel, value, input string) {
 	t.Fatalf("global flag %q not found", value)
 }
 
-// A selected global flag must be spliced in right after "jj" and before the
-// subcommand — real jj rejects global options placed after the subcommand.
+// real jj rejects global options placed after the subcommand.
 func TestBuildCommandStringsGlobalFlagPrecedesSubcommand(t *testing.T) {
 	m := newModel()
 	focusCommand(t, &m, "log", "")
@@ -43,10 +42,7 @@ func TestBuildCommandStringsGlobalFlagPrecedesSubcommand(t *testing.T) {
 	}
 }
 
-// A selected global flag's token appears even with no value entered — same
-// as a command-scoped RequiresInput flag, buildCommandStrings only omits the
-// value text itself; hasIncompleteInputs (via hasEmptyRequiredGlobalInput)
-// is what blocks finalizing to the command bar in this state.
+// hasIncompleteInputs (via hasEmptyRequiredGlobalInput) blocks finalizing to the command bar.
 func TestBuildCommandStringsGlobalFlagWithoutValueOmitsOnlyValue(t *testing.T) {
 	m := newModel()
 	focusCommand(t, &m, "log", "")
@@ -59,8 +55,6 @@ func TestBuildCommandStringsGlobalFlagWithoutValueOmitsOnlyValue(t *testing.T) {
 	}
 }
 
-// stickyGlobalCount is the number of pinned global rows the FLAGS pane shows:
-// the selected count, capped so at least one command-flag row always remains.
 func TestStickyGlobalCount(t *testing.T) {
 	m := newModel()
 
@@ -85,9 +79,8 @@ func TestStickyGlobalCount(t *testing.T) {
 	}
 }
 
-// Global flags reset on the same triggers as command flags — navigating away
-// from the current command and finishing an execution both call
-// resetCurrentFlags, which must clear selections and blank input values.
+// resetCurrentFlags must clear selections and blank input values when navigating away or finishing execution.
+
 func TestResetCurrentFlagsClearsGlobalFlags(t *testing.T) {
 	m := newModel()
 	focusCommand(t, &m, "log", "")

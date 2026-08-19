@@ -25,11 +25,9 @@ import (
 // description" summary after squash's $EDITOR closes). Unlike
 // executeCommand, no --color=always is injected: the subprocess owns a
 // real TTY and detects colour support itself.
-// executeInteractive hands cmdStr to the terminal on a pty. plainHandoff marks
-// a plain, line-based command (jj git push after a credential prompt) rather
-// than an alt-screen editor/merge tool: for those we clear the screen before
-// the prompt and, since there's no alt-screen exit marker to scan for, show the
-// whole captured transcript (jj's push result) instead of the canned message.
+// plainHandoff marks a plain, line-based command (jj git push after a
+// credential prompt): clear the screen first and, with no alt-screen exit
+// marker to scan for, show the whole captured transcript.
 func executeInteractive(cmdStr string, plainHandoff bool) tea.Cmd {
 	c := newPtyExecCommand(cmdStr)
 	c.plainHandoff = plainHandoff
@@ -70,8 +68,8 @@ type ptyExecCommand struct {
 	stdout io.Writer
 	stderr io.Writer
 
-	plainHandoff bool         // plain line-based command (vs alt-screen editor): clear before + full-transcript capture after
-	captured     bytes.Buffer // pty-master → stdout tee, capped at maxCapturedOutput
+	plainHandoff bool // plain line-based command (vs alt-screen editor): clear before + full-transcript capture after
+	captured     bytes.Buffer
 }
 
 func newPtyExecCommand(cmdStr string) *ptyExecCommand {
@@ -83,9 +81,7 @@ func (c *ptyExecCommand) SetStdout(w io.Writer) { c.stdout = w }
 func (c *ptyExecCommand) SetStderr(w io.Writer) { c.stderr = w }
 
 // Run starts the subprocess attached to a pty, forwards bytes and resize
-// events for its lifetime, and returns its exit error (if any). After Run
-// returns, c.captured holds up to the last maxCapturedOutput bytes the
-// subprocess wrote, for capturedTrailingOutput to scan.
+// events for its lifetime, and returns its exit error (if any).
 func (c *ptyExecCommand) Run() error {
 	cmd := exec.Command("sh", "-c", c.cmdStr)
 	ptmx, err := pty.Start(cmd)
@@ -161,7 +157,7 @@ func (c *ptyExecCommand) Run() error {
 	err = cmd.Wait()
 	_ = ptmx.Close()
 	if cr != nil {
-		cr.Cancel() // unblocks the forwarding goroutine's pending Read immediately
+		cr.Cancel()
 	}
 	wg.Wait()
 	if cr != nil {
@@ -171,26 +167,18 @@ func (c *ptyExecCommand) Run() error {
 	return err
 }
 
-// capturedTrailingOutput returns the plain-text tail of c.captured that was
-// written after the subprocess's last "exit alternate screen" escape
-// sequence, or ("", false) if no such marker is found (e.g. a non-alt-screen
-// tool, or a merge tool that leaves the screen in an unrecognized state).
 func (c *ptyExecCommand) capturedTrailingOutput() (string, bool) {
 	return capturedTrailingOutput(c.captured.Bytes())
 }
 
-// fullCapturedOutput returns the entire captured transcript, cleaned. Used for
-// plain line-based handoffs (jj git push after a credential prompt) that have
-// no alt-screen marker: the whole transcript IS the result we want to show.
+// fullCapturedOutput returns the entire captured transcript, cleaned.
 func (c *ptyExecCommand) fullCapturedOutput() string {
 	return cleanCapturedText(c.captured.Bytes())
 }
 
-// capturedTrailingOutput scans raw (possibly ANSI-laden) pty output captured
-// from an interactive subprocess and returns the plain-text tail written
-// after the last alt-screen-exit marker, ANSI-stripped and trimmed. Returns
-// ("", false) if no marker is present, signaling callers should fall back
-// to a canned success message rather than risk showing garbled bytes.
+// capturedTrailingOutput returns the tail of captured pty output after the
+// last alt-screen-exit marker, ANSI-stripped and trimmed, or ("", false) if
+// no marker is present (callers then show a canned message).
 func capturedTrailingOutput(raw []byte) (string, bool) {
 	idx := bytes.LastIndex(raw, altScreenExitSeq)
 	if idx < 0 {
@@ -213,7 +201,6 @@ func detachFromTTY(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 }
 
-// boundedWriter appends to buf, keeping only the last max bytes.
 type boundedWriter struct {
 	buf *bytes.Buffer
 	max int

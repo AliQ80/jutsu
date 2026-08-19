@@ -18,8 +18,7 @@ func withJutsuVersion(t *testing.T, v string) {
 	t.Cleanup(func() { jutsuVersion = saved })
 }
 
-// Pressing "?" from a composer pane opens the about modal; esc closes it.
-// State must round-trip: open, then close, then no-op on a second close.
+// second esc is a no-op after modal closed.
 func TestAboutModalOpensAndClosesWithEsc(t *testing.T) {
 	m := newModel()
 	m.width, m.height = 120, 40
@@ -47,8 +46,7 @@ func TestAboutModalOpensAndClosesWithEsc(t *testing.T) {
 	}
 }
 
-// Pressing "?" while focused on the inputs pane must NOT open the modal —
-// "?" is a literal character there and gets handed to the text input.
+// '?' is a literal character in inputs pane, so modal must not open.
 func TestAboutModalDoesNotOpenInInputsPane(t *testing.T) {
 	m := newModel()
 	m.width, m.height = 120, 40
@@ -62,8 +60,7 @@ func TestAboutModalDoesNotOpenInInputsPane(t *testing.T) {
 	}
 }
 
-// "?" must respect the modal mutex: if the global-options modal is already
-// open, the about modal must NOT open and the existing modal stays in charge.
+// respects modal mutex: about modal stays closed when global-options modal open.
 func TestAboutModalDoesNotOpenWhileGlobalOptionsModalOpen(t *testing.T) {
 	m := newModel()
 	m.width, m.height = 120, 40
@@ -82,9 +79,7 @@ func TestAboutModalDoesNotOpenWhileGlobalOptionsModalOpen(t *testing.T) {
 	}
 }
 
-// "q" inside the about modal must quit the app, NOT close the modal — q's
-// app-wide semantics are quit, never close. The returned cmd must be the quit
-// signal Bubble Tea recognizes.
+// q's app-wide semantics are quit, not close; cmd must be quit signal.
 func TestQInsideAboutModalQuits(t *testing.T) {
 	m := newModel()
 	m.width, m.height = 120, 40
@@ -100,11 +95,7 @@ func TestQInsideAboutModalQuits(t *testing.T) {
 	// nil directly because the underlying message type is unexported.
 }
 
-// renderAboutModal must surface both the version line and the docs link.
-// This guards against the static content regressing (e.g. someone renaming
-// jutsuVersion and forgetting the about popup). The modal renders the version
-// verbatim (no "v" prefix) — goreleaser stamps the tag with its "v", so a
-// release build reads "jutsu v1.2.3" while `go run .` reads "jutsu dev".
+// guards against static content regression (e.g., renaming jutsuVersion).
 func TestRenderAboutModalContainsVersionAndLink(t *testing.T) {
 	m := newModel()
 	got := m.renderAboutModal()
@@ -129,9 +120,7 @@ func TestRenderAboutModalContainsVersionAndLink(t *testing.T) {
 	}
 }
 
-// The title line must be sized against the wider docs URL so the modal's
-// content lines stay inside the box: the URL (31 chars) sets the content
-// width, the title is centered within it, and no line wraps past it.
+// ensures title width matches docs URL to avoid line wrap.
 func TestRenderAboutModalTitleSizedToDocsURL(t *testing.T) {
 	m := newModel()
 	got := stripANSI(m.renderAboutModal())
@@ -170,11 +159,7 @@ func TestRenderAboutModalTitleSizedToDocsURL(t *testing.T) {
 	}
 }
 
-// displayVersion returns the latestTag override when jutsuVersion is still
-// the "dev" default and the runtime fetch succeeded; otherwise it returns
-// the ldflag-stamped jutsuVersion (a release stamp always wins over the
-// runtime fallback so the user never sees a tag less specific than what
-// goreleaser baked in).
+// release stamp wins over runtime tag, ensuring user sees most specific version.
 func TestRuntimeFallbackOverridesDev(t *testing.T) {
 	t.Run("dev + tag resolves to the tag", func(t *testing.T) {
 		withJutsuVersion(t, "dev")
@@ -213,9 +198,7 @@ func TestRuntimeFallbackOverridesDev(t *testing.T) {
 	})
 }
 
-// When the runtime fallback resolves a tag, the rendered about modal shows
-// that tag instead of "dev" — proves the substitution actually reaches the
-// user-visible output, not just the helper.
+// proves runtime fallback tag appears in modal output.
 func TestRenderAboutModalUsesRuntimeFallback(t *testing.T) {
 	withJutsuVersion(t, "dev")
 	m := newModel()

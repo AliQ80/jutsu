@@ -9,10 +9,9 @@ import (
 )
 
 // executeInteractive on Windows falls back to plain TTY inheritance:
-// github.com/creack/pty has no real Windows pty support, so the
-// tee/alt-screen-capture behavior in pty_exec.go isn't available here.
-// Output still goes straight to the terminal, same as before this feature
-// existed on other platforms.
+// creack/pty has no real Windows pty support, so the tee/alt-screen
+// capture in pty_exec.go is unavailable here; plainHandoff clears the
+// screen via "cls && " instead.
 func executeInteractive(cmdStr string, plainHandoff bool) tea.Cmd {
 	shellCmd := cmdStr
 	if plainHandoff {
@@ -24,6 +23,5 @@ func executeInteractive(cmdStr string, plainHandoff bool) tea.Cmd {
 	})
 }
 
-// detachFromTTY is a no-op on Windows: there is no controlling-tty concept to
-// detach from here, and CreateProcess doesn't line up with the setsid model.
+// detachFromTTY is a no-op: Windows has no controlling-tty concept, and CreateProcess doesn't map to setsid.
 func detachFromTTY(cmd *exec.Cmd) {}
