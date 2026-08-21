@@ -21,7 +21,6 @@ func TestOverlaySplicesWithoutDisturbingSurroundingContent(t *testing.T) {
 	}
 }
 
-
 func TestOverlayLeavesUncoveredRowsAlone(t *testing.T) {
 	bg := "111\n222\n333"
 	fg := "Z"

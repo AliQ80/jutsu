@@ -61,6 +61,13 @@ func (m mainModel) View() tea.View {
 		v.MouseMode = tea.MouseModeCellMotion
 		return v
 	}
+	if m.sortKeyPickerOpen {
+		content := m.renderOnBackdrop(m.renderSortKeyPickerModal())
+		v := tea.NewView(content)
+		v.AltScreen = true
+		v.MouseMode = tea.MouseModeCellMotion
+		return v
+	}
 
 	content := m.renderContentFrame()
 	v := tea.NewView(content)
@@ -683,50 +690,33 @@ func (m mainModel) renderHelpBar(width int) string {
 	type entry struct{ key, desc string }
 
 	var entries, contextual []entry
+	// Base entries depend on focus pane.
 	switch m.focusPane {
 	case focusOutput:
-		entries = []entry{
-			{"O", "enlarge"},
-			{"c", "copy"},
-			{"tab", "finalize"},
-			{"esc", "back"},
-			{"g", "global"},
-			{"?", "about"},
-			{"q", "quit"},
-		}
+		entries = []entry{{"O", "enlarge"}, {"c", "copy"}, {"tab", "finalize"}, {"esc", "back"}, {"g", "global"}, {"?", "about"}, {"q", "quit"}}
 	case focusDocs:
-		entries = []entry{
-			{"D", "enlarge"},
-			{"c", "copy"},
-			{"tab", "finalize"},
-			{"esc", "back"},
-			{"g", "global"},
-			{"?", "about"},
-			{"q", "quit"},
-		}
+		entries = []entry{{"D", "enlarge"}, {"c", "copy"}, {"tab", "finalize"}, {"esc", "back"}, {"g", "global"}, {"?", "about"}, {"q", "quit"}}
 	case focusCmdBar:
-		entries = []entry{
-			{"enter", "execute"},
-			{"c", "copy"},
-			{"esc", "back"},
-			{"g", "global"},
-			{"?", "about"},
-			{"q", "quit"},
-		}
+		entries = []entry{{"enter", "execute"}, {"c", "copy"}, {"esc", "back"}, {"g", "global"}, {"?", "about"}, {"q", "quit"}}
 	case focusInputs:
-		entries = []entry{
-			{"enter", "next"},
-			{"tab", "finalize"},
-			{"esc", "back"},
-		}
+		entries = []entry{{"enter", "next"}, {"tab", "finalize"}, {"esc", "back"}}
 	default: // composer panes 0-3
-		entries = []entry{
-			{"d/D", "docs"},
-			{"o/O", "output"},
-			{"tab", "finalize"},
-			{"g", "global"},
-			{"?", "about"},
-			{"q", "quit"},
+		entries = []entry{{"d/D", "docs"}, {"o/O", "output"}, {"tab", "finalize"}, {"g", "global"}, {"?", "about"}, {"q", "quit"}}
+	}
+
+	// Append picker hint when a SORT_KEY input is focused.
+	if m.focusPane == focusInputs {
+		combined := m.getActiveCombined()
+		if len(combined) > 0 && m.focusedInputIdx < len(combined) {
+			cur := combined[m.focusedInputIdx]
+			if !cur.IsArg {
+				for _, f := range m.currentFlags() {
+					if f.Name == cur.Name && f.InputType == "SORT_KEY" {
+						entries = append(entries, entry{";", "picker"})
+						break
+					}
+				}
+			}
 		}
 	}
 
@@ -736,8 +726,7 @@ func (m mainModel) renderHelpBar(width int) string {
 	// from. getActiveCombined covers positional args as well as command-flag
 	// and global-flag inputs, so a command whose only input is an arg still
 	// gets the hint.
-	if m.focusPane != focusInputs && !m.outputEnlarged && !m.docsEnlarged &&
-		len(m.getActiveCombined()) > 0 {
+	if m.focusPane != focusInputs && !m.outputEnlarged && !m.docsEnlarged && len(m.getActiveCombined()) > 0 {
 		contextual = append(contextual, entry{"i", "inputs"})
 	}
 	if m.lastCmd != nil && m.focusPane <= focusFlags {
@@ -1070,4 +1059,55 @@ func (m mainModel) renderGlobalFlagsModal() string {
 		footer,
 	)
 	return modalFrameStyle.Render(content)
+}
+
+// renderSortKeyPickerModal renders the picker modal for SORT_KEY inputs.
+func (m mainModel) renderSortKeyPickerModal() string {
+	maxRows := max(1, m.height-10)
+	start := 0
+	if m.pickerFocusedIdx >= maxRows {
+		start = m.pickerFocusedIdx - maxRows + 1
+	}
+	end := min(len(m.pickerAllEntries), start+maxRows)
+	var b strings.Builder
+	for i, e := range m.pickerAllEntries[start:end] {
+		row := start + i
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		// Determine if selected and compute rank/arrow.
+		dir := m.pickerSelection[e.Canonical]
+		var line string
+		if dir != DirUnselected {
+			// Find rank in selection order.
+			rank := 0
+			for idx, canon := range m.pickerOrder {
+				if canon == e.Canonical {
+					rank = idx + 1
+					break
+				}
+			}
+			arrow := ""
+			if dir == DirAscending {
+				arrow = "↑"
+			} else if dir == DirDescending {
+				arrow = "↓"
+			}
+			line = fmt.Sprintf("[%d%s] %s", rank, arrow, e.Label)
+		} else {
+			line = e.Label
+		}
+		if row == m.pickerFocusedIdx {
+			b.WriteString(selectedItemStyle.Render(line))
+		} else {
+			b.WriteString(normalItemStyle.Render(line))
+		}
+	}
+	// Footer hints for picker actions.
+	hint := func(key, desc string) string {
+		return helpKeyStyle.Render(key) + " " + helpDescStyle.Render(desc)
+	}
+	footer := hint("space", "toggle") + "  " + hint("enter", "apply") + "  " + hint("esc", "cancel")
+	content := lipgloss.JoinVertical(lipgloss.Left, b.String(), "", footer)
+	return modalBoxStyle.Render(content)
 }

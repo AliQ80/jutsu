@@ -19,6 +19,15 @@ type clearValidationFlashMsg struct{}
 type clearCopyFlashMsg struct{}
 
 type mainModel struct {
+	// Picker state for SORT_KEY inputs
+	sortKeyPickerOpen bool
+	pickerProvider    *ChoiceProvider
+	pickerAllEntries  []*ChoiceEntry
+	pickerSelection   map[string]Direction
+	pickerOrder       []string
+	pickerFocusedIdx  int
+	pickerInputName   string
+
 	categories    []Category
 	focusPane     int
 	lastFocusPane int
@@ -436,6 +445,10 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.globalFlagsModalOpen {
 			return m.handleGlobalFlagsModalMouse(msg)
 		}
+		if m.sortKeyPickerOpen {
+			// While picker modal is open, ignore wheel events to keep backdrop stable.
+			return m, nil
+		}
 		if m.hostKeyModalOpen || m.authModalOpen {
 			return m, nil
 		}
@@ -484,6 +497,9 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseClickMsg:
 		if m.globalFlagsModalOpen {
 			return m.handleGlobalFlagsModalClick(msg)
+		}
+		if m.sortKeyPickerOpen {
+			return m, nil
 		}
 		if m.hostKeyModalOpen || m.authModalOpen {
 			return m, nil
@@ -590,6 +606,10 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.aboutModalOpen {
 			return m.handleAboutModalKeys(msg)
+		}
+		if m.sortKeyPickerOpen {
+			// Route picker keys directly, isolating modal handling before generic shortcuts.
+			return m.handleInputKeys(msg)
 		}
 		switch msg.String() {
 		case "ctrl+c":
@@ -2169,9 +2189,180 @@ func (m mainModel) handleInputKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.focusedInputIdx >= len(combined) {
 		m.focusedInputIdx = len(combined) - 1
 	}
-
 	cur := combined[m.focusedInputIdx]
 
+	// Picker handling
+	if m.sortKeyPickerOpen {
+		switch msg.String() {
+		case "up":
+			if m.pickerFocusedIdx > 0 {
+				m.pickerFocusedIdx--
+			}
+			return m, nil
+		case "down":
+			if m.pickerFocusedIdx < len(m.pickerAllEntries)-1 {
+				m.pickerFocusedIdx++
+			}
+			return m, nil
+		case "space":
+			if len(m.pickerAllEntries) == 0 {
+				return m, nil
+			}
+			entry := m.pickerAllEntries[m.pickerFocusedIdx]
+			curDir := m.pickerSelection[entry.Canonical]
+			var newDir Direction
+			switch curDir {
+			case DirUnselected:
+				newDir = DirAscending
+			case DirAscending:
+				newDir = DirDescending
+			case DirDescending:
+				newDir = DirUnselected
+			}
+			if newDir == DirUnselected {
+				// Deselect: remove from map and order slice
+				delete(m.pickerSelection, entry.Canonical)
+				// remove from pickerOrder
+				for i, c := range m.pickerOrder {
+					if c == entry.Canonical {
+						m.pickerOrder = append(m.pickerOrder[:i], m.pickerOrder[i+1:]...)
+						break
+					}
+				}
+			} else {
+				// Select or change direction
+				m.pickerSelection[entry.Canonical] = newDir
+				// If not already in order, append
+				found := false
+				for _, c := range m.pickerOrder {
+					if c == entry.Canonical {
+						found = true
+						break
+					}
+				}
+				if !found {
+					m.pickerOrder = append(m.pickerOrder, entry.Canonical)
+				}
+			}
+			return m, nil
+		case "enter":
+			// confirm selection
+			var sels []ChoiceSelection
+			for _, canon := range m.pickerOrder {
+				if dir, ok := m.pickerSelection[canon]; ok && dir != DirUnselected {
+					if entry, ok2 := m.pickerProvider.Entries[canon]; ok2 {
+						sels = append(sels, ChoiceSelection{Entry: entry, Direction: dir})
+					}
+				}
+			}
+			formatted := ""
+			if m.pickerProvider != nil {
+				formatted = m.pickerProvider.Format(sels)
+			}
+			if ti, ok := m.inputs[m.pickerInputName]; ok {
+				ti.SetValue(formatted)
+				m.inputs[m.pickerInputName] = ti
+			} else {
+				ti := textinput.New()
+				ti.SetValue(formatted)
+				m.inputs[m.pickerInputName] = ti
+			}
+			// Close picker and refocus the underlying sort input
+			m.sortKeyPickerOpen = false
+			m.backdrop = nil
+			// Find the input index for the picker input name
+			combined := m.getActiveCombined()
+			idx := -1
+			for i, item := range combined {
+				if item.Name == m.pickerInputName && !item.IsArg {
+					idx = i
+					break
+				}
+			}
+			if idx >= 0 {
+				m.focusPane = focusInputs
+				m.focusedInputIdx = idx
+				item := combined[idx]
+				ti := m.getInput(item)
+				cmd := ti.Focus()
+				m.setInput(item, ti)
+				m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+				return m, cmd
+			}
+			m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+			return m, nil
+		case "esc":
+			// cancel picker
+			// Cancel picker and refocus the underlying sort input
+			m.sortKeyPickerOpen = false
+			m.backdrop = nil
+			combined := m.getActiveCombined()
+			idx := -1
+			for i, item := range combined {
+				if item.Name == m.pickerInputName && !item.IsArg {
+					idx = i
+					break
+				}
+			}
+			if idx >= 0 {
+				m.focusPane = focusInputs
+				m.focusedInputIdx = idx
+				item := combined[idx]
+				ti := m.getInput(item)
+				cmd := ti.Focus()
+				m.setInput(item, ti)
+				m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+				return m, cmd
+			}
+			m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+			return m, nil
+		}
+		// ignore other keys while picker open
+		return m, nil
+	}
+
+	// Activation of picker
+	if msg.String() == ";" {
+		// open picker if current input is a SORT_KEY flag
+		for _, f := range m.currentFlags() {
+			if f.Name == cur.Name && f.InputType == "SORT_KEY" {
+				provider := GetChoiceProvider("SORT_KEY")
+				if provider == nil {
+					break
+				}
+				m.freezeBackdrop()
+				m.sortKeyPickerOpen = true
+				m.pickerProvider = provider
+				// collect entries sorted by canonical
+				entries := make([]*ChoiceEntry, 0, len(provider.Entries))
+				for _, e := range provider.Entries {
+					entries = append(entries, e)
+				}
+				sort.SliceStable(entries, func(i, j int) bool { return entries[i].Canonical < entries[j].Canonical })
+				m.pickerAllEntries = entries
+				// init selection map from current input value
+				m.pickerSelection = make(map[string]Direction)
+				var parsedSels []ChoiceSelection
+				if ti, ok := m.inputs[f.Name]; ok {
+					raw := ti.Value()
+					parsedSels = provider.Parse(raw)
+					for _, sel := range parsedSels {
+						m.pickerSelection[sel.Entry.Canonical] = sel.Direction
+					}
+				}
+				// Preserve selection order as parsed
+				m.pickerOrder = []string{}
+				for _, sel := range parsedSels {
+					m.pickerOrder = append(m.pickerOrder, sel.Entry.Canonical)
+				}
+				m.pickerFocusedIdx = 0
+				m.pickerInputName = f.Name
+				return m, nil
+			}
+		}
+	}
+
+	// Existing input handling
 	switch msg.String() {
 	case "esc":
 		ti := m.getInput(cur)
@@ -2235,6 +2426,14 @@ func (m mainModel) handleInputKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Block ordinary character input for SORT_KEY inputs; picker handles its own keys.
+	if !cur.IsArg {
+		for _, f := range m.currentFlags() {
+			if f.Name == cur.Name && f.InputType == "SORT_KEY" {
+				return m, nil
+			}
+		}
+	}
 	ti := m.getInput(cur)
 	var cmd tea.Cmd
 	ti, cmd = ti.Update(msg)
