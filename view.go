@@ -107,19 +107,20 @@ func (m mainModel) renderMainFrame() string {
 	leftWidth, rightWidth := m.getLayoutWidths()
 
 	combined := m.getActiveCombined()
-	composerH, inputsTop, outputHeight := m.paneRows()
-	descBarH := inputsTop - composerH
-	actualInputsHeight := outputHeight - inputsTop
+	composerH, docsTop, outputHeight := m.paneRows()
+	actualInputsHeight := docsTop - composerH
+	descBarH := outputHeight - docsTop
 
+	// Composer → inputs → docs; docs is last and takes whatever height is left.
 	composerSection := m.renderLeftPane(composerH)
 	leftColumn := composerSection
-	if descBarH >= 3 {
-		descBar := m.renderDescriptionBar(leftWidth, descBarH)
-		leftColumn = lipgloss.JoinVertical(lipgloss.Left, leftColumn, descBar)
-	}
 	if actualInputsHeight > 0 {
 		inputsPane := m.renderInputPanes(leftWidth, actualInputsHeight, combined)
 		leftColumn = lipgloss.JoinVertical(lipgloss.Left, leftColumn, inputsPane)
+	}
+	if descBarH >= 3 {
+		descBar := m.renderDescriptionBar(leftWidth, descBarH)
+		leftColumn = lipgloss.JoinVertical(lipgloss.Left, leftColumn, descBar)
 	}
 
 	rightPane := m.renderRightPane(rightWidth, outputHeight)

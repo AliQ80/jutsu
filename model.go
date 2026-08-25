@@ -477,7 +477,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		leftWidth, _ := m.getLayoutWidths()
-		composerH, inputsTop, bottom := m.paneRows()
+		_, docsTop, bottom := m.paneRows()
 
 		if msg.X >= leftWidth && msg.Y < bottom {
 			if msg.Button == tea.MouseWheelUp && m.output.YOffset() > 0 {
@@ -485,7 +485,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else if msg.Button == tea.MouseWheelDown {
 				m.output.SetYOffset(m.output.YOffset() + 1)
 			}
-		} else if msg.X < leftWidth && msg.Y >= composerH && msg.Y < inputsTop {
+		} else if msg.X < leftWidth && msg.Y >= docsTop && msg.Y < bottom {
 			if msg.Button == tea.MouseWheelUp && m.docs.YOffset() > 0 {
 				m.docs.SetYOffset(m.docs.YOffset() - 1)
 			} else if msg.Button == tea.MouseWheelDown {
@@ -539,7 +539,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		leftWidth, _ := m.getLayoutWidths()
-		composerH, inputsTop, bottom := m.paneRows()
+		composerH, docsTop, bottom := m.paneRows()
 
 		switch {
 		case msg.X >= leftWidth && msg.Y < bottom:
@@ -547,15 +547,15 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.lastFocusPane = m.focusPane
 			}
 			m.focusPane = focusOutput
-		case msg.X < leftWidth && msg.Y >= composerH && msg.Y < inputsTop:
+		case msg.X < leftWidth && msg.Y >= docsTop && msg.Y < bottom:
 			if m.focusPane <= focusFlags {
 				m.lastFocusPane = m.focusPane
 			}
 			m.focusPane = focusDocs
-		case msg.X < leftWidth && msg.Y >= inputsTop && msg.Y < bottom:
+		case msg.X < leftWidth && msg.Y >= composerH && msg.Y < docsTop:
 			// The box's top border owns the first row, so the Nth row
 			// of the box is input N-1.
-			return m, m.focusInput(msg.Y - inputsTop - 1)
+			return m, m.focusInput(msg.Y - composerH - 1)
 		case msg.Y >= bottom && msg.Y < bottom+5:
 			if m.hasIncompleteInputs() {
 				m.validationFlash = true
@@ -1709,24 +1709,25 @@ func docsContentDims(width, barHeight int) (w, h int) {
 }
 
 // paneRows returns the left column's row boundaries: composer [0, composerH),
-// docs bar [composerH, inputsTop), inputs box [inputsTop, bottom), command
-// bar at bottom. View(), layoutViewports() and mouse hit-testing all read
-// from here so the drawn and clickable layouts can't drift apart (they once
-// did, and clicks on the inputs box landed on the docs pane).
+// inputs box [composerH, docsTop), docs bar [docsTop, bottom), command bar at
+// bottom. View(), layoutViewports() and mouse hit-testing all read from here
+// so the drawn and clickable layouts can't drift apart (they once did, and
+// clicks on the inputs box landed on the docs pane).
 //
 // composerH is a pure function of bottom/maxInputsHt — never of the active
 // inputs — so it never resizes during navigation or flag toggling; the docs
-// bar absorbs the slack instead of leaving a gap.
-func (m mainModel) paneRows() (composerH, inputsTop, bottom int) {
+// bar (last, and the only flexible section) absorbs the slack instead of
+// leaving a gap.
+func (m mainModel) paneRows() (composerH, docsTop, bottom int) {
 	bottom = max(6, m.height-6) // 5 cmdBar + 1 helpBar
-
-	inputsTop = bottom
-	if n := len(m.getActiveCombined()); n > 0 {
-		inputsTop = bottom - (n + 2) // + border
-	}
 
 	composerBudget := max(6, bottom-m.maxInputsHt)
 	composerH = composerBudget / 2
+
+	docsTop = composerH
+	if n := len(m.getActiveCombined()); n > 0 {
+		docsTop = composerH + n + 2 // + border
+	}
 	return
 }
 
@@ -1751,7 +1752,7 @@ func (m *mainModel) layoutViewports() {
 	leftWidth, rightWidth := m.getLayoutWidths()
 
 	combined := m.getActiveCombined()
-	composerH, inputsTop, outputHeight := m.paneRows()
+	composerH, docsTop, outputHeight := m.paneRows()
 
 	outputW, outputH := m.outputViewportDims(rightWidth, outputHeight)
 	m.output.SetWidth(outputW)
@@ -1762,7 +1763,7 @@ func (m *mainModel) layoutViewports() {
 
 	// Docs viewport: fits inside the description bar's content box (title
 	// box + border consume 3 rows, handled by docsContentDims).
-	docsW, docsH := docsContentDims(leftWidth, inputsTop-composerH)
+	docsW, docsH := docsContentDims(leftWidth, outputHeight-docsTop)
 	m.docs.SetWidth(docsW)
 	m.docs.SetHeight(docsH)
 
