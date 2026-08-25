@@ -627,6 +627,13 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case "o":
+			if m.outputEnlargedActive() {
+				// Return from enlarged output to the normal output pane:
+				// clear the enlarged flag but keep focus on output.
+				m.outputEnlarged = false
+				m.layoutViewports()
+				return m, nil
+			}
 			if m.focusPane == focusOutput {
 				return m.exitOutput()
 			}
@@ -651,6 +658,15 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case "d":
+			if m.docsEnlargedActive() {
+				// Return from enlarged docs to the normal docs pane: clear
+				// the enlarged flag, keep focus on docs, and re-wrap docs at
+				// the restored (normal) width.
+				m.docsEnlarged = false
+				m.layoutViewports()
+				m.refreshDocs()
+				return m, nil
+			}
 			if m.focusPane == focusDocs {
 				return m.exitDocs()
 			}
