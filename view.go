@@ -754,7 +754,9 @@ func (m mainModel) renderHelpBar(width int) string {
 		}
 		leftBar += helpDescStyle.Render(" | ") + strings.Join(ctx, " ")
 	}
-	if m.copyFlash {
+	if m.copyErrorFlash {
+		leftBar += " " + copyErrorFlashStyle.Render("✗ copy failed")
+	} else if m.copyFlash {
 		leftBar += " " + copyFlashStyle.Render("✓ copied")
 	}
 

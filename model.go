@@ -75,6 +75,7 @@ type mainModel struct {
 
 	validationFlash bool
 	copyFlash       bool
+	copyErrorFlash  bool // set on a failed clipboard copy; suppresses the green success indicator
 	jjVersion       string
 	latestTag       string // latest jj tag resolved at startup; overrides "dev" in the about modal
 	cwd             string
@@ -434,11 +435,18 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case copyDoneMsg:
-		m.copyFlash = true
+		if msg.err != nil {
+			m.copyFlash = false
+			m.copyErrorFlash = true
+		} else {
+			m.copyFlash = true
+			m.copyErrorFlash = false
+		}
 		return m, copyFlashTimer()
 
 	case clearCopyFlashMsg:
 		m.copyFlash = false
+		m.copyErrorFlash = false
 		return m, nil
 
 	case tea.MouseWheelMsg:
@@ -2478,7 +2486,7 @@ func (m mainModel) handleDocsKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.docs.SetYOffset(m.docs.YOffset() - 1)
 		}
 	case "c":
-		text := stripANSI(m.docsContent())
+		text := m.docsContentPlain()
 		return m, copyToClipboard(text)
 	case "tab":
 		m.focusPane = focusCmdBar
@@ -2521,9 +2529,40 @@ func (m *mainModel) setDocsContent(content string) {
 	m.docs.SetContent(wordWrap(content, width))
 }
 
+// docStyler applies the terminal styling used when rendering docs text. The
+// plain styler (identity functions) yields the same content and ordering
+// without Lip Gloss escapes, used for clipboard copy.
+type docStyler struct {
+	plain  bool
+	header func(...string) string
+	bold   func(...string) string
+	flag   func(...string) string
+}
+
+var renderedStyler = docStyler{false, headerStyle.Render, boldStyle.Render, flagNameStyle.Render}
+var plainStyler = docStyler{true,
+	func(strs ...string) string { return strings.Join(strs, "") },
+	func(strs ...string) string { return strings.Join(strs, "") },
+	func(strs ...string) string { return strings.Join(strs, "") },
+}
+
+// docsContent renders the docs pane text with Lip Gloss styling (for display).
 func (m mainModel) docsContent() string {
+	return m.docsContentStyled(renderedStyler)
+}
+
+// docsContentPlain returns the docs text as readable plain text, without
+// terminal styling or viewport decorations, for clipboard copy.
+func (m mainModel) docsContentPlain() string {
+	return m.docsContentStyled(plainStyler)
+}
+
+func (m mainModel) docsContentStyled(s docStyler) string {
 	cmds := m.currentCommands()
 	if len(cmds) == 0 || m.cmdIdx >= len(cmds) {
+		if s.plain {
+			return "no description"
+		}
 		return dimItemStyle.Render("no description")
 	}
 	cmd := cmds[m.cmdIdx]
@@ -2533,7 +2572,7 @@ func (m mainModel) docsContent() string {
 		flags := m.currentFlags()
 		if m.flagIdx < len(flags) {
 			f := flags[m.flagIdx]
-			header := flagNameStyle.Render(flagDocsLabel(f))
+			header := s.flag(flagDocsLabel(f))
 			if f.Description == "" {
 				return header
 			}
@@ -2542,10 +2581,10 @@ func (m mainModel) docsContent() string {
 	case focusSubcmds:
 		if m.subIdx < len(cmd.SubCmds) {
 			sub := cmd.SubCmds[m.subIdx]
-			return buildDocsBlock(sub.Name, cmd.Name+" "+sub.Name, sub.Alias, sub.Description, sub.Args, sub.Flags, sub.RequiredUsage, nil)
+			return buildDocsBlockStyled(sub.Name, cmd.Name+" "+sub.Name, sub.Alias, sub.Description, sub.Args, sub.Flags, sub.RequiredUsage, nil, s)
 		}
 	}
-	return buildDocsBlock(cmd.Name, cmd.Name, cmd.Alias, cmd.Description, cmd.Args, cmd.Flags, cmd.RequiredUsage, cmd.SubCmds)
+	return buildDocsBlockStyled(cmd.Name, cmd.Name, cmd.Alias, cmd.Description, cmd.Args, cmd.Flags, cmd.RequiredUsage, cmd.SubCmds, s)
 }
 
 // flagLongForm returns the canonical long spelling; a ShortOnly flag has only
@@ -2595,7 +2634,7 @@ func flagDocsLabel(f Flag) string {
 	return label
 }
 
-func buildDocsBlock(name, usagePath, alias, desc string, args []Arg, flags []Flag, requiredUsage string, subCmds []SubCommand) string {
+func buildDocsBlockStyled(name, usagePath, alias, desc string, args []Arg, flags []Flag, requiredUsage string, subCmds []SubCommand, s docStyler) string {
 	var b strings.Builder
 
 	// Build usage synopsis: jj <path> [OPTIONS] <required flags> [ARG[...]]
@@ -2643,10 +2682,10 @@ func buildDocsBlock(name, usagePath, alias, desc string, args []Arg, flags []Fla
 	}
 
 	// Section order matches `jj --help`: Name → Alias → Description → Usage → Subcommands → Arguments → Options
-	b.WriteString(headerStyle.Render(name))
+	b.WriteString(s.header(name))
 	if alias != "" {
 		b.WriteString("\n\n")
-		b.WriteString(headerStyle.Render("Alias"))
+		b.WriteString(s.header("Alias"))
 		b.WriteString("\n  ")
 		b.WriteString(alias)
 	}
@@ -2655,16 +2694,16 @@ func buildDocsBlock(name, usagePath, alias, desc string, args []Arg, flags []Fla
 		b.WriteString(desc)
 	}
 	b.WriteString("\n\n")
-	b.WriteString(headerStyle.Render("Usage"))
+	b.WriteString(s.header("Usage"))
 	b.WriteString("\n  ")
 	b.WriteString(usage.String())
 	if len(subCmds) > 0 {
 		b.WriteString("\n\n")
-		b.WriteString(headerStyle.Render("Subcommands"))
-		for _, s := range subCmds {
-			line := boldStyle.Render(s.Name)
-			if s.Summary != "" {
-				line += " — " + s.Summary
+		b.WriteString(s.header("Subcommands"))
+		for _, sub := range subCmds {
+			line := s.bold(sub.Name)
+			if sub.Summary != "" {
+				line += " — " + sub.Summary
 			}
 			b.WriteString("\n  ")
 			b.WriteString(line)
@@ -2672,14 +2711,14 @@ func buildDocsBlock(name, usagePath, alias, desc string, args []Arg, flags []Fla
 	}
 	if len(args) > 0 {
 		b.WriteString("\n\n")
-		b.WriteString(headerStyle.Render("Arguments"))
+		b.WriteString(s.header("Arguments"))
 		for _, a := range args {
 			argLabel := a.Name
 			if a.Variadic {
 				argLabel += "..."
 			}
 			b.WriteString("\n  ")
-			b.WriteString(boldStyle.Render(argLabel))
+			b.WriteString(s.bold(argLabel))
 			if a.Description != "" {
 				b.WriteString("\n")
 				b.WriteString(indentBlock(a.Description))
@@ -2688,13 +2727,13 @@ func buildDocsBlock(name, usagePath, alias, desc string, args []Arg, flags []Fla
 	}
 	if len(flags) > 0 {
 		b.WriteString("\n\n")
-		b.WriteString(headerStyle.Render("Options"))
+		b.WriteString(s.header("Options"))
 		for i, f := range flags {
 			if i > 0 {
 				b.WriteString("\n")
 			}
 			b.WriteString("\n  ")
-			b.WriteString(flagNameStyle.Render(flagDocsLabel(f)))
+			b.WriteString(s.flag(flagDocsLabel(f)))
 			if f.Description != "" {
 				b.WriteString("\n")
 				b.WriteString(indentBlock(f.Description))

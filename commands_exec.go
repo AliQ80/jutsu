@@ -65,14 +65,30 @@ func fetchLatestTag() tea.Cmd {
 	}
 }
 
-type copyDoneMsg struct{}
+type copyDoneMsg struct {
+	err error
+}
+
+// clipboardCmd builds the wl-copy command for text, explicitly publishing it
+// as `text/plain;charset=utf-8` so the clipboard owns unambiguous plain text
+// rather than relying on wl-copy's default type inference. Exposed for unit
+// tests to assert the invocation without a live desktop clipboard.
+func clipboardCmd(text string) *exec.Cmd {
+	cmd := exec.Command("wl-copy", "-t", "text/plain;charset=utf-8")
+	cmd.Stdin = strings.NewReader(text)
+	return cmd
+}
+
+// clipboardCopy invokes the system clipboard command. It is a package-level
+// variable (not a const) so unit tests can substitute a fake without requiring
+// a live desktop clipboard (e.g. Wayland). The default runs wl-copy.
+var clipboardCopy = func(text string) error {
+	return clipboardCmd(text).Run()
+}
 
 func copyToClipboard(text string) tea.Cmd {
 	return func() tea.Msg {
-		cmd := exec.Command("wl-copy")
-		cmd.Stdin = strings.NewReader(text)
-		_ = cmd.Run()
-		return copyDoneMsg{}
+		return copyDoneMsg{err: clipboardCopy(text)}
 	}
 }
 

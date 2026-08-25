@@ -278,4 +278,13 @@ var (
 			Bold(true).
 			PaddingLeft(1).
 			PaddingRight(1)
+
+	// copyErrorFlashStyle mirrors copyFlashStyle but uses the error color so a
+	// failed clipboard copy is never mistaken for the green success indicator.
+	copyErrorFlashStyle = lipgloss.NewStyle().
+				Foreground(colorCrust).
+				Background(colorRed).
+				Bold(true).
+				PaddingLeft(1).
+				PaddingRight(1)
 )
