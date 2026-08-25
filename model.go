@@ -687,6 +687,18 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, cmd
 				}
 			}
+		case "r":
+			// Recall the last executed command from any navigation pane —
+			// composer, output, docs, command bar. Blocked in the inputs box,
+			// where "r" is a character to type, and a no-op with nothing
+			// recorded. Enlarged views are cleared first: the restore rebuilds
+			// layout for the saved composer pane, which never renders enlarged.
+			if m.focusPane != focusInputs && m.lastCmd != nil {
+				m.outputEnlarged = false
+				m.docsEnlarged = false
+				m.restoreLastCmd()
+				return m, nil
+			}
 		case "?":
 			// Open the about modal (version + docs link). Blocked in the
 			// inputs pane, where "?" is a literal character being typed.
@@ -803,10 +815,6 @@ func (m mainModel) handleComposerKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		m.layoutViewports()
 		m.reclampAllScrolls()
 		m.refreshDocs()
-		return m, nil
-
-	case "r":
-		m.restoreLastCmd()
 		return m, nil
 	}
 

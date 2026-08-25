@@ -225,6 +225,51 @@ func TestHelpBarInputsHintOrder(t *testing.T) {
 	}
 }
 
+// The recall hint is advertised wherever "r" actually recalls: every pane but
+// the inputs box, enlarged output/docs included, and only once a command has
+// been executed.
+func TestHelpBarRecallHintScope(t *testing.T) {
+	for _, pane := range []int{focusCategories, focusFlags, focusOutput, focusDocs, focusCmdBar} {
+		m := newModel()
+		m.focusPane = pane
+		m.lastCmd = &commandSnapshot{}
+
+		if !slices.Contains(helpBarHints(t, m), "r recall") {
+			t.Errorf("pane %d help bar missing the recall hint", pane)
+		}
+	}
+
+	for _, enlarged := range []struct {
+		pane int
+		set  func(*mainModel)
+	}{
+		{focusOutput, func(m *mainModel) { m.outputEnlarged = true }},
+		{focusDocs, func(m *mainModel) { m.docsEnlarged = true }},
+	} {
+		m := newModel()
+		m.focusPane = enlarged.pane
+		m.lastCmd = &commandSnapshot{}
+		enlarged.set(&m)
+
+		if !slices.Contains(helpBarHints(t, m), "r recall") {
+			t.Errorf("enlarged pane %d help bar missing the recall hint", enlarged.pane)
+		}
+	}
+
+	m := newModel()
+	m.focusPane = focusInputs
+	m.lastCmd = &commandSnapshot{}
+	if slices.Contains(helpBarHints(t, m), "r recall") {
+		t.Error("inputs help bar advertises recall, where r is typed text")
+	}
+
+	m = newModel()
+	m.focusPane = focusOutput
+	if slices.Contains(helpBarHints(t, m), "r recall") {
+		t.Error("help bar advertises recall with no command recorded")
+	}
+}
+
 func TestHelpBarContextualHintOrder(t *testing.T) {
 	m := newModel()
 	m.focusPane = focusFlags

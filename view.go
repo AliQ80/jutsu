@@ -729,7 +729,9 @@ func (m mainModel) renderHelpBar(width int) string {
 	if m.focusPane != focusInputs && !m.outputEnlarged && !m.docsEnlarged && len(m.getActiveCombined()) > 0 {
 		contextual = append(contextual, entry{"i", "inputs"})
 	}
-	if m.lastCmd != nil && m.focusPane <= focusFlags {
+	// "r" recalls from every navigation pane, enlarged views included — only
+	// the inputs box, where it's a literal character, is excluded (see Update).
+	if m.lastCmd != nil && m.focusPane != focusInputs {
 		contextual = append(contextual, entry{"r", "recall"})
 	}
 	if m.focusPane == focusFlags {
