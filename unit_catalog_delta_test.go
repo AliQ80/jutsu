@@ -163,22 +163,33 @@ func TestCatalogDeltaBenchTree(t *testing.T) {
 	}
 }
 
-// TestCatalogDeltaDebugTree checks the debug tree: 23 flat entries covering
-// the top-level tools plus the object/watchman subcommands, with the
-// representative flags and args of each shape.
+// TestCatalogDeltaDebugTree checks the debug tree: the flat entries that remain
+// under `debug` after the object and watchman groups were promoted to their own
+// command-pane entries, plus the two promoted groups and their complete child
+// subcommand lists.
 func TestCatalogDeltaDebugTree(t *testing.T) {
 	cats := loadCategories()
+
+	// The promoted groups must appear as first-class command entries.
+	debugObject := findCommand(cats, "Tools", "debug object")
+	if debugObject == nil {
+		t.Fatal("debug object command missing")
+	}
+	debugWatchman := findCommand(cats, "Tools", "debug watchman")
+	if debugWatchman == nil {
+		t.Fatal("debug watchman command missing")
+	}
+
+	// The flat `debug` command keeps its other entries and must no longer
+	// contain the flattened object/watchman subcommands.
 	debug := findCommand(cats, "Tools", "debug")
 	if debug == nil {
 		t.Fatal("debug missing")
 	}
 	want := []string{
 		"copy-detection", "fileset", "index", "index-changed-paths", "init-simple",
-		"local-working-copy",
-		"object commit", "object file", "object operation", "object symlink", "object tree", "object view",
-		"reindex", "revset", "snapshot", "stacked-table", "template", "tree",
-		"watchman status", "watchman query-clock", "watchman query-changed-files", "watchman reset-clock",
-		"working-copy",
+		"local-working-copy", "reindex", "revset", "snapshot", "stacked-table",
+		"template", "tree", "working-copy",
 	}
 	if len(debug.SubCmds) != len(want) {
 		t.Errorf("debug has %d subcommands, want %d", len(debug.SubCmds), len(want))
@@ -188,7 +199,13 @@ func TestCatalogDeltaDebugTree(t *testing.T) {
 			t.Errorf("debug %s subcommand missing", sub)
 		}
 	}
+	for _, flat := range []string{"object view", "watchman status"} {
+		if findSubCmd(debug.SubCmds, flat) != nil {
+			t.Errorf("debug must not retain flattened entry %q", flat)
+		}
+	}
 
+	// Representative flags preserved on the remaining flat debug entries.
 	indexChanged := findSubCmd(debug.SubCmds, "index-changed-paths")
 	if f := findFlag(indexChanged.Flags, "-n"); f == nil || !f.RequiresInput {
 		t.Error("debug index-changed-paths -n (--limit) missing or not RequiresInput")
@@ -204,9 +221,31 @@ func TestCatalogDeltaDebugTree(t *testing.T) {
 	if findFlag(revset.Flags, "--no-resolve") == nil || findFlag(revset.Flags, "--no-optimize") == nil {
 		t.Error("debug revset --no-resolve/--no-optimize missing")
 	}
-	view := findSubCmd(debug.SubCmds, "object view")
-	if f := findFlag(view.Flags, "--op"); f == nil || !f.RequiresInput {
+
+	// Promoted `debug object` group: six operations, view keeps --op input.
+	objectWant := []string{"commit", "file", "operation", "symlink", "tree", "view"}
+	if len(debugObject.SubCmds) != len(objectWant) {
+		t.Errorf("debug object has %d subcommands, want %d", len(debugObject.SubCmds), len(objectWant))
+	}
+	for _, sub := range objectWant {
+		if findSubCmd(debugObject.SubCmds, sub) == nil {
+			t.Errorf("debug object %s subcommand missing", sub)
+		}
+	}
+	objectView := findSubCmd(debugObject.SubCmds, "view")
+	if f := findFlag(objectView.Flags, "--op"); f == nil || !f.RequiresInput {
 		t.Error("debug object view --op missing or not RequiresInput")
+	}
+
+	// Promoted `debug watchman` group: four operations.
+	watchmanWant := []string{"status", "query-clock", "query-changed-files", "reset-clock"}
+	if len(debugWatchman.SubCmds) != len(watchmanWant) {
+		t.Errorf("debug watchman has %d subcommands, want %d", len(debugWatchman.SubCmds), len(watchmanWant))
+	}
+	for _, sub := range watchmanWant {
+		if findSubCmd(debugWatchman.SubCmds, sub) == nil {
+			t.Errorf("debug watchman %s subcommand missing", sub)
+		}
 	}
 }
 
@@ -598,5 +637,37 @@ func TestCatalogDeltaPromotedGitGroups(t *testing.T) {
 	}
 	if got := strings.Count(short, "git colocation"); got != 1 {
 		t.Errorf("git colocation group emitted %d times in %q, want exactly once", got, short)
+	}
+}
+
+// TestCatalogDeltaPromotedDebugGroups builds representative invocations for the
+// promoted debug object / debug watchman command groups and asserts the group
+// names are emitted exactly once in the composed command.
+func TestCatalogDeltaPromotedDebugGroups(t *testing.T) {
+	m := newModel()
+	focusCommand(t, &m, "debug object", "view")
+	selectFlag(t, &m, "--op", "xyz")
+	short, long := m.buildCommandStrings()
+	if want := "jj debug object view --op xyz"; short != want {
+		t.Errorf("debug object view = %q, want %q", short, want)
+	}
+	if short != long {
+		t.Errorf("debug object view short/long mismatch: %q vs %q", short, long)
+	}
+	if got := strings.Count(short, "debug object"); got != 1 {
+		t.Errorf("debug object group emitted %d times in %q, want exactly once", got, short)
+	}
+
+	m = newModel()
+	focusCommand(t, &m, "debug watchman", "status")
+	short, long = m.buildCommandStrings()
+	if want := "jj debug watchman status"; short != want {
+		t.Errorf("debug watchman status = %q, want %q", short, want)
+	}
+	if short != long {
+		t.Errorf("debug watchman status short/long mismatch: %q vs %q", short, long)
+	}
+	if got := strings.Count(short, "debug watchman"); got != 1 {
+		t.Errorf("debug watchman group emitted %d times in %q, want exactly once", got, short)
 	}
 }

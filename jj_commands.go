@@ -1268,65 +1268,6 @@ func loadCategories() []Category {
 							Flags:       []Flag{},
 						},
 						{
-							Summary: "Show information about a commit", Name: "object commit",
-							Description: "Show information about a commit",
-							Args: []Arg{
-								{Name: "ID", Description: "The commit ID to show", Required: true},
-							},
-							Flags: []Flag{},
-						},
-						{
-							Summary: "Show information about a file", Name: "object file",
-							Description: "Show information about a file",
-							Args: []Arg{
-								{Name: "PATH", Description: "The path of the file", Required: true},
-								{Name: "ID", Description: "The file ID to show"},
-							},
-							Flags: []Flag{
-								{Name: "revision", Description: "The revision", Value: "-r", RequiresInput: true, InputType: "REVISION"},
-							},
-						},
-						{
-							Summary: "Show information about an operation", Name: "object operation",
-							Description: "Show information about an operation",
-							Args: []Arg{
-								{Name: "ID", Description: "The operation ID to show", Required: true},
-							},
-							Flags: []Flag{},
-						},
-						{
-							Summary: "Show information about a symlink", Name: "object symlink",
-							Description: "Show information about a symlink",
-							Args: []Arg{
-								{Name: "PATH", Description: "The path of the symlink", Required: true},
-								{Name: "ID", Description: "The symlink ID to show"},
-							},
-							Flags: []Flag{
-								{Name: "revision", Description: "The revision", Value: "-r", RequiresInput: true, InputType: "REVISION"},
-							},
-						},
-						{
-							Summary: "Show information about a tree", Name: "object tree",
-							Description: "Show information about a tree",
-							Args: []Arg{
-								{Name: "DIR", Description: "The directory of the tree", Required: true},
-								{Name: "ID", Description: "The tree ID to show"},
-							},
-							Flags: []Flag{
-								{Name: "revision", Description: "The revision", Value: "-r", RequiresInput: true, InputType: "REVISION"},
-							},
-						},
-						{
-							Summary: "Show information about a view", Name: "object view",
-							Description: "Show information about a view",
-							Args: []Arg{
-								{Name: "ID", Description: "The view ID to show"},
-							},
-							Flags: []Flag{
-								{Name: "op", Description: "The operation", Value: "--op", RequiresInput: true, InputType: "OP"},
-							},
-						},
-						{
 							Summary: "Rebuild commit index", Name: "reindex",
 							Description: "Rebuild commit index",
 							Flags:       []Flag{},
@@ -1378,28 +1319,99 @@ func loadCategories() []Category {
 							},
 						},
 						{
-							Summary: "Check whether `watchman` is enabled and whether it's correctly installed", Name: "watchman status",
+							Summary: "Show information about the working copy state", Name: "working-copy",
+							Description: "Show information about the working copy state",
+							Flags:       []Flag{},
+						},
+					},
+				},
+				{
+					Name:        "debug object",
+					Description: "Show information about an operation and its view",
+					SubCmds: []SubCommand{
+						{
+							Summary: "Show information about a commit", Name: "commit",
+							Description: "Show information about a commit",
+							Args: []Arg{
+								{Name: "ID", Description: "The commit ID to show", Required: true},
+							},
+							Flags: []Flag{},
+						},
+						{
+							Summary: "Show information about a file", Name: "file",
+							Description: "Show information about a file",
+							Args: []Arg{
+								{Name: "PATH", Description: "The path of the file", Required: true},
+								{Name: "ID", Description: "The file ID to show"},
+							},
+							Flags: []Flag{
+								{Name: "revision", Description: "The revision", Value: "-r", RequiresInput: true, InputType: "REVISION"},
+							},
+						},
+						{
+							Summary: "Show information about an operation", Name: "operation",
+							Description: "Show information about an operation",
+							Args: []Arg{
+								{Name: "ID", Description: "The operation ID to show", Required: true},
+							},
+							Flags: []Flag{},
+						},
+						{
+							Summary: "Show information about a symlink", Name: "symlink",
+							Description: "Show information about a symlink",
+							Args: []Arg{
+								{Name: "PATH", Description: "The path of the symlink", Required: true},
+								{Name: "ID", Description: "The symlink ID to show"},
+							},
+							Flags: []Flag{
+								{Name: "revision", Description: "The revision", Value: "-r", RequiresInput: true, InputType: "REVISION"},
+							},
+						},
+						{
+							Summary: "Show information about a tree", Name: "tree",
+							Description: "Show information about a tree",
+							Args: []Arg{
+								{Name: "DIR", Description: "The directory of the tree", Required: true},
+								{Name: "ID", Description: "The tree ID to show"},
+							},
+							Flags: []Flag{
+								{Name: "revision", Description: "The revision", Value: "-r", RequiresInput: true, InputType: "REVISION"},
+							},
+						},
+						{
+							Summary: "Show information about a view", Name: "view",
+							Description: "Show information about a view",
+							Args: []Arg{
+								{Name: "ID", Description: "The view ID to show"},
+							},
+							Flags: []Flag{
+								{Name: "op", Description: "The operation", Value: "--op", RequiresInput: true, InputType: "OP"},
+							},
+						},
+					},
+				},
+				{
+					Name:        "debug watchman",
+					Description: "Commands for interacting with watchman",
+					SubCmds: []SubCommand{
+						{
+							Summary: "Check whether `watchman` is enabled and whether it's correctly installed", Name: "status",
 							Description: "Check whether `watchman` is enabled and whether it's correctly installed",
 							Flags:       []Flag{},
 						},
 						{
-							Summary: "Query the watchman clock", Name: "watchman query-clock",
+							Summary: "Query the watchman clock", Name: "query-clock",
 							Description: "Query the watchman clock",
 							Flags:       []Flag{},
 						},
 						{
-							Summary: "Query changed files from watchman", Name: "watchman query-changed-files",
+							Summary: "Query changed files from watchman", Name: "query-changed-files",
 							Description: "Query changed files from watchman",
 							Flags:       []Flag{},
 						},
 						{
-							Summary: "Reset the watchman clock", Name: "watchman reset-clock",
+							Summary: "Reset the watchman clock", Name: "reset-clock",
 							Description: "Reset the watchman clock",
-							Flags:       []Flag{},
-						},
-						{
-							Summary: "Show information about the working copy state", Name: "working-copy",
-							Description: "Show information about the working copy state",
 							Flags:       []Flag{},
 						},
 					},
