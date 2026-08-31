@@ -1594,6 +1594,7 @@ func (m mainModel) buildCommandStrings() (short, long string) {
 	longParts := append([]string{"jj"}, globalLong...)
 	longParts = append(longParts, cmd.Name)
 
+	flagsBeforeArgs := false
 	if len(cmd.SubCmds) > 0 && m.subIdx < len(cmd.SubCmds) {
 		sub := cmd.SubCmds[m.subIdx]
 		longPart := sub.Value
@@ -1606,37 +1607,50 @@ func (m mainModel) buildCommandStrings() (short, long string) {
 		}
 		shortParts = append(shortParts, shortPart)
 		longParts = append(longParts, longPart)
+		flagsBeforeArgs = sub.FlagsBeforeArgs
 	}
 
-	// Positional args come before flags, matching how jj commands are
-	// naturally written (e.g. `jj tag set v0.2.0 --to @-`, not the reverse).
-	// Optional args are simply omitted when empty, letting jj apply its own
-	// default (e.g. @).
-	for _, a := range m.currentArgs() {
-		if val := m.argInputs[a.Name].Value(); val != "" {
-			shortParts = append(shortParts, val)
-			longParts = append(longParts, val)
+	// Positional args come before flags by default, matching how jj commands
+	// are naturally written (e.g. `jj tag set v0.2.0 --to @-`, not the
+	// reverse). Optional args are simply omitted when empty, letting jj apply
+	// its own default (e.g. @). A subcommand with FlagsBeforeArgs (config set)
+	// reverses this so its target flag (--user/--repo/--workspace) precedes the
+	// NAME/VALUE args, which is how jj parses it.
+	appendArgs := func() {
+		for _, a := range m.currentArgs() {
+			if val := m.argInputs[a.Name].Value(); val != "" {
+				shortParts = append(shortParts, val)
+				longParts = append(longParts, val)
+			}
 		}
 	}
-
-	flags := m.currentFlags()
-	for _, f := range flags {
-		if f.Selected {
-			if f.Value != "" {
-				shortParts = append(shortParts, flagExecForm(f))
-				longParts = append(longParts, flagBarForm(f))
-			}
-			if f.RequiresInput {
-				val := m.inputs[f.Name].Value()
-				if val != "" {
-					if f.NeedsQuotes {
-						val = "\"" + val + "\""
+	appendFlags := func() {
+		for _, f := range m.currentFlags() {
+			if f.Selected {
+				if f.Value != "" {
+					shortParts = append(shortParts, flagExecForm(f))
+					longParts = append(longParts, flagBarForm(f))
+				}
+				if f.RequiresInput {
+					val := m.inputs[f.Name].Value()
+					if val != "" {
+						if f.NeedsQuotes {
+							val = "\"" + val + "\""
+						}
+						shortParts = append(shortParts, val)
+						longParts = append(longParts, val)
 					}
-					shortParts = append(shortParts, val)
-					longParts = append(longParts, val)
 				}
 			}
 		}
+	}
+
+	if flagsBeforeArgs {
+		appendFlags()
+		appendArgs()
+	} else {
+		appendArgs()
+		appendFlags()
 	}
 
 	return strings.Join(shortParts, " "), strings.Join(longParts, " ")

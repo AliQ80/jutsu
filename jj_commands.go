@@ -37,6 +37,7 @@ type SubCommand struct {
 	Interactive       bool     // always opens an editor/picker — runs via TTY handoff
 	RequiredFlagGroup []string // Values of flags where at least one must be selected
 	RequiredUsage     string   // required-flag portion of the Usage line, e.g. "<--onto|--insert-after|--insert-before>" — populated by gen-descriptions
+	FlagsBeforeArgs   bool     // emit flags (with values) before positional args when building the command string
 }
 
 type Command struct {
@@ -1602,8 +1603,9 @@ func loadCategories() []Category {
 						},
 						{
 							Summary: "Update a config file to set the given option to a given value", Name: "set",
-							Alias:       "s",
-							Description: "Update a config file to set the given option to a given value",
+							Alias:           "s",
+							Description:     "Update a config file to set the given option to a given value",
+							FlagsBeforeArgs: true,
 							Args: []Arg{
 								{Name: "NAME", Description: "", Required: true},
 								{Name: "VALUE", Description: "New value to set\n\nThe value should be specified as a TOML expression. If string value isn't enclosed by any TOML constructs (such as apostrophes or array notation), quotes can be omitted. Note that the value may also need shell quoting. TOML multi-line strings can be useful if the value contains apostrophes. For example, to set `foo.bar` to the string \"{don't}\" use `jj config set --user foo.bar \"'''{don't}'''\"`. This is valid in both Bash and Fish.\n\nAlternative, e.g. to avoid dealing with shell quoting, use `jj config edit` to edit the TOML file directly.", Required: true},
