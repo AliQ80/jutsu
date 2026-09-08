@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -28,15 +29,15 @@ import (
 // plainHandoff marks a plain, line-based command (jj git push after a
 // credential prompt): clear the screen first and, with no alt-screen exit
 // marker to scan for, show the whole captured transcript.
-func executeInteractive(cmdStr string, plainHandoff bool) tea.Cmd {
-	c := newPtyExecCommand(cmdStr)
+func executeInteractive(inv jjInvocation, plainHandoff bool) tea.Cmd {
+	c := newPtyExecCommand(inv)
 	c.plainHandoff = plainHandoff
 	return tea.Exec(c, func(err error) tea.Msg {
 		output, ok := c.capturedTrailingOutput()
 		if !ok && c.plainHandoff {
 			output = c.fullCapturedOutput()
 		}
-		return execInteractiveResultMsg{cmdStr: cmdStr, output: output, err: err}
+		return execInteractiveResultMsg{inv: inv, output: output, err: err}
 	})
 }
 
@@ -53,8 +54,8 @@ const maxCapturedOutput = 64 * 1024
 var altScreenExitSeq = []byte("\x1b[?1049l")
 
 // ptyExecCommand implements tea.ExecCommand (Run/SetStdin/SetStdout/SetStderr)
-// by running cmdStr's subprocess attached to a pty instead of the process's
-// real stdio. This lets Jutsu tee the subprocess's pty output into an
+// by running the invocation's subprocess attached to a pty instead of the
+// process's real stdio. This lets Jutsu tee the subprocess's pty output into an
 // in-memory buffer, recovering trailing plain-text jj output printed after
 // an editor/pager closes (e.g. jj's post-squash summary), while still
 // giving the subprocess a real interactive terminal via bidirectional byte
@@ -62,7 +63,7 @@ var altScreenExitSeq = []byte("\x1b[?1049l")
 // releaseTerminal/RestoreTerminal, so Bubble Tea's raw-mode input reader is
 // suspended/resumed exactly as it is for tea.ExecProcess.
 type ptyExecCommand struct {
-	cmdStr string
+	inv jjInvocation
 
 	stdin  io.Reader
 	stdout io.Writer
@@ -72,8 +73,8 @@ type ptyExecCommand struct {
 	captured     bytes.Buffer
 }
 
-func newPtyExecCommand(cmdStr string) *ptyExecCommand {
-	return &ptyExecCommand{cmdStr: cmdStr}
+func newPtyExecCommand(inv jjInvocation) *ptyExecCommand {
+	return &ptyExecCommand{inv: inv}
 }
 
 func (c *ptyExecCommand) SetStdin(r io.Reader)  { c.stdin = r }
@@ -83,7 +84,12 @@ func (c *ptyExecCommand) SetStderr(w io.Writer) { c.stderr = w }
 // Run starts the subprocess attached to a pty, forwards bytes and resize
 // events for its lifetime, and returns its exit error (if any).
 func (c *ptyExecCommand) Run() error {
-	cmd := exec.Command("sh", "-c", c.cmdStr)
+	// Direct argv, no shell: the subprocess gets the values exactly as typed.
+	argv := c.inv.argv
+	if len(argv) == 0 {
+		return errors.New("no command to run")
+	}
+	cmd := exec.Command(argv[0], argv[1:]...)
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
 		return err

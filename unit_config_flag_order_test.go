@@ -25,7 +25,7 @@ func TestBuildCommandStringsConfigSetFlagsBeforeArgs(t *testing.T) {
 			setArg(&m, "NAME", "user.name")
 			setArg(&m, "VALUE", "\"Martin\"")
 
-			short, long := m.buildCommandStrings()
+			short, long := m.buildInvocation().display()
 
 			// Long form uses full names and is exact.
 			want := "jj config set " + tc.flagValue + " user.name \"Martin\""
@@ -54,7 +54,7 @@ func TestBuildCommandStringsConfigUnsetArgsBeforeFlags(t *testing.T) {
 	selectFlag(t, &m, "--user", "")
 	setArg(&m, "NAME", "user.name")
 
-	short, long := m.buildCommandStrings()
+	short, long := m.buildInvocation().display()
 
 	if want := "jj config unset user.name --user"; long != want {
 		t.Errorf("long = %q, want %q", long, want)
@@ -78,7 +78,7 @@ func TestBuildCommandStringsUnrelatedSubcommandArgsBeforeFlags(t *testing.T) {
 	selectFlag(t, &m, "-r", "@-")
 	setArg(&m, "NAMES", "main")
 
-	short, long := m.buildCommandStrings()
+	short, long := m.buildInvocation().display()
 
 	if want := "jj bookmark set main -r @-"; long != want {
 		t.Errorf("long = %q, want %q", long, want)

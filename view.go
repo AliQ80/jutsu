@@ -616,9 +616,9 @@ func (m mainModel) renderDescriptionBar(width, height int) string {
 func (m mainModel) renderCommandBar(width int) string {
 	// Show the word form (long name, or a shorter word alias) in the bar;
 	// the shortest form (short flags, command aliases) is what gets executed.
-	cmdDisplay := m.cmdTextLong
+	cmdDisplay := m.inv.long
 	if cmdDisplay == "" {
-		cmdDisplay = m.cmdText
+		cmdDisplay = m.inv.short
 	}
 	if cmdDisplay == "" {
 		cmdDisplay = "jj"

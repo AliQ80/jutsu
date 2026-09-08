@@ -325,7 +325,7 @@ func TestCatalogDeltaLogRevisionConstruction(t *testing.T) {
 	}
 
 	selectFlag(t, &m, "-r", "main")
-	short, _ := m.buildCommandStrings()
+	short, _ := m.buildInvocation().display()
 	if want := "jj log -r main"; short != want {
 		t.Errorf("log command = %q, want %q", short, want)
 	}
@@ -615,7 +615,7 @@ func TestCatalogDeltaPromotedGitGroups(t *testing.T) {
 	focusCommand(t, &m, "git remote", "add")
 	setArg(&m, "REMOTE", "origin")
 	setArg(&m, "URL", "git@example.com:me/repo.git")
-	short, long := m.buildCommandStrings()
+	short, long := m.buildInvocation().display()
 	if want := "jj git remote add origin git@example.com:me/repo.git"; short != want {
 		t.Errorf("git remote add = %q, want %q", short, want)
 	}
@@ -628,7 +628,7 @@ func TestCatalogDeltaPromotedGitGroups(t *testing.T) {
 
 	m = newModel()
 	focusCommand(t, &m, "git colocation", "enable")
-	short, long = m.buildCommandStrings()
+	short, long = m.buildInvocation().display()
 	if want := "jj git colocation enable"; short != want {
 		t.Errorf("git colocation enable = %q, want %q", short, want)
 	}
@@ -647,7 +647,7 @@ func TestCatalogDeltaPromotedDebugGroups(t *testing.T) {
 	m := newModel()
 	focusCommand(t, &m, "debug object", "view")
 	selectFlag(t, &m, "--op", "xyz")
-	short, long := m.buildCommandStrings()
+	short, long := m.buildInvocation().display()
 	if want := "jj debug object view --op xyz"; short != want {
 		t.Errorf("debug object view = %q, want %q", short, want)
 	}
@@ -660,7 +660,7 @@ func TestCatalogDeltaPromotedDebugGroups(t *testing.T) {
 
 	m = newModel()
 	focusCommand(t, &m, "debug watchman", "status")
-	short, long = m.buildCommandStrings()
+	short, long = m.buildInvocation().display()
 	if want := "jj debug watchman status"; short != want {
 		t.Errorf("debug watchman status = %q, want %q", short, want)
 	}

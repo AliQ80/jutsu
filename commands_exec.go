@@ -17,7 +17,7 @@ import (
 var errNoSSHHost = errors.New("no ssh host for remote")
 
 type execResultMsg struct {
-	cmdStr string
+	inv    jjInvocation
 	output string
 	err    error
 }
@@ -98,20 +98,22 @@ func copyToClipboard(text string) tea.Cmd {
 // subprocess's alternate screen closed (e.g. jj's post-squash summary);
 // it's "" if nothing usable was captured, or always on Windows.
 type execInteractiveResultMsg struct {
-	cmdStr string
+	inv    jjInvocation
 	output string
 	err    error
 }
 
-func executeCommand(cmdStr string) tea.Cmd {
+// executeCommand runs a composed invocation directly — no shell — so an input
+// value containing spaces or shell syntax reaches jj as one literal argument.
+// execArgv adds --color=always, since output is captured through a pipe where
+// jj would otherwise drop colour.
+func executeCommand(inv jjInvocation) tea.Cmd {
 	return func() tea.Msg {
-		// Inject --color=always for jj commands since we're running in a pipe,
-		// not a real TTY, and jj defaults to no color in that case.
-		execStr := cmdStr
-		if execStr == "jj" || strings.HasPrefix(execStr, "jj ") {
-			execStr = "jj --color=always" + execStr[2:]
+		argv := inv.execArgv()
+		if len(argv) == 0 {
+			return execResultMsg{inv: inv, err: errors.New("no command to run")}
 		}
-		cmd := exec.Command("sh", "-c", execStr)
+		cmd := exec.Command(argv[0], argv[1:]...)
 		// Detach from the controlling terminal so a command that unexpectedly
 		// needs a prompt (e.g. jj git push hitting an SSH host-key or
 		// credential prompt) fails fast instead of hanging the TUI. The
@@ -120,20 +122,29 @@ func executeCommand(cmdStr string) tea.Cmd {
 		detachFromTTY(cmd)
 		out, err := cmd.CombinedOutput()
 		return execResultMsg{
-			cmdStr: cmdStr,
+			inv:    inv,
 			output: string(out),
 			err:    err,
 		}
 	}
 }
 
-// isRemoteGitCommand reports whether cmdStr is a jj network operation that can
+// isRemoteGitCommand reports whether inv is a jj network operation that can
 // legitimately need a live prompt (SSH host-key approval, HTTPS credentials).
 // Only these are worth classifying + surfacing a modal for after a failure.
-func isRemoteGitCommand(cmdStr string) bool {
-	return strings.Contains(cmdStr, "git push") ||
-		strings.Contains(cmdStr, "git fetch") ||
-		strings.Contains(cmdStr, "git clone")
+// Matching adjacent argv elements (rather than substrings of the display text)
+// keeps an input value like a commit message containing "git push" out of it.
+func isRemoteGitCommand(inv jjInvocation) bool {
+	for i, a := range inv.argv {
+		if a != "git" || i+1 >= len(inv.argv) {
+			continue
+		}
+		switch inv.argv[i+1] {
+		case "push", "fetch", "clone":
+			return true
+		}
+	}
+	return false
 }
 
 // --- Failure classification -------------------------------------------------
@@ -182,39 +193,39 @@ func isAuthFailure(out string) bool {
 }
 
 type hostKeyFetchedMsg struct {
-	host         string // host[:port] display label
-	fingerprint  string // human `ssh-keygen -lf` output (one line per key type)
-	keyscanLines string // raw ssh-keyscan output to append to known_hosts
-	pushCmd      string // the original command to silently retry after trust
-	err          error  // non-nil → couldn't scan; caller falls back to terminal
+	host         string       // host[:port] display label
+	fingerprint  string       // human `ssh-keygen -lf` output (one line per key type)
+	keyscanLines string       // raw ssh-keyscan output to append to known_hosts
+	push         jjInvocation // the original invocation to silently retry after trust
+	err          error        // non-nil → couldn't scan; caller falls back to terminal
 }
 
 type knownHostAddedMsg struct {
-	pushCmd string
-	err     error
+	push jjInvocation
+	err  error
 }
 
 // remoteHostFor resolves the SSH host[:port] the failed command was pushing to,
 // by reading `jj git remote list` and parsing the selected remote's URL. Returns
 // ("", "") for non-SSH (https/git) remotes or when resolution fails — the caller
 // then falls back to the guided-terminal modal.
-func remoteHostFor(cmdStr string) (host, port string) {
+func remoteHostFor(inv jjInvocation) (host, port string) {
 	out, err := exec.Command("jj", "git", "remote", "list").Output()
 	if err != nil {
 		return "", ""
 	}
-	remote := selectedRemoteName(cmdStr)
-	return parseSSHHost(remoteURL(string(out), remote))
+	return parseSSHHost(remoteURL(string(out), selectedRemoteName(inv)))
 }
 
-// selectedRemoteName extracts --remote flag value or empty.
-func selectedRemoteName(cmdStr string) string {
-	fields := strings.Fields(cmdStr)
-	for i, f := range fields {
-		if f == "--remote" && i+1 < len(fields) {
-			return fields[i+1]
+// selectedRemoteName extracts the --remote value from the invocation's literal
+// args, or "" when unset. Reading argv (not the display string) means a remote
+// name containing spaces stays intact.
+func selectedRemoteName(inv jjInvocation) string {
+	for i, a := range inv.argv {
+		if a == "--remote" && i+1 < len(inv.argv) {
+			return inv.argv[i+1]
 		}
-		if v, ok := strings.CutPrefix(f, "--remote="); ok {
+		if v, ok := strings.CutPrefix(a, "--remote="); ok {
 			return v
 		}
 	}
@@ -268,12 +279,12 @@ func parseSSHHost(remote string) (host, port string) {
 }
 
 // fetchHostKey scans SSH host keys and fingerprints; on failure returns error to fallback to terminal modal. Runs off the Update loop.
-func fetchHostKey(pushCmd string) tea.Cmd {
+func fetchHostKey(push jjInvocation) tea.Cmd {
 	return func() tea.Msg {
 		fail := func(err error) tea.Msg {
-			return hostKeyFetchedMsg{pushCmd: pushCmd, err: err}
+			return hostKeyFetchedMsg{push: push, err: err}
 		}
-		host, port := remoteHostFor(pushCmd)
+		host, port := remoteHostFor(push)
 		if host == "" {
 			return fail(errNoSSHHost)
 		}
@@ -299,25 +310,25 @@ func fetchHostKey(pushCmd string) tea.Cmd {
 			host:         host,
 			fingerprint:  strings.TrimRight(string(fp), "\n"),
 			keyscanLines: string(scan),
-			pushCmd:      pushCmd,
+			push:         push,
 		}
 	}
 }
 
 // addKnownHost appends scanned keys to ~/.ssh/known_hosts (0600) and signals retry.
-func addKnownHost(keyscanLines, pushCmd string) tea.Cmd {
+func addKnownHost(keyscanLines string, push jjInvocation) tea.Cmd {
 	return func() tea.Msg {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return knownHostAddedMsg{pushCmd: pushCmd, err: err}
+			return knownHostAddedMsg{push: push, err: err}
 		}
 		path := filepath.Join(home, ".ssh", "known_hosts")
 		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-			return knownHostAddedMsg{pushCmd: pushCmd, err: err}
+			return knownHostAddedMsg{push: push, err: err}
 		}
 		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 		if err != nil {
-			return knownHostAddedMsg{pushCmd: pushCmd, err: err}
+			return knownHostAddedMsg{push: push, err: err}
 		}
 		defer f.Close()
 		data := keyscanLines
@@ -325,6 +336,6 @@ func addKnownHost(keyscanLines, pushCmd string) tea.Cmd {
 			data += "\n"
 		}
 		_, err = f.WriteString(data)
-		return knownHostAddedMsg{pushCmd: pushCmd, err: err}
+		return knownHostAddedMsg{push: push, err: err}
 	}
 }

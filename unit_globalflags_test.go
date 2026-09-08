@@ -30,7 +30,7 @@ func TestBuildCommandStringsGlobalFlagPrecedesSubcommand(t *testing.T) {
 	focusCommand(t, &m, "log", "")
 	selectGlobalFlag(t, &m, "-R", "../other-repo")
 
-	short, long := m.buildCommandStrings()
+	short, long := m.buildInvocation().display()
 
 	if want := "jj -R ../other-repo log"; short != want {
 		t.Errorf("short = %q, want %q", short, want)
@@ -48,7 +48,7 @@ func TestBuildCommandStringsGlobalFlagWithoutValueOmitsOnlyValue(t *testing.T) {
 	focusCommand(t, &m, "log", "")
 	selectGlobalFlag(t, &m, "-R", "")
 
-	short, _ := m.buildCommandStrings()
+	short, _ := m.buildInvocation().display()
 
 	if want := "jj -R log"; short != want {
 		t.Errorf("short = %q, want %q", short, want)

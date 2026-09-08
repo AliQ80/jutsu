@@ -57,20 +57,19 @@ type mainModel struct {
 	argInputs       map[string]textinput.Model // keyed by Arg Name
 	focusedInputIdx int
 
-	cmdText     string
-	cmdTextLong string
-	running     bool
-	spinner     spinner.Model    // animates only while running (see spinner.TickMsg)
-	lastCmd     *commandSnapshot // nil until first command executes
+	inv     jjInvocation // the composed command: literal argv + its display forms
+	running bool
+	spinner spinner.Model    // animates only while running (see spinner.TickMsg)
+	lastCmd *commandSnapshot // nil until first command executes
 
 	// Remote-prompt modals (see execResultMsg classification). A failed
 	// push/fetch/clone that needed a prompt surfaces one of these instead of
 	// a raw error.
 	hostKeyModalOpen bool              // SSH host-key approval popup
-	hostKeyPrompt    hostKeyFetchedMsg // host / fingerprint / keyscan lines / pushCmd
+	hostKeyPrompt    hostKeyFetchedMsg // host / fingerprint / keyscan lines / invocation to retry
 	hostKeyTried     bool              // loop guard: only offer the host-key modal once per run
 	authModalOpen    bool              // "continue in terminal" popup for credential prompts
-	authModalCmd     string            // the command that popup would retry via the pty handoff
+	authModalInv     jjInvocation      // the command that popup would retry via the pty handoff
 	aboutModalOpen   bool              // read-only popup with the running jutsu version + GitHub link (opened via ?)
 
 	validationFlash bool
@@ -311,7 +310,7 @@ func newModel() mainModel {
 	}
 	initMandatoryFlagInputs(m.globalFlags, m.inputs)
 
-	m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+	m.inv = m.buildInvocation()
 	m.refreshDocs()
 	return m
 }
@@ -334,24 +333,24 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A failed remote op may have hit a prompt the detached (no-tty) run
 		// couldn't answer. Classify and surface the right modal instead of a
 		// raw error line. See the classifiers in commands_exec.go.
-		if msg.err != nil && isRemoteGitCommand(msg.cmdStr) {
+		if msg.err != nil && isRemoteGitCommand(msg.inv) {
 			switch {
 			case isUnknownHostKey(msg.output) && !m.hostKeyTried:
 				// First connect to an unknown host: scan its key off the
 				// Update loop, then show the fingerprint-approval modal.
 				m.hostKeyTried = true
 				m.running = true
-				return m, tea.Batch(m.spinner.Tick, fetchHostKey(msg.cmdStr))
+				return m, tea.Batch(m.spinner.Tick, fetchHostKey(msg.inv))
 			case isAuthFailure(msg.output):
 				// Credentials needed: offer the guided terminal handoff.
 				m.freezeBackdrop()
 				m.authModalOpen = true
-				m.authModalCmd = msg.cmdStr
+				m.authModalInv = msg.inv
 				return m, nil
 			}
 		}
 
-		lines := commandEchoLines(msg.cmdStr)
+		lines := commandEchoLines(msg.inv.short)
 		if msg.err != nil {
 			errorMsg := msg.err.Error()
 			if msg.output != "" {
@@ -375,7 +374,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// terminal handoff so real ssh can prompt.
 			m.freezeBackdrop()
 			m.authModalOpen = true
-			m.authModalCmd = msg.pushCmd
+			m.authModalInv = msg.push
 			return m, nil
 		}
 		m.hostKeyPrompt = msg
@@ -386,25 +385,25 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case knownHostAddedMsg:
 		if msg.err != nil {
 			m.running = false
-			lines := commandEchoLines(msg.pushCmd)
+			lines := commandEchoLines(msg.push.short)
 			lines = append(lines, errorStyle.Render("✗ could not update known_hosts: "+msg.err.Error()))
 			m.setOutputLines(lines)
 			return m, nil
 		}
-		// Host now trusted — silently retry the original push.
+		// Host now trusted — silently retry the original push, same literal args.
 		m.running = true
-		return m, tea.Batch(m.spinner.Tick, executeCommand(msg.pushCmd))
+		return m, tea.Batch(m.spinner.Tick, executeCommand(msg.push))
 
 	case execFallbackMsg:
 		// herdr couldn't give us a terminal — suspend the TUI and use the
 		// ordinary pty handoff instead of failing the command outright.
-		return m, executeInteractive(msg.cmdStr, msg.plain)
+		return m, executeInteractive(msg.inv, msg.plain)
 
 	case execInteractiveResultMsg:
 		// The subprocess ran on a pty; msg.output holds the plain-text tail
 		// recovered after its alternate screen closed, if any was found.
 		m.running = false
-		lines := commandEchoLines(msg.cmdStr)
+		lines := commandEchoLines(msg.inv.short)
 
 		if msg.err != nil {
 			errorMsg := msg.err.Error()
@@ -525,7 +524,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, flashTimer()
 				}
 				m.focusPane = focusCmdBar
-				m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+				m.inv = m.buildInvocation()
 			}
 			return m, nil
 		}
@@ -541,7 +540,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, flashTimer()
 				}
 				m.focusPane = focusCmdBar
-				m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+				m.inv = m.buildInvocation()
 			}
 			return m, nil
 		}
@@ -573,7 +572,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.lastFocusPane = m.focusPane
 			}
 			m.focusPane = focusCmdBar
-			m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+			m.inv = m.buildInvocation()
 		case msg.X < leftWidth && msg.Y < composerH:
 			switch {
 			case msg.X < catPaneW:
@@ -762,7 +761,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				var cmd tea.Cmd
 				ti, cmd = ti.Update(msg)
 				m.setInput(item, ti)
-				m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+				m.inv = m.buildInvocation()
 				return m, cmd
 			}
 		}
@@ -780,7 +779,7 @@ func (m mainModel) handleComposerKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		}
 		m.lastFocusPane = m.focusPane
 		m.focusPane = focusCmdBar
-		m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+		m.inv = m.buildInvocation()
 		return m, nil
 
 	case "right", "l":
@@ -795,7 +794,7 @@ func (m mainModel) handleComposerKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 			m.focusPane = next
 			m.clampIndices()
 		}
-		m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+		m.inv = m.buildInvocation()
 		m.layoutViewports()
 		m.refreshDocs()
 		return m, nil
@@ -808,7 +807,7 @@ func (m mainModel) handleComposerKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 			}
 			m.clampIndices()
 		}
-		m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+		m.inv = m.buildInvocation()
 		m.layoutViewports()
 		m.refreshDocs()
 		return m, nil
@@ -816,7 +815,7 @@ func (m mainModel) handleComposerKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 	case "down", "j":
 		m.navigateDown()
 		m.clampFocusPane()
-		m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+		m.inv = m.buildInvocation()
 		m.layoutViewports()
 		m.reclampAllScrolls()
 		m.refreshDocs()
@@ -825,7 +824,7 @@ func (m mainModel) handleComposerKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 	case "up", "k":
 		m.navigateUp()
 		m.clampFocusPane()
-		m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+		m.inv = m.buildInvocation()
 		m.layoutViewports()
 		m.reclampAllScrolls()
 		m.refreshDocs()
@@ -835,7 +834,7 @@ func (m mainModel) handleComposerKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		if m.focusPane == focusFlags {
 			m.toggleFlag()
 		}
-		m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+		m.inv = m.buildInvocation()
 		m.layoutViewports()
 		m.reclampAllScrolls()
 		m.refreshDocs()
@@ -848,7 +847,7 @@ func (m mainModel) handleComposerKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 func (m mainModel) handleCmdBarKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
-		if m.cmdText != "" && !m.running {
+		if m.inv.short != "" && !m.running {
 			if m.hasIncompleteInputs() {
 				m.validationFlash = true
 				return m, flashTimer()
@@ -858,12 +857,12 @@ func (m mainModel) handleCmdBarKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.hostKeyTried = false // a fresh run may legitimately hit the host-key modal again
 			m.focusPane = m.lastFocusPane
 			if m.isInteractiveInvocation() {
-				return m, executeHandoff(m.cmdText, false)
+				return m, executeHandoff(m.inv, false)
 			}
-			return m, tea.Batch(m.spinner.Tick, executeCommand(m.cmdText))
+			return m, tea.Batch(m.spinner.Tick, executeCommand(m.inv))
 		}
 	case "c":
-		return m, copyToClipboard(m.cmdTextLong)
+		return m, copyToClipboard(m.inv.long)
 	case "esc":
 		m.focusPane = m.lastFocusPane
 		return m, nil
@@ -929,12 +928,12 @@ func (m mainModel) handleHostKeyModalKeys(msg tea.KeyPressMsg) (tea.Model, tea.C
 		m.hostKeyModalOpen = false
 		m.backdrop = nil
 		m.running = true
-		return m, tea.Batch(m.spinner.Tick, addKnownHost(p.keyscanLines, p.pushCmd))
+		return m, tea.Batch(m.spinner.Tick, addKnownHost(p.keyscanLines, p.push))
 	case "n", "esc", "q", "ctrl+c":
 		m.hostKeyModalOpen = false
 		m.backdrop = nil
 		// Surface the original failure so the user sees why nothing happened.
-		lines := commandEchoLines(m.hostKeyPrompt.pushCmd)
+		lines := commandEchoLines(m.hostKeyPrompt.push.short)
 		lines = append(lines, "Host key not trusted — push canceled.")
 		m.setOutputLines(lines)
 		return m, nil
@@ -948,15 +947,15 @@ func (m mainModel) handleHostKeyModalKeys(msg tea.KeyPressMsg) (tea.Model, tea.C
 func (m mainModel) handleAuthModalKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
-		cmd := m.authModalCmd
+		inv := m.authModalInv
 		m.authModalOpen = false
 		m.backdrop = nil
 		m.running = true
-		return m, executeHandoff(cmd, true) // plain handoff: a herdr split pane, else clear the screen and take over the terminal
+		return m, executeHandoff(inv, true) // plain handoff: a herdr split pane, else clear the screen and take over the terminal
 	case "n", "esc", "q", "ctrl+c":
 		m.authModalOpen = false
 		m.backdrop = nil
-		lines := commandEchoLines(m.authModalCmd)
+		lines := commandEchoLines(m.authModalInv.short)
 		lines = append(lines, "Canceled.")
 		m.setOutputLines(lines)
 		return m, nil
@@ -976,7 +975,7 @@ func (m mainModel) handleGlobalFlagsModalKeys(msg tea.KeyPressMsg) (tea.Model, t
 	case "esc", "g":
 		m.globalFlagsModalOpen = false
 		m.backdrop = nil
-		m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+		m.inv = m.buildInvocation()
 		// Selections may have added/removed input-bar fields — resize now.
 		m.layoutViewports()
 		m.reclampAllScrolls()
@@ -1010,7 +1009,7 @@ func (m mainModel) handleGlobalFlagsModalKeys(msg tea.KeyPressMsg) (tea.Model, t
 	case "space":
 		if !m.globalModalDocsFocus {
 			toggleFlagAt(m.globalFlags, m.globalFlagIdx, m.inputs)
-			m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+			m.inv = m.buildInvocation()
 		}
 	case "pgdown":
 		m.globalDocs.SetYOffset(m.globalDocs.YOffset() + 1)
@@ -1434,7 +1433,7 @@ func (m *mainModel) restoreLastCmd() {
 	m.layoutViewports()
 	m.reclampAllScrolls()
 	m.refreshDocs()
-	m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+	m.inv = m.buildInvocation()
 }
 
 func (m *mainModel) toggleFlag() {
@@ -1571,16 +1570,44 @@ func (m *mainModel) currentRequiredFlagGroup() []string {
 	return cmd.RequiredFlagGroup
 }
 
-// buildCommandStrings returns (short, long) where short uses command/subcommand
-// aliases when available, and long always uses the full name.
-func (m mainModel) buildCommandStrings() (short, long string) {
-	globalShort, globalLong := m.selectedGlobalFlagParts()
+// jjInvocation is one composed command in the two forms it is needed in: the
+// literal argv handed to the process (input values exactly as typed, never
+// shell-parsed) and the readable text shown in the command bar, clipboard and
+// output echo. Display quoting (Flag.NeedsQuotes) is presentation-only and
+// never reaches argv.
+type jjInvocation struct {
+	argv  []string // "jj" plus its literal arguments
+	short string   // display using command/flag aliases where shorter
+	long  string   // display always using full names (clipboard)
+}
+
+// execArgv returns the argv to launch for the captured-output path, forcing
+// colour: that run is a pipe, not a tty, and jj defaults to no colour there.
+func (inv jjInvocation) execArgv() []string {
+	if len(inv.argv) == 0 || inv.argv[0] != "jj" {
+		return inv.argv
+	}
+	argv := make([]string, 0, len(inv.argv)+1)
+	argv = append(argv, "jj", "--color=always")
+	return append(argv, inv.argv[1:]...)
+}
+
+// buildInvocation composes the current selection into literal argv plus the
+// short (aliased) and long (full-name) display strings.
+func (m mainModel) buildInvocation() jjInvocation {
+	globalArgs, globalShort, globalLong := m.selectedGlobalFlagParts()
+
+	argv := append([]string{"jj"}, globalArgs...)
 
 	cmds := m.currentCommands()
 	if len(cmds) == 0 || m.cmdIdx >= len(cmds) {
 		shortParts := append([]string{"jj"}, globalShort...)
 		longParts := append([]string{"jj"}, globalLong...)
-		return strings.Join(shortParts, " "), strings.Join(longParts, " ")
+		return jjInvocation{
+			argv:  argv,
+			short: strings.Join(shortParts, " "),
+			long:  strings.Join(longParts, " "),
+		}
 	}
 
 	cmd := cmds[m.cmdIdx]
@@ -1593,6 +1620,7 @@ func (m mainModel) buildCommandStrings() (short, long string) {
 	shortParts = append(shortParts, shortName)
 	longParts := append([]string{"jj"}, globalLong...)
 	longParts = append(longParts, cmd.Name)
+	argv = append(argv, cmd.Name)
 
 	flagsBeforeArgs := false
 	if len(cmd.SubCmds) > 0 && m.subIdx < len(cmd.SubCmds) {
@@ -1607,6 +1635,7 @@ func (m mainModel) buildCommandStrings() (short, long string) {
 		}
 		shortParts = append(shortParts, shortPart)
 		longParts = append(longParts, longPart)
+		argv = append(argv, longPart)
 		flagsBeforeArgs = sub.FlagsBeforeArgs
 	}
 
@@ -1619,8 +1648,18 @@ func (m mainModel) buildCommandStrings() (short, long string) {
 	appendArgs := func() {
 		for _, a := range m.currentArgs() {
 			if val := m.argInputs[a.Name].Value(); val != "" {
-				shortParts = append(shortParts, val)
-				longParts = append(longParts, val)
+				// Variadic args ([NAME]...) accept several space-separated
+				// values in one field (e.g. `jj new @ main`, `bookmark create
+				// foo bar`), matching the pre-structured behavior; each becomes
+				// its own argv element. Non-variadic positional args keep the
+				// value literal — a space stays part of one argument.
+				vals := []string{val}
+				if a.Variadic {
+					vals = strings.Fields(val)
+				}
+				argv = append(argv, vals...)
+				shortParts = append(shortParts, strings.Join(vals, " "))
+				longParts = append(longParts, strings.Join(vals, " "))
 			}
 		}
 	}
@@ -1628,17 +1667,16 @@ func (m mainModel) buildCommandStrings() (short, long string) {
 		for _, f := range m.currentFlags() {
 			if f.Selected {
 				if f.Value != "" {
+					argv = append(argv, f.Value)
 					shortParts = append(shortParts, flagExecForm(f))
 					longParts = append(longParts, flagBarForm(f))
 				}
 				if f.RequiresInput {
 					val := m.inputs[f.Name].Value()
 					if val != "" {
-						if f.NeedsQuotes {
-							val = "\"" + val + "\""
-						}
-						shortParts = append(shortParts, val)
-						longParts = append(longParts, val)
+						argv = append(argv, val)
+						shortParts = append(shortParts, displayValue(f, val))
+						longParts = append(longParts, displayValue(f, val))
 					}
 				}
 			}
@@ -1653,30 +1691,43 @@ func (m mainModel) buildCommandStrings() (short, long string) {
 		appendFlags()
 	}
 
-	return strings.Join(shortParts, " "), strings.Join(longParts, " ")
+	return jjInvocation{
+		argv:  argv,
+		short: strings.Join(shortParts, " "),
+		long:  strings.Join(longParts, " "),
+	}
+}
+
+// displayValue renders an input value for the command bar / clipboard only.
+// NeedsQuotes flags (commit messages, author strings) read better quoted; the
+// quotes are never part of the executed argument.
+func displayValue(f Flag, val string) string {
+	if f.NeedsQuotes {
+		return "\"" + val + "\""
+	}
+	return val
 }
 
 // selectedGlobalFlagParts renders the currently-selected global flags (and
-// their input values) in exec and bar form. buildCommandStrings splices these
-// in right after "jj", before the subcommand, since jj requires global
-// options to precede it.
-func (m mainModel) selectedGlobalFlagParts() (short, long []string) {
+// their input values) as literal args plus their exec and bar display forms.
+// buildInvocation splices these in right after "jj", before the subcommand,
+// since jj requires global options to precede it.
+func (m mainModel) selectedGlobalFlagParts() (args, short, long []string) {
 	for _, f := range m.globalFlags {
 		if !f.Selected {
 			continue
 		}
 		if f.Value != "" {
+			args = append(args, f.Value)
 			short = append(short, flagExecForm(f))
 			long = append(long, flagBarForm(f))
 		}
 		if f.RequiresInput {
 			val := m.inputs[f.Name].Value()
 			if val != "" {
-				if f.NeedsQuotes {
-					val = "\"" + val + "\""
-				}
-				short = append(short, val)
-				long = append(long, val)
+				args = append(args, val)
+				short = append(short, displayValue(f, val))
+				long = append(long, displayValue(f, val))
 			}
 		}
 	}
@@ -2006,8 +2057,10 @@ func copyFlashTimer() tea.Cmd {
 
 // commandEchoLines returns the "❯ cmd args" header line plus a following
 // blank line, as shown at the top of the output pane after any command run.
-func commandEchoLines(cmdStr string) []string {
-	cmdParts := strings.SplitN(cmdStr, " ", 2)
+// Takes display text (jjInvocation.short), never the literal argv — this is
+// presentation only.
+func commandEchoLines(display string) []string {
+	cmdParts := strings.SplitN(display, " ", 2)
 	cmdLine := promptStyle.Render("❯") + " " + promptCmdStyle.Render(cmdParts[0])
 	if len(cmdParts) > 1 {
 		cmdLine += " " + cmdParts[1]
@@ -2333,10 +2386,10 @@ func (m mainModel) handleInputKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				ti := m.getInput(item)
 				cmd := ti.Focus()
 				m.setInput(item, ti)
-				m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+				m.inv = m.buildInvocation()
 				return m, cmd
 			}
-			m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+			m.inv = m.buildInvocation()
 			return m, nil
 		case "esc":
 			// cancel picker
@@ -2358,10 +2411,10 @@ func (m mainModel) handleInputKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				ti := m.getInput(item)
 				cmd := ti.Focus()
 				m.setInput(item, ti)
-				m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+				m.inv = m.buildInvocation()
 				return m, cmd
 			}
-			m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+			m.inv = m.buildInvocation()
 			return m, nil
 		}
 		// ignore other keys while picker open
@@ -2416,7 +2469,7 @@ func (m mainModel) handleInputKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		ti.Blur()
 		m.setInput(cur, ti)
 		m.focusPane = m.lastFocusPane
-		m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+		m.inv = m.buildInvocation()
 		return m, nil
 	case "up":
 		if m.focusedInputIdx > 0 {
@@ -2431,7 +2484,7 @@ func (m mainModel) handleInputKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			cmd := newTi.Focus()
 			m.setInput(newItem, newTi)
 
-			m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+			m.inv = m.buildInvocation()
 			return m, cmd
 		}
 		return m, nil
@@ -2448,7 +2501,7 @@ func (m mainModel) handleInputKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			cmd := newTi.Focus()
 			m.setInput(newItem, newTi)
 
-			m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+			m.inv = m.buildInvocation()
 			return m, cmd
 		}
 		return m, nil
@@ -2461,7 +2514,7 @@ func (m mainModel) handleInputKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		newTi := m.getInput(newItem)
 		cmd := newTi.Focus()
 		m.setInput(newItem, newTi)
-		m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+		m.inv = m.buildInvocation()
 		return m, cmd
 	case "tab":
 		if m.hasIncompleteInputs() {
@@ -2469,7 +2522,7 @@ func (m mainModel) handleInputKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, flashTimer()
 		}
 		m.focusPane = focusCmdBar
-		m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+		m.inv = m.buildInvocation()
 		return m, nil
 	}
 
@@ -2485,7 +2538,7 @@ func (m mainModel) handleInputKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	ti, cmd = ti.Update(msg)
 	m.setInput(cur, ti)
-	m.cmdText, m.cmdTextLong = m.buildCommandStrings()
+	m.inv = m.buildInvocation()
 	return m, cmd
 }
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -15,9 +16,12 @@ func TestLiveMuxRoundTrip(t *testing.T) {
 	}
 	t.Logf("tmux=%v herdr=%v", inTmux(), inHerdr())
 
-	run := func(t *testing.T, cmdStr string, plain bool) execInteractiveResultMsg {
+	// The handoff now carries literal argv, so a shell construct has to be
+	// asked for explicitly (`sh -c`) — which is also what proves nothing else
+	// is being re-split by a shell on the way through.
+	run := func(t *testing.T, argv []string, plain bool) execInteractiveResultMsg {
 		t.Helper()
-		cmd := executeInMux(cmdStr, plain)
+		cmd := executeInMux(jjInvocation{argv: argv, short: strings.Join(argv, " ")}, plain)
 		if cmd == nil {
 			t.Fatal("executeInMux returned nil")
 		}
@@ -29,7 +33,7 @@ func TestLiveMuxRoundTrip(t *testing.T) {
 		return res
 	}
 
-	res := run(t, "echo hello-from-pane; echo second-line", true)
+	res := run(t, []string{"sh", "-c", "echo hello-from-pane; echo second-line"}, true)
 	t.Logf("split pane: err=%v output=%q", res.err, res.output)
 	if res.err != nil {
 		t.Errorf("unexpected err: %v", res.err)
@@ -40,7 +44,7 @@ func TestLiveMuxRoundTrip(t *testing.T) {
 
 	// Failure path: `exit` must not take the wrapper script down with it (it
 	// would hang the wait forever).
-	res = run(t, "echo oops >&2; exit 3", true)
+	res = run(t, []string{"sh", "-c", "echo oops >&2; exit 3"}, true)
 	t.Logf("fail path: err=%v output=%q", res.err, res.output)
 	if res.err == nil || res.err.Error() != "exit status 3" {
 		t.Errorf("err = %v, want exit status 3", res.err)
@@ -50,10 +54,20 @@ func TestLiveMuxRoundTrip(t *testing.T) {
 	}
 
 	// Editor-shaped path: a whole tab/window rather than a split pane.
-	res = run(t, "echo from-a-tab", false)
+	res = run(t, []string{"echo", "from-a-tab"}, false)
 	t.Logf("tab/window path: err=%v output=%q", res.err, res.output)
 	if res.err != nil || res.output != "from-a-tab" {
 		t.Errorf("tab/window path: err=%v output=%q", res.err, res.output)
+	}
+
+	// A value full of shell syntax must reach the command as one argument,
+	// unexpanded — the whole point of quoting each argv element in the wrapper
+	// script instead of pasting a command line together.
+	const nasty = `a b $HOME "q" 'r' ; rm -rf x \ y`
+	res = run(t, []string{"printf", "%s", nasty}, true)
+	t.Logf("literal arg: err=%v output=%q", res.err, res.output)
+	if res.err != nil || res.output != nasty {
+		t.Errorf("literal arg: err=%v output=%q, want %q", res.err, res.output, nasty)
 	}
 
 	// The handoff terminal must come up with the user's own environment. It
@@ -62,7 +76,7 @@ func TestLiveMuxRoundTrip(t *testing.T) {
 	// `jj describe` ended up with no $EDITOR and fell back to jj's built-in
 	// default editor.
 	if want := os.Getenv("EDITOR"); want != "" {
-		res = run(t, "printenv EDITOR", false)
+		res = run(t, []string{"printenv", "EDITOR"}, false)
 		t.Logf("env path: err=%v output=%q want=%q", res.err, res.output, want)
 		if res.output != want {
 			t.Errorf("EDITOR in handoff terminal = %q, want %q", res.output, want)

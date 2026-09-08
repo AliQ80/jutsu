@@ -2,26 +2,8 @@ package main
 
 import "testing"
 
-func TestIsRemoteGitCommand(t *testing.T) {
-	cases := []struct {
-		cmd  string
-		want bool
-	}{
-		{"jj git push", true},
-		{"jj git push --remote origin --bookmark main", true},
-		{"jj git fetch", true},
-		{"jj git clone https://example.com/repo", true},
-		{"jj log", false},
-		{"jj git init", false},
-		{"jj git remote list", false},
-		{"jj describe -m hi", false},
-	}
-	for _, c := range cases {
-		if got := isRemoteGitCommand(c.cmd); got != c.want {
-			t.Errorf("isRemoteGitCommand(%q) = %v, want %v", c.cmd, got, c.want)
-		}
-	}
-}
+// isRemoteGitCommand and selectedRemoteName now read the structured
+// invocation; their tests live in unit_invocation_test.go.
 
 func TestClassifyFailure(t *testing.T) {
 	unknown := "jj: Host key verification failed.\n"
@@ -51,23 +33,6 @@ func TestClassifyFailure(t *testing.T) {
 	}
 	if isUnknownHostKey(benign) || isAuthFailure(benign) || isChangedHostKey(benign) {
 		t.Error("a benign non-fast-forward error must not match any prompt classifier")
-	}
-}
-
-func TestSelectedRemoteName(t *testing.T) {
-	cases := []struct {
-		cmd  string
-		want string
-	}{
-		{"jj git push --remote upstream", "upstream"},
-		{"jj git push --remote=upstream", "upstream"},
-		{"jj git push --bookmark main", ""},
-		{"jj git push", ""},
-	}
-	for _, c := range cases {
-		if got := selectedRemoteName(c.cmd); got != c.want {
-			t.Errorf("selectedRemoteName(%q) = %q, want %q", c.cmd, got, c.want)
-		}
 	}
 }
 

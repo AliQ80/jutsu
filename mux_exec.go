@@ -86,35 +86,35 @@ func currentMux() *mux {
 	return nil
 }
 
-// execFallbackMsg asks Update to run cmdStr through the ordinary pty handoff.
+// execFallbackMsg asks Update to run inv through the ordinary pty handoff.
 // Returned when the multiplexer itself fails (socket gone, server restarted)
 // so a broken multiplexer never means a command that can't run at all.
 type execFallbackMsg struct {
-	cmdStr string
-	plain  bool
+	inv   jjInvocation
+	plain bool
 }
 
 // executeHandoff runs a command that needs a real terminal, preferring a
 // sibling pane/tab in whatever multiplexer we're inside over suspending the
 // TUI. plain is as described on mux.open; see executeInteractive for what it
 // means on the fallback path.
-func executeHandoff(cmdStr string, plain bool) tea.Cmd {
-	if cmd := executeInMux(cmdStr, plain); cmd != nil {
+func executeHandoff(inv jjInvocation, plain bool) tea.Cmd {
+	if cmd := executeInMux(inv, plain); cmd != nil {
 		return cmd
 	}
-	return executeInteractive(cmdStr, plain)
+	return executeInteractive(inv, plain)
 }
 
-// executeInMux runs cmdStr in a sibling multiplexer terminal and reports its
+// executeInMux runs inv in a sibling multiplexer terminal and reports its
 // output back, leaving Jutsu running throughout. Returns nil when we're not
 // inside a multiplexer, so callers fall back to the pty handoff.
-func executeInMux(cmdStr string, plain bool) tea.Cmd {
+func executeInMux(inv jjInvocation, plain bool) tea.Cmd {
 	m := currentMux()
 	if m == nil {
 		return nil
 	}
 	return func() tea.Msg {
-		fallback := execFallbackMsg{cmdStr: cmdStr, plain: plain}
+		fallback := execFallbackMsg{inv: inv, plain: plain}
 
 		dir, err := os.MkdirTemp("", "jutsu-mux-")
 		if err != nil {
@@ -124,7 +124,7 @@ func executeInMux(cmdStr string, plain bool) tea.Cmd {
 
 		script := filepath.Join(dir, "run.sh")
 		exitFile := filepath.Join(dir, "exit")
-		if err := os.WriteFile(script, []byte(muxScript(cmdStr, exitFile, m.notify(dir))), 0o700); err != nil {
+		if err := os.WriteFile(script, []byte(muxScript(inv, exitFile, m.notify(dir))), 0o700); err != nil {
 			return fallback
 		}
 
@@ -147,7 +147,7 @@ func executeInMux(cmdStr string, plain bool) tea.Cmd {
 		term.dispose()
 
 		if waitErr != nil {
-			return execInteractiveResultMsg{cmdStr: cmdStr, output: output, err: fmt.Errorf("lost track of the handoff terminal: %w", waitErr)}
+			return execInteractiveResultMsg{inv: inv, output: output, err: fmt.Errorf("lost track of the handoff terminal: %w", waitErr)}
 		}
 
 		var runErr error
@@ -156,14 +156,45 @@ func executeInMux(cmdStr string, plain bool) tea.Cmd {
 		} else if c := strings.TrimSpace(string(code)); c != "0" {
 			runErr = fmt.Errorf("exit status %s", c)
 		}
-		return execInteractiveResultMsg{cmdStr: cmdStr, output: output, err: runErr}
+		return execInteractiveResultMsg{inv: inv, output: output, err: runErr}
 	}
 }
 
-// muxScript builds the wrapper script a handoff terminal runs. A script file
-// (rather than a command line) keeps cmdStr from ever crossing a shell quoting
-// boundary — jj commit messages are full of quotes.
-func muxScript(cmdStr, exitFile, notify string) string {
+// shellQuote encodes one argument for the POSIX shell that runs the wrapper
+// script — the one boundary a multiplexer handoff cannot avoid, since the
+// user's own shell is what supplies $EDITOR, $PATH and the rest. Anything
+// outside a conservative safe set (including the empty string) is single-quoted,
+// with each embedded single quote spliced out and re-escaped — inside single
+// quotes a POSIX shell expands nothing at all.
+func shellQuote(arg string) string {
+	safe := arg != ""
+	for _, r := range arg {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' ||
+			strings.ContainsRune("-_./:=@+,", r)) {
+			safe = false
+			break
+		}
+	}
+	if safe {
+		return arg
+	}
+	return "'" + strings.ReplaceAll(arg, "'", `'\''`) + "'"
+}
+
+// shellQuoteArgs renders a literal argv as one shell command line, quoting each
+// argument independently so values keep their exact contents and boundaries.
+func shellQuoteArgs(argv []string) string {
+	quoted := make([]string, len(argv))
+	for i, a := range argv {
+		quoted[i] = shellQuote(a)
+	}
+	return strings.Join(quoted, " ")
+}
+
+// muxScript builds the wrapper script a handoff terminal runs. The invocation's
+// literal argv is rendered with per-argument shell quoting, so a commit message
+// full of quotes, spaces or $ still reaches jj as one argument.
+func muxScript(inv jjInvocation, exitFile, notify string) string {
 	// The leading clear wipes anything the terminal opened with — for herdr,
 	// the shell's echo of the line that started this script — so the new
 	// terminal shows the command's own output and nothing else.
@@ -173,7 +204,7 @@ func muxScript(cmdStr, exitFile, notify string) string {
 	// leaving no exit code and no completion report — i.e. a wait that never
 	// returns.
 	return fmt.Sprintf("printf '\\033[2J\\033[3J\\033[H'\n( %s\n)\necho $? > %s\nprintf '%s\\n'\n%s",
-		cmdStr, exitFile, muxSentinel, notify)
+		shellQuoteArgs(inv.argv), exitFile, muxSentinel, notify)
 }
 
 // trimPaneTranscript reduces a scraped pane transcript to just the command's
