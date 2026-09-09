@@ -23,10 +23,9 @@ Jutsu's interface is organized into six primary panes and eight focus states, mo
 Building a Jutsu command follows a simple mental model:
 
 ```text
-What do I want to do?     → Commands
-How should it behave?     → Flags
-What values are needed?   → Inputs
-Which repository/context? → Global Options
+What do I want to do?         → Commands
+What fine tuning is needed?   → Flags
+What values are needed?       → Inputs
 ```
 
 Each concept has one canonical page above; the [Deep Dive Tutorials](#deep-dive-tutorials) below show them combined into concrete, end-to-end scenarios.

@@ -11,7 +11,6 @@ Get Jutsu up and running on your system. Before installing, ensure you meet the 
 
 To run Jutsu, your system must meet the following requirements:
 
-*   **Go 1.25+** — [Install Go](https://go.dev/doc/install) if you plan to build from source or install via Go tools.
 *   **Jujutsu (`jj`) CLI** — [Install `jj`](https://jj-vcs.github.io/jj/latest/install-and-setup/) version control system, which Jutsu composes commands for.
 *   **Terminal Emulator** — A modern terminal emulator with:
     *   256 color support
@@ -22,6 +21,9 @@ To run Jutsu, your system must meet the following requirements:
 Jutsu is tested on modern terminals, including **Alacritty, Ghostty, iTerm2, Kitty, WezTerm, GNOME Terminal, Konsole**, and within **tmux/screen** multiplexer sessions.
 :::
 
+:::note
+* **Go 1.25+** — [Install Go](https://go.dev/doc/install) if you plan to build from source or install via Go tools.
+:::
 ---
 
 ## Installation Methods
