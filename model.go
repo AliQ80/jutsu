@@ -77,7 +77,12 @@ type mainModel struct {
 	copyErrorFlash  bool // set on a failed clipboard copy; suppresses the green success indicator
 	jjVersion       string
 	latestTag       string // latest jj tag resolved at startup; overrides "dev" in the about modal
-	cwd             string
+	// latestReleaseVersion / latestReleaseURL hold a newer Jutsu GitHub release
+	// detected at startup (non-empty only when one was found). They drive the
+	// persistent update status row and the About-modal update details.
+	latestReleaseVersion string
+	latestReleaseURL     string
+	cwd                  string
 
 	width  int
 	height int
@@ -316,7 +321,7 @@ func newModel() mainModel {
 }
 
 func (m mainModel) Init() tea.Cmd {
-	return tea.Batch(fetchJJVersion(), fetchLatestTag())
+	return tea.Batch(fetchJJVersion(), fetchLatestTag(), checkRelease())
 }
 
 func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -427,6 +432,22 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case latestTagMsg:
 		m.latestTag = string(msg)
+		return m, nil
+
+	case releaseCheckMsg:
+		// Only a detected-newer release carries a version; the empty message
+		// is the silent "no update" outcome (failed lookup, dev build, equal,
+		// older, or malformed) and leaves existing state untouched.
+		if msg.version != "" {
+			m.latestReleaseVersion = msg.version
+			m.latestReleaseURL = msg.url
+			// Resize the panes so the content area yields exactly one row to
+			// the new status row, keeping the frame height stable. Skip until
+			// the terminal is actually sized (a 0-width layout is meaningless).
+			if m.width > 0 {
+				m.layoutViewports()
+			}
+		}
 		return m, nil
 
 	case clearValidationFlashMsg:
@@ -1792,7 +1813,8 @@ func docsContentDims(width, barHeight int) (w, h int) {
 // bar (last, and the only flexible section) absorbs the slack instead of
 // leaving a gap.
 func (m mainModel) paneRows() (composerH, docsTop, bottom int) {
-	bottom = max(6, m.height-6) // 5 cmdBar + 1 helpBar
+	// 5 cmdBar + 1 helpBar, minus the update status row when it's shown.
+	bottom = max(6, m.height-6-m.frameUpdateRowHeight())
 
 	composerBudget := max(6, bottom-m.maxInputsHt)
 	composerH = composerBudget / 2
@@ -1806,7 +1828,7 @@ func (m mainModel) paneRows() (composerH, docsTop, bottom int) {
 
 func (m *mainModel) layoutViewports() {
 	if m.outputEnlargedActive() {
-		height := m.height - 6
+		height := m.height - 6 - m.frameUpdateRowHeight()
 		outputW, outputH := m.outputViewportDims(m.width, height)
 		m.output.SetWidth(outputW)
 		m.output.SetHeight(outputH)
@@ -1815,7 +1837,7 @@ func (m *mainModel) layoutViewports() {
 	}
 
 	if m.docsEnlargedActive() {
-		height := max(6, m.height-6)
+		height := max(6, m.height-6-m.frameUpdateRowHeight())
 		docsW, docsH := docsContentDims(m.width, height)
 		m.docs.SetWidth(docsW)
 		m.docs.SetHeight(docsH)

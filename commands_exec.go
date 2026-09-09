@@ -2,12 +2,17 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -62,6 +67,123 @@ func fetchLatestTag() tea.Cmd {
 		}
 		tag, _, _ := strings.Cut(line, " ")
 		return latestTagMsg(tag)
+	}
+}
+
+// releaseCheckMsg carries a newer published Jutsu release detected at startup.
+// version is non-empty only when GitHub reported a release strictly newer than
+// the running build; an empty version means "no update" (dev build, equal,
+// older, malformed, or a failed lookup all collapse to this silent case).
+type releaseCheckMsg struct {
+	version string
+	url     string
+}
+
+const releaseRepo = "AliQ80/jutsu"
+
+// releaseEndpoint is the GitHub API URL for the latest published release.
+// It is a package-level variable (not a const) so unit tests can repoint it at
+// an httptest server without touching the network.
+var releaseEndpoint = "https://api.github.com/repos/" + releaseRepo + "/releases/latest"
+
+// releaseClient bounds the lookup so an offline or slow network can never make
+// startup appear hung. GitHub expects a User-Agent; the bare Go client is
+// rejected with 403, so it's set on every request.
+var releaseClient = &http.Client{Timeout: 3 * time.Second}
+
+// fetchLatestRelease decodes tag_name + html_url from the GitHub latest-release
+// endpoint. Any failure (network error, non-200 status, decode error, or a
+// missing tag_name) returns "", "" and a non-nil error — callers treat that as
+// "no update" so lookup errors stay silent and never disrupt startup.
+func fetchLatestRelease() (tag, url string, err error) {
+	req, err := http.NewRequest(http.MethodGet, releaseEndpoint, nil)
+	if err != nil {
+		return "", "", err
+	}
+	req.Header.Set("User-Agent", "jutsu/"+jutsuVersion)
+
+	resp, err := releaseClient.Do(req)
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", "", fmt.Errorf("unexpected status %d", resp.StatusCode)
+	}
+
+	var body struct {
+		TagName string `json:"tag_name"`
+		HTMLURL string `json:"html_url"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return "", "", err
+	}
+	if body.TagName == "" {
+		return "", "", fmt.Errorf("missing tag_name")
+	}
+	return body.TagName, body.HTMLURL, nil
+}
+
+// parseSemver parses a strict "vMAJOR.MINOR.PATCH" (the leading "v" and a "jj "
+// prefix are both optional) into its numeric components. Anything with the
+// wrong component count, a prerelease/build suffix (e.g. "1.2.3-rc1"), or
+// non-numeric parts fails (ok=false) — so dev, malformed, and prerelease tags
+// are ineligible for comparison rather than mis-ordered.
+func parseSemver(s string) (major, minor, patch int, ok bool) {
+	s = strings.TrimPrefix(s, "jj ")
+	s = strings.TrimPrefix(s, "v")
+	parts := strings.Split(s, ".")
+	if len(parts) != 3 {
+		return 0, 0, 0, false
+	}
+	var nums [3]int
+	for i, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil {
+			return 0, 0, 0, false
+		}
+		nums[i] = n
+	}
+	return nums[0], nums[1], nums[2], true
+}
+
+// isUpdateAvailable reports whether latestTag is a published release strictly
+// newer than the running build. The running version must itself parse as a
+// strict release version — a "dev" or otherwise unparseable build yields false
+// (no notification), matching the "development version without a comparable
+// version" ineligibility rule.
+func isUpdateAvailable(latestTag string) bool {
+	runMaj, runMin, runPatch, runOK := parseSemver(jutsuVersion)
+	if !runOK {
+		return false
+	}
+	latMaj, latMin, latPatch, latOK := parseSemver(latestTag)
+	if !latOK {
+		return false
+	}
+	if latMaj != runMaj {
+		return latMaj > runMaj
+	}
+	if latMin != runMin {
+		return latMin > runMin
+	}
+	return latPatch > runPatch
+}
+
+// checkRelease is the startup tea.Cmd: fetch Jutsu's latest GitHub release and,
+// when it is strictly newer than the running build, return it for display. Every
+// other outcome (lookup failure, dev build, equal, older, malformed) returns an
+// empty releaseCheckMsg so the TUI stays silent and usable.
+func checkRelease() tea.Cmd {
+	return func() tea.Msg {
+		tag, url, err := fetchLatestRelease()
+		if err != nil {
+			return releaseCheckMsg{}
+		}
+		if !isUpdateAvailable(tag) {
+			return releaseCheckMsg{}
+		}
+		return releaseCheckMsg{version: tag, url: url}
 	}
 }
 

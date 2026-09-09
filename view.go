@@ -83,20 +83,30 @@ func (m mainModel) View() tea.View {
 // same enlarged layout behind it.
 func (m mainModel) renderContentFrame() string {
 	if m.outputEnlargedActive() {
-		height := m.height - 6 // 5 cmdBar + 1 helpBar
+		height := m.height - 6 - m.frameUpdateRowHeight() // 5 cmdBar + 1 helpBar, minus the update row when shown
 		rightPane := m.renderRightPane(m.width, height)
 		cmdBar := m.renderCommandBar(m.width)
 		helpBar := m.renderHelpBar(m.width)
-		return lipgloss.JoinVertical(lipgloss.Left, rightPane, cmdBar, helpBar)
+		parts := []string{rightPane, cmdBar}
+		if row := m.renderUpdateRow(); row != "" {
+			parts = append(parts, row)
+		}
+		parts = append(parts, helpBar)
+		return lipgloss.JoinVertical(lipgloss.Left, parts...)
 	}
 
 	if m.docsEnlargedActive() {
-		height := m.height - 6
+		height := m.height - 6 - m.frameUpdateRowHeight()
 		height = max(height, 6)
 		docsPane := m.renderDescriptionBar(m.width, height)
 		cmdBar := m.renderCommandBar(m.width)
 		helpBar := m.renderHelpBar(m.width)
-		return lipgloss.JoinVertical(lipgloss.Left, docsPane, cmdBar, helpBar)
+		parts := []string{docsPane, cmdBar}
+		if row := m.renderUpdateRow(); row != "" {
+			parts = append(parts, row)
+		}
+		parts = append(parts, helpBar)
+		return lipgloss.JoinVertical(lipgloss.Left, parts...)
 	}
 
 	return m.renderMainFrame()
@@ -130,7 +140,12 @@ func (m mainModel) renderMainFrame() string {
 	helpBar := m.renderHelpBar(m.width)
 
 	topSection = strings.TrimRight(topSection, "\n")
-	return lipgloss.JoinVertical(lipgloss.Left, topSection, cmdBar, helpBar)
+	parts := []string{topSection, cmdBar}
+	if row := m.renderUpdateRow(); row != "" {
+		parts = append(parts, row)
+	}
+	parts = append(parts, helpBar)
+	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 
 // renderOnBackdrop centers modal on top of the frozen pre-modal app frame
@@ -687,6 +702,50 @@ func (m mainModel) renderVersionBadge() string {
 	}
 }
 
+// updateRowText returns the status-row text that fits the given terminal
+// width, or "" when no safe variant fits. The full and compact forms are
+// chosen by width BEFORE any fixed-width style is applied, so Lip Gloss never
+// word-wraps the row and the frame height stays fixed. An empty latestReleaseVersion
+// (no detected update) also yields "".
+func (m mainModel) updateRowText(width int) string {
+	if m.latestReleaseVersion == "" {
+		return ""
+	}
+	full := fmt.Sprintf("↑ Jutsu %s is available — press ? for details", m.latestReleaseVersion)
+	compact := fmt.Sprintf("↑ Jutsu %s available (? for details)", m.latestReleaseVersion)
+	if lipgloss.Width(full) <= width {
+		return full
+	}
+	if lipgloss.Width(compact) <= width {
+		return compact
+	}
+	return ""
+}
+
+// frameUpdateRowHeight is 1 when the update status row is shown, else 0. The
+// content panes yield exactly this many rows to it, and the row is only ever
+// added to the frame when it is non-empty — so the normal frame is unchanged
+// when no update exists or the row can't fit.
+func (m mainModel) frameUpdateRowHeight() int {
+	if m.updateRowText(m.width) != "" {
+		return 1
+	}
+	return 0
+}
+
+// renderUpdateRow renders the persistent update status row spanning the full
+// terminal width, or "" when it should be omitted. The text is selected to fit
+// width first (see updateRowText), then a fixed-width style pads to the full
+// width with the row's background — no wrapping, because the content already
+// fits.
+func (m mainModel) renderUpdateRow() string {
+	text := m.updateRowText(m.width)
+	if text == "" {
+		return ""
+	}
+	return updateRowStyle.Width(m.width).Render(text)
+}
+
 func (m mainModel) renderHelpBar(width int) string {
 	type entry struct{ key, desc string }
 
@@ -910,6 +969,16 @@ func (m mainModel) renderAboutModal() string {
 		"",
 		"jutsu     " + m.displayVersion(),
 		docsURL,
+	}
+	// When a newer release was detected at startup, surface its version and
+	// published release URL. This is the only place the URL is shown; the
+	// status row just points here with "?".
+	if m.latestReleaseVersion != "" {
+		lines = append(lines,
+			"",
+			headerStyle.Render("Update available: ")+versionGreenStyle.Render(m.latestReleaseVersion),
+			m.latestReleaseURL,
+		)
 	}
 	innerW := 0
 	for _, line := range lines {

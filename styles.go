@@ -241,6 +241,15 @@ var (
 
 	scrollbarThumbStyle = lipgloss.NewStyle().
 				Foreground(colorOverlay2)
+
+	// updateRowStyle paints the persistent "update available" status row shown
+	// directly above the help bar. Peach (the active-border accent) on the
+	// near-black crust makes it read as a highlighted status bar without
+	// borrowing the help-bar's "inherit terminal background" treatment.
+	updateRowStyle = lipgloss.NewStyle().
+			Foreground(colorCrust).
+			Background(colorPeach).
+			Bold(true)
 )
 
 const (
