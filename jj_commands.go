@@ -63,6 +63,15 @@ func loadCategories() []Category {
 			Name: "View",
 			Commands: []Command{
 				{
+					Name:        "status",
+					Alias:       "st",
+					Description: "Show high-level repo status [default alias: st]\n\nThis includes:\n\n* The working copy commit and its parents, and a summary of the changes in the working copy (compared to the merged parents)\n\n* Conflicts in the working copy\n\n* [Conflicted bookmarks]\n\nNote: You can use `jj diff --summary -r <rev>` to see the changed files for a specific revision.\n\n[Conflicted bookmarks]: https://docs.jj-vcs.dev/latest/bookmarks/#conflicts",
+					Args: []Arg{
+						{Name: "FILESETS", Description: "Restrict the status display to these paths", Variadic: true},
+					},
+					Flags: []Flag{},
+				},
+				{
 					Name:        "log",
 					Description: "Show revision history\n\nRenders a graphical view of the project's history, ordered with children before parents. By default, the output only includes mutable revisions, along with some additional revisions for context. Use `jj log -r ::` to see all revisions. See [`jj help -k revsets`] for information about the syntax.\n\n[`jj help -k revsets`]: https://docs.jj-vcs.dev/latest/revsets/\n\nSpans of revisions that are not included in the graph per `--revisions` are rendered as a synthetic node labeled \"(elided revisions)\".\n\nThe working-copy commit is indicated by a `@` symbol in the graph. [Immutable revisions] have a `◆` symbol. Other commits have a `○` symbol. All of these symbols can be [customized].\n\n[Immutable revisions]: https://docs.jj-vcs.dev/latest/config/#set-of-immutable-commits\n\n[customized]: https://docs.jj-vcs.dev/latest/config/#node-style",
 					Args: []Arg{
@@ -110,15 +119,6 @@ func loadCategories() []Category {
 						{Name: "tool", Description: "Generate diff by external command\n\nA builtin format can also be specified as `:<name>`. For example, `--tool=:git` is equivalent to `--git`.", Value: "--tool", RequiresInput: true, InputType: "TOOL"},
 						{Name: "context", Description: "Number of lines of context to show", Value: "--context", RequiresInput: true, InputType: "CONTEXT"},
 					},
-				},
-				{
-					Name:        "status",
-					Alias:       "st",
-					Description: "Show high-level repo status [default alias: st]\n\nThis includes:\n\n* The working copy commit and its parents, and a summary of the changes in the working copy (compared to the merged parents)\n\n* Conflicts in the working copy\n\n* [Conflicted bookmarks]\n\nNote: You can use `jj diff --summary -r <rev>` to see the changed files for a specific revision.\n\n[Conflicted bookmarks]: https://docs.jj-vcs.dev/latest/bookmarks/#conflicts",
-					Args: []Arg{
-						{Name: "FILESETS", Description: "Restrict the status display to these paths", Variadic: true},
-					},
-					Flags: []Flag{},
 				},
 				{
 					Name:        "show",

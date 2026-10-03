@@ -114,7 +114,7 @@ func TestAboutModalFreezesBackdropAndReleasesOnClose(t *testing.T) {
 	m := newModel()
 	m.width, m.height = 120, 40
 	m.focusPane = focusCategories
-	m.catIdx, m.cmdIdx, m.flagIdx = 0, 0, 0
+	m.catIdx, m.cmdIdx, m.flagIdx = 0, 1, 0
 	preCatIdx := m.catIdx
 
 	next, _ := m.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
@@ -133,16 +133,16 @@ func TestAboutModalFreezesBackdropAndReleasesOnClose(t *testing.T) {
 	// Mutating representative live state while the modal is open must not
 	// alter what the backdrop renders: toggle a flag in place (the deep-copy
 	// hazard) and move the category cursor.
-	wantFrozen := opened.categories[0].Commands[0].Flags[0].Selected
+	wantFrozen := opened.categories[0].Commands[1].Flags[0].Selected
 	opened.toggleFlag()
-	if opened.categories[0].Commands[0].Flags[0].Selected == wantFrozen {
+	if opened.categories[0].Commands[1].Flags[0].Selected == wantFrozen {
 		t.Fatal("test setup: toggleFlag() did not actually change the live flag")
 	}
 	opened.catIdx = 1
 	if opened.backdrop.catIdx != preCatIdx {
 		t.Errorf("backdrop.catIdx changed to %d after live mutation; want frozen %d", opened.backdrop.catIdx, preCatIdx)
 	}
-	if opened.backdrop.categories[0].Commands[0].Flags[0].Selected != wantFrozen {
+	if opened.backdrop.categories[0].Commands[1].Flags[0].Selected != wantFrozen {
 		t.Errorf("backdrop flag.Selected changed to %v after live toggleFlag(); want frozen %v",
 			opened.backdrop.categories[0].Commands[0].Flags[0].Selected, wantFrozen)
 	}
@@ -188,7 +188,7 @@ func TestModalViewRendersOverBackdropFrame(t *testing.T) {
 func TestFreezeBackdropIsolatesCategoryFlagMutation(t *testing.T) {
 	m := newModel()
 	m.width, m.height = 120, 40
-	m.catIdx, m.cmdIdx, m.flagIdx = 0, 0, 0
+	m.catIdx, m.cmdIdx, m.flagIdx = 0, 1, 0
 
 	flags := m.currentFlags()
 	if len(flags) == 0 {
@@ -198,7 +198,7 @@ func TestFreezeBackdropIsolatesCategoryFlagMutation(t *testing.T) {
 
 	m.freezeBackdrop()
 
-	m.toggleFlag() // mutates m.categories[0].Commands[0].Flags[0].Selected in place
+	m.toggleFlag() // mutates the selected command's flag in place
 
 	got := m.backdrop.categories[m.catIdx].Commands[m.cmdIdx].Flags[m.flagIdx].Selected
 	if got != wantFrozen {
