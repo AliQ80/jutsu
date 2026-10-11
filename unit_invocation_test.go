@@ -173,6 +173,71 @@ func TestBuildInvocationDisplayStaysReadable(t *testing.T) {
 	}
 }
 
+func TestBuildInvocationPromotedCommandGroupsSplitArgv(t *testing.T) {
+	cases := []struct {
+		name        string
+		cmd         string
+		sub         string
+		setup       func(*testing.T, *mainModel)
+		wantArgv    []string
+		wantDisplay string
+	}{
+		{
+			name: "git remote add",
+			cmd:  "git remote",
+			sub:  "add",
+			setup: func(t *testing.T, m *mainModel) {
+				setArg(m, "REMOTE", "origin")
+				setArg(m, "URL", "git@example.com:me/repo.git")
+			},
+			wantArgv:    []string{"jj", "git", "remote", "add", "origin", "git@example.com:me/repo.git"},
+			wantDisplay: "jj git remote add origin git@example.com:me/repo.git",
+		},
+		{
+			name:        "git colocation enable",
+			cmd:         "git colocation",
+			sub:         "enable",
+			wantArgv:    []string{"jj", "git", "colocation", "enable"},
+			wantDisplay: "jj git colocation enable",
+		},
+		{
+			name: "debug object view",
+			cmd:  "debug object",
+			sub:  "view",
+			setup: func(t *testing.T, m *mainModel) {
+				selectFlag(t, m, "--op", "operation id")
+			},
+			wantArgv:    []string{"jj", "debug", "object", "view", "--op", "operation id"},
+			wantDisplay: "jj debug object view --op operation id",
+		},
+		{
+			name:        "debug watchman status",
+			cmd:         "debug watchman",
+			sub:         "status",
+			wantArgv:    []string{"jj", "debug", "watchman", "status"},
+			wantDisplay: "jj debug watchman status",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := newModel()
+			focusCommand(t, &m, tc.cmd, tc.sub)
+			if tc.setup != nil {
+				tc.setup(t, &m)
+			}
+
+			inv := m.buildInvocation()
+			if !slices.Equal(inv.argv, tc.wantArgv) {
+				t.Errorf("argv = %q, want %q", inv.argv, tc.wantArgv)
+			}
+			if inv.short != tc.wantDisplay || inv.long != tc.wantDisplay {
+				t.Errorf("display = (%q, %q), want %q", inv.short, inv.long, tc.wantDisplay)
+			}
+		})
+	}
+}
+
 // TestExecArgvForcesColor covers the captured-output path's colour injection:
 // --color=always must be a global option (before the subcommand) and must not
 // disturb the composed arguments.

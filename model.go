@@ -1641,7 +1641,7 @@ func (m mainModel) buildInvocation() jjInvocation {
 	shortParts = append(shortParts, shortName)
 	longParts := append([]string{"jj"}, globalLong...)
 	longParts = append(longParts, cmd.Name)
-	argv = append(argv, cmd.Name)
+	argv = append(argv, strings.Fields(cmd.Name)...)
 
 	flagsBeforeArgs := false
 	if len(cmd.SubCmds) > 0 && m.subIdx < len(cmd.SubCmds) {
