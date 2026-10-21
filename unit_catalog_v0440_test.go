@@ -1,12 +1,21 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
-// TestCompatJJVersionIsV0440 pins the compatibility badge target to the jj
-// 0.44.0 release this catalog update targets.
-func TestCompatJJVersionIsV0440(t *testing.T) {
-	if compatJJVersion != "0.44.0" {
-		t.Errorf("compatJJVersion = %q, want %q", compatJJVersion, "0.44.0")
+// TestCompatJJVersionIsV0460 pins the compatibility badge target to jj 0.46.0.
+func TestCompatJJVersionIsV0460(t *testing.T) {
+	if compatJJVersion != "0.46.0" {
+		t.Errorf("compatJJVersion = %q, want %q", compatJJVersion, "0.46.0")
+	}
+}
+
+func TestVersionBadgeShowsCompatJJVersion(t *testing.T) {
+	m := mainModel{}
+	if badge := m.renderVersionBadge(); !strings.Contains(badge, "jj v0.46.0") {
+		t.Errorf("version badge = %q, want it to show jj v0.46.0", badge)
 	}
 }
 

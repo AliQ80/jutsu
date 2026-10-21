@@ -2024,6 +2024,12 @@ func (m mainModel) isInteractiveInvocation() bool {
 	}
 	cmd := cmds[m.cmdIdx]
 
+	// converge prompts by default; --no-interactive opts out. Handle this
+	// before static markers so a catalog marker cannot override the opt-out.
+	if cmd.Name == "converge" {
+		return !m.isFlagSelected("--no-interactive")
+	}
+
 	// Statically interactive command or subcommand (diffedit, arrange,
 	// config edit, sparse edit, ...).
 	if cmd.Interactive {
