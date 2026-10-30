@@ -19,6 +19,11 @@ type clearValidationFlashMsg struct{}
 type clearCopyFlashMsg struct{}
 
 type mainModel struct {
+	updater          *updateAttempt
+	updateStatus     string
+	updateDownload   *updateDownloadProgress
+	updateCommitting bool
+	updateRestart    *updateTransaction
 	// Picker state for SORT_KEY inputs
 	sortKeyPickerOpen bool
 	pickerProvider    *ChoiceProvider
@@ -70,7 +75,7 @@ type mainModel struct {
 	hostKeyTried     bool              // loop guard: only offer the host-key modal once per run
 	authModalOpen    bool              // "continue in terminal" popup for credential prompts
 	authModalInv     jjInvocation      // the command that popup would retry via the pty handoff
-	aboutModalOpen   bool              // read-only popup with the running jutsu version + GitHub link (opened via ?)
+	aboutModalOpen   bool              // About popup with version, release link, and updater (opened via ?)
 
 	validationFlash bool
 	copyFlash       bool
@@ -326,6 +331,10 @@ func (m mainModel) Init() tea.Cmd {
 
 func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case updateEvent:
+		return m.handleUpdateEvent(msg)
+	case updateHandoffMsg:
+		return m.handleUpdateHandoff(msg)
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -477,7 +486,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// While picker modal is open, ignore wheel events to keep backdrop stable.
 			return m, nil
 		}
-		if m.hostKeyModalOpen || m.authModalOpen {
+		if m.hostKeyModalOpen || m.authModalOpen || m.aboutModalOpen {
 			return m, nil
 		}
 		if m.outputEnlargedActive() {
@@ -529,7 +538,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.sortKeyPickerOpen {
 			return m, nil
 		}
-		if m.hostKeyModalOpen || m.authModalOpen {
+		if m.hostKeyModalOpen || m.authModalOpen || m.aboutModalOpen {
 			return m, nil
 		}
 		if msg.Button != tea.MouseLeft {
@@ -924,17 +933,28 @@ func (m mainModel) handleOutputKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleAboutModalKeys drives the read-only about popup. esc closes; every
-// other key — including q — is either a no-op or, in q's case, an explicit
-// quit (matches `q`'s app-wide semantics; it is never a modal close).
+// handleAboutModalKeys keeps update cancellation inside the modal lifecycle.
 func (m mainModel) handleAboutModalKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if m.updateCommitting {
+		return m, nil
+	}
 	switch msg.String() {
-	case "esc":
+	case "u":
+		return m.startUpdate()
+	case "esc", "q", "ctrl+c":
+		if m.updater != nil {
+			m.updater.closeRequested = true
+			m.updater.quitRequested = msg.String() != "esc"
+			m.updater.cancel()
+			m.updateStatus = "Cancelling update…"
+			return m, nil
+		}
+		if msg.String() != "esc" {
+			return m, tea.Quit
+		}
 		m.aboutModalOpen = false
 		m.backdrop = nil
 		return m, nil
-	case "q":
-		return m, tea.Quit
 	}
 	return m, nil
 }

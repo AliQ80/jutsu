@@ -980,6 +980,46 @@ func (m mainModel) renderAboutModal() string {
 			m.latestReleaseURL,
 		)
 	}
+	if m.latestReleaseVersion != "" {
+		lines = append(lines, "", updateActionStyle.Render("u  Update and restart"))
+		if m.updater != nil {
+			lines[len(lines)-1] = updateStatusStyle.Render("Updating…")
+		}
+		if m.updateStatus != "" {
+			lines = append(lines, updateStatusStyle.Render(m.updateStatus))
+		}
+		if m.updateDownload != nil {
+			width := 32
+			if m.width > 0 {
+				width = min(width, max(1, m.width-modalBoxStyle.GetHorizontalFrameSize()-7))
+			}
+			bar, counts := m.updateDownload.render(width)
+			lines = append(lines, bar, updateStatusStyle.Render(counts))
+		}
+		if m.updateCommitting {
+			lines = append(lines, updateStatusStyle.Render("Cannot cancel"))
+		}
+		if m.updater != nil && !m.updateCommitting {
+			lines = append(lines, updateStatusStyle.Render("esc cancel and close · q cancel and quit"))
+		}
+	}
+	// Short terminals can lose decorative blank lines without hiding controls.
+	if m.height > 0 && len(lines)+modalBoxStyle.GetVerticalFrameSize() > m.height {
+		compact := []string{lines[0]}
+		for _, line := range lines[1:] {
+			if line != "" {
+				compact = append(compact, line)
+			}
+		}
+		lines = compact
+	}
+	// Bound each line before Render: lipgloss Width wraps rather than clips.
+	available := max(1, m.width-modalBoxStyle.GetHorizontalFrameSize())
+	if m.width > 0 {
+		for i, line := range lines {
+			lines[i] = ansi.Truncate(line, available, "…")
+		}
+	}
 	innerW := 0
 	for _, line := range lines {
 		if w := lipgloss.Width(line); w > innerW {

@@ -297,3 +297,10 @@ var (
 				PaddingLeft(1).
 				PaddingRight(1)
 )
+
+var updateActionStyle = helpKeyStyle
+var updateStatusStyle = helpDescStyle
+
+var updateProgressStyle = versionGreenStyle
+
+var updateTrackStyle = dimItemStyle

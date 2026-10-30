@@ -134,6 +134,38 @@ go env GOPATH
 
 ---
 
+## Updating from inside Jutsu
+
+For direct binary installations on Linux, macOS, and Windows, open **About** with `?` when Jutsu announces a newer release, then press **`u` — Update and restart**. This downloads the release for your operating system and architecture, verifies its SHA-256 checksum, and replaces the installed executable. No Go installation is required.
+
+About shows a download progress bar with percentage and downloaded/total size, followed by verification and preparation status. If the server does not provide a total size, the bar shows an indeterminate indicator and the number of bytes downloaded. Press `esc` to cancel and close About, or `q` to cancel and quit, before installation starts. Cancellation is unavailable during installation and restart. Wait for any running command or interactive editor to finish before updating.
+
+Jutsu restarts in the same working directory with the same application arguments and environment. Your unexecuted composed command and viewport position are not restored. Custom installation locations and invocation symlinks are supported; the actual executable is updated in place.
+
+If the installation directory is unwritable, Jutsu stays open and shows an error. It does not automatically request administrator access. Use the installer with suitable permissions or choose a writable user installation instead. Package-manager integrations are deferred; use the package manager's own upgrade process for managed installations.
+
+### Failed or interrupted updates
+
+Download and verification failures leave the installed binary unchanged. About displays the failure and lets you retry with `u`. Installation or restart-launch failures attempt to restore the previous binary. On Windows, replacement happens through a helper after Jutsu exits; failures at that stage are printed in the terminal with recovery instructions. Close other Jutsu instances if Windows reports that the executable is locked.
+
+If automatic restoration fails, keep the recovery executable at the path printed in the error. Relaunch the restored executable using its full path, or reinstall a known working release. Pin the desired exact tag with the existing installers:
+
+```bash
+# Linux/macOS: substitute an actual published release tag.
+curl -fsSL https://raw.githubusercontent.com/AliQ80/jutsu/main/install.sh | VERSION=v1.2.3 sh
+# Include INSTALL_DIR=/your/current/directory before sh for a custom location.
+```
+
+```powershell
+# Windows: download install.ps1 as described above, then choose an exact tag.
+.\install.ps1 -Version v1.2.3
+# Include -InstallDir 'C:\Your\Current Directory' for a custom location.
+```
+
+Older versions without the update action must first be upgraded using the installer. Checksums detect download corruption; the script, checksum manifest, and release assets share trust in the project's GitHub repository.
+
+---
+
 ## Building from Source
 
 For development or compiling directly from the latest codebase. **Linux/macOS:**
