@@ -1886,7 +1886,8 @@ func (m *mainModel) layoutViewports() {
 
 	// Size each input field to fill the remaining box width so text can
 	// scroll all the way to the border instead of stopping at a fixed width.
-	boxContentWidth := leftWidth - 4 // border(2) + padding(2), matches renderInputPanes
+	_, bodyWidth := barWidths(leftWidth)
+	boxContentWidth := max(1, bodyWidth-2) // shared frame geometry, plus content padding
 	for _, item := range combined {
 		ti := m.getInput(item)
 		// ponytail: -1 margin works around a bubbles textinput off-by-one; see

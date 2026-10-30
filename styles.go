@@ -304,3 +304,20 @@ var updateStatusStyle = helpDescStyle
 var updateProgressStyle = versionGreenStyle
 
 var updateTrackStyle = dimItemStyle
+
+// Bar titles use the same typography as the other pane headings.
+var barTitleStyle = headerStyle
+
+func barFrameStyle(focused, command, invalid bool) (lipgloss.Border, lipgloss.Style) {
+	border, color := lipgloss.RoundedBorder(), colorLavender
+	if focused {
+		border, color = cmdBarBorderThick, colorPeach
+		if command {
+			color = colorGreen
+		}
+	}
+	if invalid {
+		border, color = cmdBarBorderThick, colorRed
+	}
+	return border, lipgloss.NewStyle().Foreground(color)
+}

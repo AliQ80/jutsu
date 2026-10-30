@@ -639,35 +639,20 @@ func (m mainModel) renderCommandBar(width int) string {
 		cmdDisplay = "jj"
 	}
 
-	// Height(5) = 2 borders + 3 content rows
-	contentWidth := width - 4 // 2 borders + 2 padding
-
-	renderedText := commandTextStyle.Render(cmdDisplay)
-	centeredText := lipgloss.PlaceHorizontal(contentWidth, lipgloss.Center, renderedText)
-
-	// Pre-wrap to size blank padding by line count; see CLAUDE.md "Known
-	// fragile points" for why this can't just rely on the outer Style's wrap.
-	wrapped := lipgloss.Wrap(centeredText, contentWidth, "")
-	lines := strings.Count(wrapped, "\n") + 1
-
-	var content strings.Builder
-	if lines <= 1 {
-		content.WriteString("\n")
-		content.WriteString(wrapped)
-		content.WriteString("\n")
-	} else {
-		content.WriteString(wrapped)
-		if pad := 3 - lines; pad > 0 {
-			content.WriteString(strings.Repeat("\n", pad))
-		}
+	// Equal left/right insets keep the command centered on the full bar.
+	titleW, bodyW := barWidths(width)
+	inset := titleW + 1
+	safeW := max(1, bodyW-2-inset)
+	wrapped := lipgloss.Wrap(cmdDisplay, safeW, "")
+	lines := strings.Split(wrapped, "\n")
+	for i, line := range lines {
+		lines[i] = " " + commandTextStyle.Render(lipgloss.PlaceHorizontal(safeW, lipgloss.Center, strings.TrimSpace(line)))
 	}
-
-	style := commandBarInactiveStyle.Width(width).Height(5)
-	if m.focusPane == focusCmdBar {
-		style = commandBarActiveStyle.Width(width).Height(5)
+	if len(lines) == 1 {
+		lines = []string{"", lines[0], ""}
 	}
-
-	return style.Render(content.String())
+	border, style := barFrameStyle(m.focusPane == focusCmdBar, true, false)
+	return renderTitledBar("COMMAND", width, 5, lines, border, style)
 }
 
 // parseVersion parses "jj 0.42.0" / "v0.42.0" / "0.42.0" into major, minor, patch.
@@ -933,19 +918,13 @@ func (m mainModel) renderInputPanes(width, height int, combined []InputItem) str
 		b.WriteString(m.getInput(item).View())
 	}
 
-	borderColor := colorLavender
-	borderStyle := lipgloss.RoundedBorder()
-	if m.focusPane == focusInputs {
-		borderColor = colorPeach
-		borderStyle = cmdBarBorderThick
+	invalid := m.validationFlash && (m.hasEmptyRequiredFlagInput() || m.hasEmptyRequiredGlobalInput() || m.hasEmptyRequiredArg())
+	border, style := barFrameStyle(m.focusPane == focusInputs, false, invalid)
+	lines := strings.Split(b.String(), "\n")
+	for i := range lines {
+		lines[i] = " " + lines[i]
 	}
-	if m.validationFlash && (m.hasEmptyRequiredFlagInput() || m.hasEmptyRequiredGlobalInput() || m.hasEmptyRequiredArg()) {
-		borderColor = colorRed
-		borderStyle = cmdBarBorderThick
-	}
-	style := lipgloss.NewStyle().BorderStyle(borderStyle).BorderForeground(borderColor).PaddingLeft(1).PaddingRight(1).Width(width).Height(height)
-
-	return style.Render(b.String())
+	return renderTitledBar("INPUTS", width, height, lines, border, style)
 }
 
 // Fixed dimensions for the global-options modal: a checklist column sized to
