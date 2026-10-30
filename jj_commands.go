@@ -27,6 +27,8 @@ type Arg struct {
 }
 
 type SubCommand struct {
+	// Name and Value contain whitespace-separated command syntax tokens,
+	// not shell-quoted text. Value overrides Name for execution when set.
 	Name              string
 	Alias             string // e.g. "a" for bookmark advance — populated by gen-descriptions
 	Description       string

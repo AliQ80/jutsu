@@ -238,6 +238,55 @@ func TestBuildInvocationPromotedCommandGroupsSplitArgv(t *testing.T) {
 	}
 }
 
+func TestBuildInvocationCompoundMenuChoices(t *testing.T) {
+	cases := []struct {
+		cmd, sub string
+		argv     []string
+	}{
+		{"help", "bookmarks", []string{"jj", "help", "-k", "bookmarks"}},
+		{"help", "config", []string{"jj", "help", "-k", "config"}},
+		{"help", "filesets", []string{"jj", "help", "-k", "filesets"}},
+		{"help", "glossary", []string{"jj", "help", "-k", "glossary"}},
+		{"help", "revsets", []string{"jj", "help", "-k", "revsets"}},
+		{"help", "templates", []string{"jj", "help", "-k", "templates"}},
+		{"help", "tutorial", []string{"jj", "help", "-k", "tutorial"}},
+		{"util", "backend name", []string{"jj", "util", "backend", "name"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.cmd+"/"+tc.sub, func(t *testing.T) {
+			m := newModel()
+			focusCommand(t, &m, tc.cmd, tc.sub)
+			inv := m.buildInvocation()
+			if !slices.Equal(inv.argv, tc.argv) {
+				t.Errorf("argv = %q, want %q", inv.argv, tc.argv)
+			}
+			wantDisplay := strings.Join(tc.argv, " ")
+			if inv.short != wantDisplay || inv.long != wantDisplay {
+				t.Errorf("display = (%q, %q), want %q", inv.short, inv.long, wantDisplay)
+			}
+		})
+	}
+}
+
+func TestBuildInvocationCompoundSyntaxKeepsInputsLiteral(t *testing.T) {
+	for _, tc := range nastyValues {
+		t.Run(tc.name, func(t *testing.T) {
+			m := newModel()
+			focusCommand(t, &m, "file", "annotate")
+			// Exercise compound syntax with real positional and flag inputs.
+			// The catalog's affected choices themselves have no input fields.
+			m.categories[m.catIdx].Commands[m.cmdIdx].SubCmds[m.subIdx].Value = "nested annotate"
+			setArg(&m, "PATH", tc.value)
+			selectFlag(t, &m, "-r", tc.value)
+			inv := m.buildInvocation()
+			want := []string{"jj", "file", "nested", "annotate", tc.value, "-r", tc.value}
+			if !slices.Equal(inv.argv, want) {
+				t.Errorf("argv = %q, want %q", inv.argv, want)
+			}
+		})
+	}
+}
+
 // TestExecArgvForcesColor covers the captured-output path's colour injection:
 // --color=always must be a global option (before the subcommand) and must not
 // disturb the composed arguments.

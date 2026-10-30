@@ -1676,7 +1676,9 @@ func (m mainModel) buildInvocation() jjInvocation {
 		}
 		shortParts = append(shortParts, shortPart)
 		longParts = append(longParts, longPart)
-		argv = append(argv, longPart)
+		// Catalog syntax can contain several tokens (e.g. "-k revsets"
+		// or "backend name"); user input values are kept literal below.
+		argv = append(argv, strings.Fields(longPart)...)
 		flagsBeforeArgs = sub.FlagsBeforeArgs
 	}
 
