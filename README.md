@@ -29,8 +29,16 @@ them, so you get faster with it, but never dependent on it.
 
 ## 📦 Installation
 
+**Linux/macOS:**
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/AliQ80/jutsu/main/install.sh | sh
+```
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://raw.githubusercontent.com/AliQ80/jutsu/main/install.ps1 | iex
 ```
 
 See the [installation guide](https://aliq80.github.io/jutsu/installation/) for prerequisites, alternative installation methods, and troubleshooting.

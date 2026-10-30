@@ -6,6 +6,33 @@ on:
   pull_request:
 
 jobs:
+  windows-installer:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        shell: [powershell, pwsh]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test installer with fixture releases
+        shell: ${{ matrix.shell }}
+        run: ./tools/test-windows-installer.ps1
+      - name: Smoke-test published release and reinstall
+        shell: ${{ matrix.shell }}
+        run: |
+          $savedPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+          $destination = Join-Path $env:RUNNER_TEMP 'jutsu smoke test'
+          try {
+            & ./install.ps1 -InstallDir $destination
+            $first = (Get-FileHash (Join-Path $destination 'jutsu.exe')).Hash
+            & ./install.ps1 -InstallDir $destination
+            if ((Get-FileHash (Join-Path $destination 'jutsu.exe')).Hash -ne $first) {
+              throw 'Reinstallation produced a different executable.'
+            }
+          } finally {
+            [Environment]::SetEnvironmentVariable('Path', $savedPath, 'User')
+            if (Test-Path $destination) { Remove-Item $destination -Recurse -Force }
+          }
+
   check:
     runs-on: ubuntu-latest
     steps:
